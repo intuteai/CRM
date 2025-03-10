@@ -1,14 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { XCircle, PlusCircle, Trash2 } from 'lucide-react';
 
-function CreateOrderForm({ customers, availableProducts, onClose, onSubmit, validateOrderItems, getAvailableStock, formatDate }) {
+function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, formatDate }) {
   const [newOrder, setNewOrder] = useState({
     customerId: '',
     targetDeliveryDate: '',
     items: [{ product_id: '', quantity: '', price: '' }],
   });
+  const [availableProducts, setAvailableProducts] = useState([]);
   const [formErrors, setFormErrors] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const fetchStock = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('http://localhost:5000/api/inventory/stock', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch available stock');
+        const data = await response.json();
+        setAvailableProducts(data);
+      } catch (error) {
+        setFormErrors([error.message]);
+      }
+    };
+    fetchStock();
+  }, []);
+
+  const getAvailableStock = (productId) => {
+    const product = availableProducts.find(p => p.product_id === parseInt(productId));
+    return product ? product.stock_quantity : 0;
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -42,7 +65,6 @@ function CreateOrderForm({ customers, availableProducts, onClose, onSubmit, vali
       setFormErrors(errors);
       return;
     }
-    console.log('Form newOrder before submit:', newOrder);
     try {
       setIsSubmitting(true);
       const payload = {
@@ -56,6 +78,7 @@ function CreateOrderForm({ customers, availableProducts, onClose, onSubmit, vali
       };
       await onSubmit(payload);
       setFormErrors([]);
+      onClose();
     } catch (error) {
       setFormErrors([error.message]);
     } finally {
@@ -110,7 +133,7 @@ function CreateOrderForm({ customers, availableProducts, onClose, onSubmit, vali
                   required
                 >
                   <option value="">Select Product</option>
-                  {availableProducts.filter(p => p && typeof p.product_id !== 'undefined').map(product => (
+                  {availableProducts.map(product => (
                     <option
                       key={product.product_id}
                       value={product.product_id}

@@ -5,19 +5,8 @@ function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">Admin Dashboard</h1>
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-        <Link
-          to="/queries"
-          className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200"
-        >
-          <div className="flex items-center justify-center mb-6">
-            <svg className="w-12 h-12 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5v-2l3-3 4 4 7-7" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-semibold text-gray-800 text-center">Queries</h2>
-          <p className="text-gray-600 text-center mt-3 text-lg">Manage customer inquiries</p>
-        </Link>
+      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
+        {/* Orders Card */}
         <Link
           to="/orders"
           className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200"
@@ -30,6 +19,36 @@ function AdminDashboard() {
           <h2 className="text-2xl font-semibold text-gray-800 text-center">Orders</h2>
           <p className="text-gray-600 text-center mt-3 text-lg">Track and process orders</p>
         </Link>
+
+        {/* Queries Card */}
+        <Link
+          to="/queries"
+          className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200"
+        >
+          <div className="flex items-center justify-center mb-6">
+            <svg className="w-12 h-12 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5v-2l3-3 4 4 7-7" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-semibold text-gray-800 text-center">Queries</h2>
+          <p className="text-gray-600 text-center mt-3 text-lg">Manage customer inquiries</p>
+        </Link>
+
+        {/* Inventory Card (New) */}
+        <Link
+          to="/inventory"
+          className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200"
+        >
+          <div className="flex items-center justify-center mb-6">
+            <svg className="w-12 h-12 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0v10l-8 4m0-14v10m-8-6l8 4" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-semibold text-gray-800 text-center">Inventory</h2>
+          <p className="text-gray-600 text-center mt-3 text-lg">Manage stock levels</p>
+        </Link>
+
+        {/* Customers Card */}
         <Link
           to="/customer-list"
           className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200"

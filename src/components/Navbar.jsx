@@ -1,8 +1,7 @@
-// src/components/Navbar.jsx
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-function Navbar({ userRole, userName, setUserRole, setShowLogin }) {
+function Navbar({ userRole, userName, token, setUserRole, setShowLogin, handleLogout }) {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState('');
 
@@ -16,13 +15,16 @@ function Navbar({ userRole, userName, setUserRole, setShowLogin }) {
     return () => clearInterval(interval);
   }, []);
 
-  const handleLogout = () => {
-    fetch('http://localhost:5000/api/auth/logout', { method: 'POST' })
+  const handleLogoutClick = () => {
+    fetch('http://localhost:5000/api/auth/logout', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+    })
       .then(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('role');
-        localStorage.removeItem('name');
-        setUserRole(null);
+        handleLogout(); // Use the passed handler
         navigate('/');
       })
       .catch(err => console.error('Logout error:', err));
@@ -35,7 +37,7 @@ function Navbar({ userRole, userName, setUserRole, setShowLogin }) {
           to={userRole === 'admin' ? '/admin-dashboard' : '/customer-dashboard'}
           className="text-amber-300 text-3xl font-bold hover:text-amber-400 transition-all duration-300 transform hover:scale-105"
         >
-          Intute.ai
+          intute.ai
         </Link>
         <div className="flex items-center space-x-8">
           {userRole === 'admin' && (
@@ -64,6 +66,12 @@ function Navbar({ userRole, userName, setUserRole, setShowLogin }) {
               >
                 Customers
               </Link>
+              <Link
+                to="/inventory"
+                className="text-gray-200 text-lg font-medium hover:text-amber-300 transition-all duration-300 transform hover:scale-110 hover:shadow-md px-4 py-2 rounded-lg bg-gray-700 bg-opacity-50"
+              >
+                Inventory
+              </Link>
             </div>
           )}
           {userRole === 'customer' && (
@@ -90,11 +98,17 @@ function Navbar({ userRole, userName, setUserRole, setShowLogin }) {
           )}
           {userRole && (
             <div className="flex items-center space-x-6">
+              <Link
+                to="/edit-profile"
+                className="text-gray-200 text-lg font-medium hover:text-amber-300 transition-all duration-300 transform hover:scale-110 hover:shadow-md px-4 py-2 rounded-lg bg-gray-700 bg-opacity-50"
+              >
+                Edit Profile
+              </Link>
               <span className="text-gray-200 text-lg font-medium">
                 Hello, {userName} | {currentTime} (IST)
               </span>
               <button
-                onClick={handleLogout}
+                onClick={handleLogoutClick}
                 className="bg-amber-400 text-gray-900 text-lg font-semibold px-6 py-3 rounded-lg shadow-md hover:bg-amber-500 transition-all duration-300 transform hover:scale-105"
               >
                 Logout

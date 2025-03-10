@@ -234,7 +234,7 @@ function QueriesPage() {
           onChange={(e) => setFilterStatus(e.target.value)}
           className="p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
         >
-          <option value="All">All</option>
+          <option value="All">All Queries</option>
           <option value="Open">Open</option>
           <option value="In Progress">In Progress</option>
           <option value="Closed">Closed</option>

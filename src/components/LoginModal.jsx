@@ -8,19 +8,27 @@ function LoginModal({ setShowLogin, onSubmit }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
+
     try {
       const res = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
+
       if (res.ok) {
-        localStorage.setItem('token', data.token);
-        onSubmit(data.role, data.name || email.split('@')[0]);
+        localStorage.setItem('token', data.token); // Store token
+        onSubmit(data.role, data.name || email.split('@')[0], data.token);
         setShowLogin(false);
       } else {
-        setError(data.error || 'Login failed');
+        if (res.status === 429) {
+          setError('Too many login attempts. Please wait and try again.');
+        } else {
+          setError(data.error || 'Login failed');
+        }
       }
     } catch (err) {
       setError('Network error - please check if the server is running');

@@ -1,3 +1,4 @@
+// src/components/CustomerList.jsx
 import React, { useState, useEffect } from 'react';
 
 function CustomerList() {
@@ -7,7 +8,9 @@ function CustomerList() {
   const [isLoading, setIsLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
 
-  useEffect(() => {
+  // Refetch function to load customers
+  const fetchCustomers = () => {
+    setIsLoading(true);
     fetch('/api/customers', {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
     })
@@ -17,6 +20,7 @@ function CustomerList() {
       })
       .then(data => {
         setCustomers(data || []);
+        setError(null); // Clear any previous errors on successful fetch
         setIsLoading(false);
       })
       .catch(err => {
@@ -25,6 +29,10 @@ function CustomerList() {
         setCustomers([]);
         setIsLoading(false);
       });
+  };
+
+  useEffect(() => {
+    fetchCustomers(); // Initial fetch on component mount
   }, []);
 
   const handleSearch = (e) => setSearchTerm(e.target.value);
@@ -62,7 +70,7 @@ function CustomerList() {
     return sortableCustomers;
   }, [filteredCustomers, sortConfig]);
 
-  if (isLoading) {
+  if (isLoading && !customers.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
         <div className="text-gray-600 text-xl animate-pulse">Loading customers...</div>
@@ -75,6 +83,12 @@ function CustomerList() {
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
         <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg">
           {error}
+          <button
+            onClick={fetchCustomers}
+            className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -84,13 +98,30 @@ function CustomerList() {
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">Customers</h1>
       <div className="max-w-6xl mx-auto">
-        <input
-          type="text"
-          placeholder="Search Customers..."
-          value={searchTerm}
-          onChange={handleSearch}
-          className="w-full p-4 mb-8 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
-        />
+        <div className="flex items-center mb-8 gap-4">
+          <input
+            type="text"
+            placeholder="Search Customers..."
+            value={searchTerm}
+            onChange={handleSearch}
+            className="flex-1 min-w-0 p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
+          />
+          {/* Refresh Button - Parallel to Search */}
+          <button
+            onClick={fetchCustomers}
+            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 transition-all duration-300 shadow-md text-lg w-32"
+            title="Refresh customers"
+            disabled={isLoading}
+          >
+            Refresh
+          </button>
+        </div>
+
+        {/* Optional: Show refreshing message */}
+        {isLoading && customers.length > 0 && (
+          <div className="text-gray-600 text-lg mb-4 text-center">Refreshing data...</div>
+        )}
+
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead className="bg-gradient-to-r from-amber-100 to-amber-50">

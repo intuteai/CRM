@@ -9,6 +9,8 @@ import CustomerList from './components/CustomerList';
 import CustomerDashboard from './components/CustomerDashboard';
 import CustomerOrdersPage from './components/CustomerOrdersPage';
 import CustomerQueriesPage from './components/CustomerQueriesPage';
+import EditProfile from './components/EditProfile';
+import InventoryPage from './components/InventoryPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginModal from './components/LoginModal';
 import logo from './assets/intute-ai_logo.jpeg';
@@ -16,7 +18,8 @@ import logo from './assets/intute-ai_logo.jpeg';
 function App() {
   const [userRole, setUserRole] = useState(localStorage.getItem('role') || null);
   const [userName, setUserName] = useState(localStorage.getItem('name') || 'User');
-  const [showLogin, setShowLogin] = useState(false);
+  const [token, setToken] = useState(localStorage.getItem('token') || null); // Add token state
+  const [showLogin, setShowLogin] = useState(!localStorage.getItem('token')); // Show login if no token
   const location = useLocation();
 
   useEffect(() => {
@@ -26,12 +29,23 @@ function App() {
     return () => socket.disconnect();
   }, []);
 
-  const handleLoginSubmit = (role, name) => {
+  const handleLoginSubmit = (role, name, token) => {
     setUserRole(role);
     setUserName(name);
+    setToken(token);
     localStorage.setItem('role', role);
     localStorage.setItem('name', name);
+    localStorage.setItem('token', token); // Store token
     setShowLogin(false);
+  };
+
+  const handleLogout = () => {
+    setUserRole(null);
+    setUserName('User');
+    setToken(null);
+    localStorage.removeItem('role');
+    localStorage.removeItem('name');
+    localStorage.removeItem('token');
   };
 
   const showNavbar = userRole && location.pathname !== '/';
@@ -42,12 +56,9 @@ function App() {
         <Navbar
           userRole={userRole}
           userName={userName}
-          setUserRole={(role) => {
-            setUserRole(role);
-            localStorage.setItem('role', role || '');
-            if (!role) localStorage.removeItem('name');
-          }}
+          setUserRole={setUserRole}
           setShowLogin={() => setShowLogin(true)}
+          handleLogout={handleLogout} // Pass logout handler
         />
       )}
       <Routes>
@@ -58,6 +69,8 @@ function App() {
         <Route path="/customer-dashboard" element={userRole === 'customer' ? <CustomerDashboard /> : <Navigate to="/" replace />} />
         <Route path="/customer-orders" element={userRole === 'customer' ? <CustomerOrdersPage /> : <Navigate to="/" replace />} />
         <Route path="/customer-queries" element={userRole === 'customer' ? <CustomerQueriesPage /> : <Navigate to="/" replace />} />
+        <Route path="/edit-profile" element={userRole ? <EditProfile /> : <Navigate to="/" replace />} />
+        <Route path="/inventory" element={userRole === 'admin' ? <InventoryPage userRole={userRole} /> : <Navigate to="/" replace />} />
         <Route
           path="/"
           element={
@@ -98,7 +111,9 @@ function App() {
 export default function AppWrapper() {
   return (
     <Router>
-      <App />
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
     </Router>
   );
 }

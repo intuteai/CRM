@@ -1,3 +1,4 @@
+// src/components/OrdersPage.jsx
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
@@ -252,14 +253,23 @@ function OrdersPage() {
     setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
   }, []);
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading orders...</div>;
-  if (error && !showCreateForm && !showEditForm) return <div className="min-h-screen flex items-center justify-center text-red-700">{error}</div>;
+  if (isLoading && !orders.length) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-gray-600 text-xl animate-pulse">Loading orders...</div>
+    </div>
+  );
+  if (error && !showCreateForm && !showEditForm) return (
+    <div className="min-h-screen flex items-center justify-center text-red-700">
+      {error}
+      <button onClick={() => refetchData()} className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600">Retry</button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Orders</h1>
       <div className="max-w-7xl mx-auto">
-        <div className="flex mb-8 gap-6">
+        <div className="flex mb-8 gap-6 flex-wrap">
           <div className="relative flex-grow">
             <input
               type="text"
@@ -283,6 +293,15 @@ function OrdersPage() {
             <option value="Shipped">Shipped</option>
             <option value="Delivered">Delivered</option>
           </select>
+          {/* Added Refresh Button */}
+          <button
+            onClick={() => refetchData()}
+            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 transition-all duration-300 shadow-md text-lg"
+            title="Refresh orders"
+            disabled={isLoading}
+          >
+            Refresh
+          </button>
           <button
             onClick={() => setShowCreateForm(true)}
             className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center"
@@ -292,6 +311,11 @@ function OrdersPage() {
             <PlusCircle className="mr-2" /> Create Order
           </button>
         </div>
+
+        {/* Optional: Show refreshing message */}
+        {isLoading && orders.length > 0 && (
+          <div className="text-gray-600 text-lg mb-4 text-center">Refreshing data...</div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
           <table className="w-full text-left">
@@ -387,7 +411,10 @@ function OrdersPage() {
           )}
 
           {filteredOrders.length === 0 && (
-            <div className="text-center py-12 text-gray-500">No orders found.</div>
+            <div className="text-center py-12 text-gray-500">
+              <Filter className="mx-auto mb-4 text-gray-400" size={48} />
+              No orders found matching your search or filter.
+            </div>
           )}
         </div>
       </div>
