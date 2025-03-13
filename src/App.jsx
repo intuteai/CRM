@@ -80,15 +80,28 @@ function App() {
                   <img
                     src={logo}
                     alt="Intute.ai Logo"
-                    className="h-72 w-auto mx-auto mb-12 drop-shadow-2xl"
+                    className="h-72 w-auto mx-auto mb-12 drop-shadow-2xl animate-float"
+                    style={{animation: 'float 6s ease-in-out infinite'}}
                   />
-                  <p className="text-5xl font-semibold text-gray-800 mb-10 tracking-widest uppercase shadow-text">ERP System</p>
+                  <div className="relative">
+                    <p className="text-5xl font-semibold text-gray-800 mb-10 tracking-wider uppercase relative z-10" 
+                       style={{
+                         textShadow: '0 2px 4px rgba(0,0,0,0.1), 0 8px 16px rgba(222,170,50,0.2)',
+                         letterSpacing: '0.15em'
+                       }}>
+                      <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-900">Business</span>
+                      <span className="px-3 text-gray-700">Planning</span>
+                      <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-900 to-amber-600">Platform</span>
+                    </p>
+                    <div className="absolute -inset-1 blur-sm bg-gradient-to-r from-amber-200 via-transparent to-amber-200 opacity-20 z-0"></div>
+                  </div>
                   <button
                     onClick={() => setShowLogin(true)}
-                    className="relative bg-gradient-to-r from-amber-300 to-amber-400 text-gray-900 text-2xl font-medium px-16 py-6 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-amber-500 hover:bg-gradient-to-r hover:from-amber-400 hover:to-amber-500"
+                    className="relative overflow-hidden bg-gradient-to-r from-amber-300 to-amber-400 text-gray-900 text-2xl font-medium px-16 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-500 transform hover:-translate-y-1 border border-amber-500 group"
                   >
-                    Login
-                    <span className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-200 to-transparent opacity-0 hover:opacity-30 transition-opacity duration-300 rounded-xl"></span>
+                    <span className="relative z-10">Login</span>
+                    <span className="absolute inset-0 bg-gradient-to-r from-amber-400 to-amber-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-xl"></span>
+                    <span className="absolute -inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-amber-200 to-transparent transform translate-y-0 group-hover:translate-y-full transition-all duration-1000"></span>
                   </button>
                 </div>
               </div>
@@ -107,6 +120,16 @@ function App() {
     </>
   );
 }
+
+// Add this to your global CSS or component CSS
+const styleTag = document.createElement('style');
+styleTag.textContent = `
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+`;
+document.head.appendChild(styleTag);
 
 export default function AppWrapper() {
   return (

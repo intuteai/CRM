@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { formatDate, showNotification } from '../utils/helpers';
+import { formatDate } from '../utils/helpers';
 import { useQueries } from '../hooks/useQueries';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { ArrowDownUp } from 'lucide-react'; // Importing the sorting icon
 
 function QueriesPage() {
   const { queries, setQueries, isLoading: queriesLoading, error: queryError, fetchQueries, setError } = useQueries();
@@ -12,9 +15,10 @@ function QueriesPage() {
   const [responseText, setResponseText] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingCloseId, setPendingCloseId] = useState(null);
-  const [notification, setNotification] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedResponses, setExpandedResponses] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const tableRef = useRef(null);
 
   useEffect(() => {
     let socket;
@@ -30,16 +34,15 @@ function QueriesPage() {
           if (prev.some(q => q.queryId === query.queryId)) return prev;
           return [...prev, query];
         });
-        showNotification(setNotification, 'New query has been added');
+        toast.info('New query has been added', { autoClose: 2000 });
+        if (tableRef.current) tableRef.current.focus();
       });
       socket.on('queryUpdate', (updatedQuery) => {
-        setQueries(prev => {
-          const updatedQueries = prev.map(q => 
-            q.queryId === updatedQuery.queryId ? updatedQuery : q
-          );
-          return updatedQueries;
-        });
-        showNotification(setNotification, `Query #${updatedQuery.queryId} updated`);
+        setQueries(prev => prev.map(q => 
+          q.queryId === updatedQuery.queryId ? updatedQuery : q
+        ));
+        toast.info(`Query #${updatedQuery.queryId} updated in real-time`, { autoClose: 2000 });
+        if (tableRef.current) tableRef.current.focus();
       });
       fetchQueries();
     } catch (err) {
@@ -51,6 +54,32 @@ function QueriesPage() {
       if (socket) socket.disconnect();
     };
   }, [fetchQueries, setQueries, setError]);
+
+  const sortData = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+
+    setQueries(prev => {
+      const sorted = [...prev].sort((a, b) => {
+        let aValue = a[key] || '';
+        let bValue = b[key] || '';
+        if (key === 'queryId') {
+          aValue = Number(aValue);
+          bValue = Number(bValue);
+        } else {
+          aValue = String(aValue).toLowerCase();
+          bValue = String(bValue).toLowerCase();
+        }
+        if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+      return sorted;
+    });
+  };
 
   const filteredQueries = queries.filter(query => {
     const customerName = (query.customerName || '').toLowerCase();
@@ -75,7 +104,7 @@ function QueriesPage() {
   const handleSubmitResponse = async (e) => {
     e.preventDefault();
     if (!responseText.trim()) {
-      setError('Response text is required');
+      toast.error('Response text is required', { autoClose: 3000 });
       return;
     }
     setIsLoading(true);
@@ -98,13 +127,13 @@ function QueriesPage() {
         setRespondingQuery(null);
         setResponseText('');
         setError(null);
-        showNotification(setNotification, 'Response submitted successfully');
+        toast.success('Response submitted successfully', { autoClose: 3000 });
       } else {
-        setError(data.error || 'Failed to submit response. Please try again.');
+        toast.error(data.error || 'Failed to submit response', { autoClose: 3000 });
       }
     } catch (err) {
       console.error('Error submitting response:', err);
-      setError('Network error. Please check your connection and try again.');
+      toast.error('Network error. Please check your connection.', { autoClose: 3000 });
     } finally {
       setIsLoading(false);
     }
@@ -127,15 +156,15 @@ function QueriesPage() {
           q.queryId === data.queryId ? data : q
         ));
         setError(null);
-        showNotification(setNotification, 'Query set to In Progress');
+        toast.success('Query set to In Progress', { autoClose: 3000 });
       } else {
         await fetchQueries();
-        setError(data.error || 'Failed to update query status.');
+        toast.error(data.error || 'Failed to update query status', { autoClose: 3000 });
       }
     } catch (err) {
       console.error('Error updating query status:', err);
       await fetchQueries();
-      setError('Network error. Please check your connection and try again.');
+      toast.error('Network error. Please check your connection.', { autoClose: 3000 });
     } finally {
       setIsLoading(false);
     }
@@ -165,15 +194,15 @@ function QueriesPage() {
           q.queryId === data.queryId ? data : q
         ));
         setError(null);
-        showNotification(setNotification, 'Query closed successfully');
+        toast.success('Query closed successfully', { autoClose: 3000 });
       } else {
         await fetchQueries();
-        setError(data.error || 'Failed to close query.');
+        toast.error(data.error || 'Failed to close query', { autoClose: 3000 });
       }
     } catch (err) {
       console.error('Error closing query:', err);
       await fetchQueries();
-      setError('Network error. Please check your connection and try again.');
+      toast.error('Network error. Please check your connection.', { autoClose: 3000 });
     } finally {
       setPendingCloseId(null);
       setIsLoading(false);
@@ -191,9 +220,9 @@ function QueriesPage() {
 
   if (queriesLoading && !queries.length) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8" aria-live="polite">
         <div className="flex justify-center items-center h-64">
-          <div className="text-gray-600 text-xl">Loading queries...</div>
+          <div className="text-gray-600 text-xl animate-pulse">Loading queries...</div>
         </div>
       </div>
     );
@@ -204,75 +233,105 @@ function QueriesPage() {
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">Queries</h1>
       
       {queryError && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg mb-6 max-w-4xl mx-auto shadow-md">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg mb-6 max-w-4xl mx-auto shadow-md" role="alert">
           {queryError}
           <button 
-            className="float-right text-red-700 hover:text-red-900"
+            className="float-right text-red-700 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-300"
             onClick={() => setError(null)}
+            aria-label="Dismiss error"
           >
             ×
           </button>
         </div>
       )}
       
-      {notification && (
-        <div className="bg-amber-100 border border-amber-400 text-amber-800 px-6 py-4 rounded-lg mb-6 fixed top-8 right-8 z-50 shadow-lg transform transition-all duration-300">
-          {notification}
-        </div>
-      )}
-      
       <div className="flex mb-8 gap-6 max-w-4xl mx-auto">
-        <input
-          type="text"
-          placeholder="Search Queries..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
-        />
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
-        >
-          <option value="All">All Queries</option>
-          <option value="Open">Open</option>
-          <option value="In Progress">In Progress</option>
-          <option value="Closed">Closed</option>
-        </select>
+        <div className="relative flex-grow">
+          <label htmlFor="search-queries" className="sr-only">Search Queries</label>
+          <input
+            id="search-queries"
+            type="text"
+            placeholder="Search Queries..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
+          />
+        </div>
+        <div>
+          <label htmlFor="status-filter" className="sr-only">Filter by Status</label>
+          <select
+            id="status-filter"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
+          >
+            <option value="All">All Queries</option>
+            <option value="Open">Open</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Closed">Closed</option>
+          </select>
+        </div>
         <button 
           onClick={fetchQueries}
-          className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 transition-all duration-300 shadow-md text-lg"
-          title="Refresh queries"
+          className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
+          aria-label="Refresh queries"
         >
           Refresh
         </button>
       </div>
       
       {isLoading && queries.length > 0 && (
-        <div className="text-gray-600 text-lg mb-4 text-center">Refreshing data...</div>
+        <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">Refreshing data...</div>
       )}
       
       {filteredQueries.length === 0 ? (
-        <div className="text-center py-12 text-gray-500 text-xl max-w-4xl mx-auto">
+        <div className="text-center py-12 text-gray-500 text-xl max-w-4xl mx-auto" role="alert">
           No queries found matching your filters.
         </div>
       ) : (
         <div className="max-w-6xl mx-auto overflow-x-auto">
-          <table className="w-full text-left border-collapse bg-white rounded-2xl shadow-lg">
+          <table 
+            className="w-full text-left border-collapse bg-white rounded-2xl shadow-lg" 
+            role="grid" 
+            aria-label="Queries table"
+            ref={tableRef}
+            tabIndex={0}
+          >
             <thead>
-              <tr className="bg-gradient-to-r from-amber-100 to-amber-50">
-                <th className="py-3 px-4 text-gray-700 text-base font-semibold">Query ID</th>
-                <th className="py-3 px-4 text-gray-700 text-base font-semibold">Customer Name</th>
-                <th className="py-3 px-4 text-gray-700 text-base font-semibold">Description</th>
-                <th className="py-3 px-4 text-gray-700 text-base font-semibold">Status</th>
-                <th className="py-3 px-4 text-gray-700 text-base font-semibold">Admin Responses</th>
-                <th className="py-3 px-4 text-gray-700 text-base font-semibold">Actions</th>
+              <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50" role="row">
+                {[
+                  { label: 'Query ID', key: 'queryId' },
+                  { label: 'Customer Name', key: 'customerName' },
+                  { label: 'Description', key: 'description' },
+                  { label: 'Status', key: 'status' },
+                  { label: 'Admin Responses', key: null },
+                  { label: 'Actions', key: null },
+                ].map((header, idx) => (
+                  <th 
+                    key={idx}
+                    className={`py-4 px-4 text-gray-800 text-base font-semibold ${header.key ? 'cursor-pointer hover:bg-amber-300' : ''} transition-all duration-200`}
+                    scope="col"
+                    onClick={header.key ? () => sortData(header.key) : undefined}
+                    aria-sort={sortConfig.key === header.key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span>{header.label}</span>
+                      {header.key && (
+                        <ArrowDownUp 
+                          size={16} 
+                          className={`ml-2 text-gray-600 ${sortConfig.key === header.key ? 'text-gray-900' : 'opacity-50'}`} 
+                          aria-hidden="true" 
+                        />
+                      )}
+                    </div>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {filteredQueries.map((query) => (
                 <React.Fragment key={query.queryId}>
-                  <tr className="border-t hover:bg-amber-50 transition-all duration-200">
+                  <tr className="border-t hover:bg-amber-50 transition-all duration-200" role="row">
                     <td className="py-3 px-4 text-gray-600 text-base">{query.queryId}</td>
                     <td className="py-3 px-4 text-gray-600 text-base">{query.customerName || 'N/A'}</td>
                     <td className="py-3 px-4 text-gray-600 text-base">{query.description}</td>
@@ -290,8 +349,10 @@ function QueriesPage() {
                     <td className="py-3 px-4 text-gray-600 text-base">
                       {Array.isArray(query.adminResponses) && query.adminResponses.length > 0 ? (
                         <button
-                          className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-medium px-4 py-2 rounded-md border border-blue-200 shadow-sm transition-all duration-200 flex items-center space-x-1"
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-medium px-4 py-2 rounded-md border border-blue-200 shadow-sm transition-all duration-200 flex items-center space-x-1 focus:outline-none focus:ring-2 focus:ring-blue-300"
                           onClick={() => toggleResponses(query.queryId)}
+                          aria-label={`Toggle ${query.adminResponses.length} response(s) for query ${query.queryId}`}
+                          aria-expanded={expandedResponses === query.queryId}
                         >
                           <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold">
                             {query.adminResponses.length}
@@ -306,8 +367,9 @@ function QueriesPage() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleRespond(query)}
-                          className="bg-gradient-to-r from-amber-400 to-amber-500 text-gray-900 px-4 py-2 rounded-md hover:from-amber-500 hover:to-amber-600 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed text-base font-medium"
+                          className="bg-gradient-to-r from-amber-400 to-amber-500 text-gray-900 px-4 py-2 rounded-md hover:from-amber-500 hover:to-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed text-base font-medium"
                           disabled={query.status === 'Closed' || isLoading}
+                          aria-label={`Respond to query ${query.queryId}`}
                         >
                           Respond
                         </button>
@@ -315,15 +377,17 @@ function QueriesPage() {
                           <>
                             <button
                               onClick={() => handleInProgress(query.queryId)}
-                              className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-4 py-2 rounded-md hover:from-yellow-500 hover:to-yellow-600 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed text-base font-medium"
+                              className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-white px-4 py-2 rounded-md hover:from-yellow-500 hover:to-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed text-base font-medium"
                               disabled={query.status === 'In Progress' || isLoading}
+                              aria-label={`Set query ${query.queryId} to In Progress`}
                             >
                               In Progress
                             </button>
                             <button
                               onClick={() => initiateClose(query.queryId)}
-                              className="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-4 py-2 rounded-md hover:from-gray-600 hover:to-gray-700 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed text-base font-medium"
+                              className="bg-gradient-to-r from-gray-500 to-gray-600 text-white px-4 py-2 rounded-md hover:from-gray-600 hover:to-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed text-base font-medium"
                               disabled={isLoading}
+                              aria-label={`Close query ${query.queryId}`}
                             >
                               Close
                             </button>
@@ -333,7 +397,7 @@ function QueriesPage() {
                     </td>
                   </tr>
                   {expandedResponses === query.queryId && Array.isArray(query.adminResponses) && query.adminResponses.length > 0 && (
-                    <tr className="bg-blue-50">
+                    <tr className="bg-blue-50" role="row">
                       <td colSpan="6" className="py-4 px-6">
                         <div className="border-l-4 border-blue-400 pl-4 space-y-3">
                           <div className="text-sm font-medium text-blue-700 mb-2">Admin Responses:</div>
@@ -355,13 +419,15 @@ function QueriesPage() {
       )}
       
       {showRespondForm && respondingQuery && (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50" role="dialog" aria-labelledby="respond-form-title">
           <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-2xl transform transition-all duration-300">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">
+            <h2 id="respond-form-title" className="text-2xl font-bold text-gray-800 mb-6">
               Respond to Query #{respondingQuery.queryId}
             </h2>
             <form onSubmit={handleSubmitResponse} className="space-y-6">
+              <label htmlFor="response-text" className="sr-only">Response</label>
               <textarea
+                id="response-text"
                 value={responseText}
                 onChange={(e) => setResponseText(e.target.value)}
                 required
@@ -374,15 +440,17 @@ function QueriesPage() {
                 <button
                   type="button"
                   onClick={() => setShowRespondForm(false)}
-                  className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
                   disabled={isLoading}
+                  aria-label="Cancel response"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-3 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  className="px-6 py-3 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
                   disabled={isLoading}
+                  aria-label="Submit response"
                 >
                   {isLoading ? 'Submitting...' : 'Submit Response'}
                 </button>
@@ -393,22 +461,24 @@ function QueriesPage() {
       )}
       
       {showConfirmDialog && (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50" role="dialog" aria-labelledby="confirm-dialog-title">
           <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-2xl transform transition-all duration-300">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Confirm Close</h2>
+            <h2 id="confirm-dialog-title" className="text-2xl font-bold text-gray-800 mb-6">Confirm Close</h2>
             <p className="text-gray-600 text-lg mb-6">Are you sure you want to close this query? This action cannot be undone.</p>
             <div className="flex justify-end space-x-4">
               <button
                 onClick={cancelClose}
-                className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
                 disabled={isLoading}
+                aria-label="Cancel close action"
               >
                 Cancel
               </button>
               <button
                 onClick={handleClose}
-                className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
                 disabled={isLoading}
+                aria-label="Confirm close action"
               >
                 {isLoading ? 'Closing...' : 'Close Query'}
               </button>
@@ -416,6 +486,8 @@ function QueriesPage() {
           </div>
         </div>
       )}
+
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </div>
   );
 }

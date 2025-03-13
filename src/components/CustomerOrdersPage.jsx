@@ -1,9 +1,10 @@
-// src/components/CustomerOrdersPage.jsx
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   ArrowDownUp, Filter, PlusCircle, XCircle, Search, ChevronLeft, ChevronRight 
 } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 // Utility functions
 const formatDate = (dateString) => (dateString ? new Date(dateString).toISOString().split('T')[0] : '');
@@ -64,7 +65,6 @@ const useFetchData = ({ limit, cursor }) => {
       setTotalOrders(ordersData.total || 0);
       const validProducts = (productsData || []).filter(p => p && typeof p.product_id !== 'undefined');
       setProducts(validProducts);
-      console.log('Updated products state:', validProducts);
     } catch (err) {
       setError(err.message);
       console.error('Fetch error:', err);
@@ -75,7 +75,7 @@ const useFetchData = ({ limit, cursor }) => {
 
   useEffect(() => { fetchData(true); }, [fetchData]);
 
-  return { orders, totalOrders, products, isLoading, error, refetchData: fetchData };
+  return { orders, setOrders, totalOrders, products, isLoading, error, refetchData: fetchData };
 };
 
 function CustomerOrdersPage() {
@@ -88,35 +88,43 @@ function CustomerOrdersPage() {
   const [newOrder, setNewOrder] = useState({ targetDeliveryDate: '', items: [{ product_id: '', quantity: 1 }] });
   const [formErrors, setFormErrors] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const socketRef = useRef(null);
+  const tableRef = useRef(null);
 
-  const { orders, totalOrders, products, isLoading, error, refetchData } = useFetchData({ limit: ordersPerPage, cursor });
+  const { orders, setOrders, totalOrders, products, isLoading, error, refetchData } = useFetchData({ limit: ordersPerPage, cursor });
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:5000');
-    socketRef.current.on('connect', () => console.log('Connected to Socket.IO'));
-    socketRef.current.on('stockUpdate', (data) => {
-      console.log('Received stockUpdate event:', data);
-      refetchData(true);
+    const socket = io('http://localhost:5000');
+    socket.on('connect', () => console.log('Connected to Socket.IO'));
+    socket.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
-    socketRef.current.on('orderUpdate', () => {
-      console.log('Received orderUpdate event, refreshing data');
+    socket.on('stockUpdate', () => {
       refetchData(true);
+      toast.info('Inventory stock levels updated', { autoClose: 3000 });
     });
-    socketRef.current.on('disconnect', () => console.log('Socket.IO disconnected'));
-    return () => socketRef.current.disconnect();
-  }, [refetchData]);
+    socket.on('orderUpdate', (updatedOrder) => {
+      setOrders(prev => {
+        const exists = prev.some(o => o.id === updatedOrder.id);
+        if (exists) {
+          return prev.map(o => (o.id === updatedOrder.id ? updatedOrder : o));
+        } else {
+          return [...prev, updatedOrder];
+        }
+      });
+      toast.info(`Your order #${updatedOrder.id} updated`, { autoClose: 3000 });
+      if (tableRef.current) tableRef.current.focus();
+    });
+    return () => socket.disconnect();
+  }, [refetchData, setOrders]);
 
   const getTotalStock = useMemo(() => {
     const cache = {};
     return (productId) => {
       const cacheKey = `${productId}`;
       if (cache[cacheKey] !== undefined) return cache[cacheKey];
-
       const product = products.find(p => String(p.product_id) === String(productId));
-      const totalStock = product ? product.stock_quantity : 0;
-      console.log(`getTotalStock for ${productId}: stock=${totalStock}`);
-      return (cache[cacheKey] = totalStock);
+      return (cache[cacheKey] = product ? product.stock_quantity : 0);
     };
   }, [products]);
 
@@ -125,11 +133,12 @@ function CustomerOrdersPage() {
     setIsSubmitting(true);
     setFormErrors([]);
 
-    await refetchData(true); // Fetch latest data before validation
+    await refetchData(true);
     const { isValid, errors } = validateOrderItems(newOrder.items, products, getTotalStock);
     if (!isValid) {
       setFormErrors(errors);
       setIsSubmitting(false);
+      toast.error('Failed to create order. Check the errors below.', { autoClose: 3000 });
       return;
     }
 
@@ -153,11 +162,13 @@ function CustomerOrdersPage() {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Failed to create order');
       }
-      await refetchData(true); // Refresh after creation
+      await refetchData(true);
       setShowCreateForm(false);
       setNewOrder({ targetDeliveryDate: '', items: [{ product_id: '', quantity: 1 }] });
+      toast.success('Order created successfully!', { autoClose: 3000 });
     } catch (err) {
       setFormErrors([err.message]);
+      toast.error(err.message, { autoClose: 3000 });
     } finally {
       setIsSubmitting(false);
     }
@@ -189,23 +200,28 @@ function CustomerOrdersPage() {
     return sortedOrders.filter(order => {
       const matchesSearch = searchTerm === '' || 
         order.id.toString().includes(searchTerm) ||
-        order.customerName.toLowerCase().includes(searchTerm.toLowerCase());
+        order.customerName?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = filterStatus === 'All' || order.status === filterStatus;
       return matchesSearch && matchesStatus;
     });
   }, [sortedOrders, searchTerm, filterStatus]);
 
   if (isLoading && !orders.length) return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" aria-live="polite">
       <div className="text-gray-600 text-xl animate-pulse">Loading orders...</div>
     </div>
   );
 
   if (error && !showCreateForm) return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
-      <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" role="alert">
+      <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg flex items-center">
         {error}
-        <button onClick={() => refetchData(true)} className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600">Retry</button>
+        <button 
+          onClick={() => refetchData(true)} 
+          className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
+        >
+          Retry
+        </button>
       </div>
     </div>
   );
@@ -214,55 +230,66 @@ function CustomerOrdersPage() {
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">My Orders</h1>
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center mb-8 gap-4">
+        <div className="flex items-center mb-8 gap-4 flex-wrap">
           <div className="relative flex-1 min-w-0">
+            <label htmlFor="search-orders" className="sr-only">Search Orders</label>
             <input
+              id="search-orders"
               type="text"
-              placeholder="Search Orders..."
+              placeholder="Search by Order ID or Customer Name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value.toLowerCase())}
-              className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
+              className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
             />
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md w-40"
-          >
-            <option value="All">All Status</option>
-            <option value="Pending">Pending</option>
-            <option value="Processing">Processing</option>
-            <option value="Shipped">Shipped</option>
-            <option value="Delivered">Delivered</option>
-          </select>
-          {/* Refresh Button - Parallel to Search */}
+          <div>
+            <label htmlFor="status-filter" className="sr-only">Filter by Status</label>
+            <select
+              id="status-filter"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md w-40"
+            >
+              <option value="All">All Status</option>
+              <option value="Pending">Pending</option>
+              <option value="Processing">Processing</option>
+              <option value="Shipped">Shipped</option>
+              <option value="Delivered">Delivered</option>
+            </select>
+          </div>
           <button
             onClick={() => refetchData(true)}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 transition-all duration-300 shadow-md text-lg w-32"
-            title="Refresh orders"
+            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg w-32"
             disabled={isLoading}
+            aria-label="Refresh orders"
           >
-            Refresh
+            {isLoading && orders.length > 0 ? 'Refreshing...' : 'Refresh'}
           </button>
           <button
             onClick={() => setShowCreateForm(true)}
-            className="p-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg shadow-md hover:shadow-lg font-semibold flex items-center w-44"
-            disabled={products.length === 0}
+            className="p-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg shadow-md hover:shadow-lg hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 font-semibold flex items-center w-44"
+            disabled={products.length === 0 || isLoading}
+            aria-label="Create new order"
           >
             <PlusCircle className="mr-2" /> Create Order
           </button>
         </div>
 
-        {/* Optional: Show refreshing message */}
         {isLoading && orders.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center">Refreshing data...</div>
+          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">Refreshing data...</div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-gradient-to-r from-amber-100 to-amber-50">
-              <tr>
+        <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
+          <table 
+            className="w-full text-left border-collapse" 
+            role="grid" 
+            aria-label="Customer orders table"
+            ref={tableRef}
+            tabIndex={0}
+          >
+            <thead>
+              <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50" role="row">
                 {[
                   { key: 'id', label: 'Order ID' },
                   { key: 'items', label: 'Items' },
@@ -275,11 +302,19 @@ function CustomerOrdersPage() {
                   <th
                     key={key}
                     onClick={() => key !== 'items' && handleSort(key)}
-                    className={`py-4 px-6 text-gray-700 text-lg font-semibold ${key !== 'items' ? 'cursor-pointer hover:bg-amber-100' : ''}`}
+                    className={`py-4 px-6 text-gray-800 text-base font-semibold ${key !== 'items' ? 'cursor-pointer hover:bg-amber-300' : ''} transition-all duration-200`}
+                    aria-sort={sortConfig.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    scope="col"
                   >
-                    <div className="flex items-center">
-                      {label}
-                      {key !== 'items' && <ArrowDownUp className="ml-2 opacity-50 hover:opacity-100" size={16} />}
+                    <div className="flex items-center justify-between">
+                      <span>{label}</span>
+                      {key !== 'items' && (
+                        <ArrowDownUp 
+                          size={16} 
+                          className={`ml-2 text-gray-600 ${sortConfig.key === key ? 'text-gray-900' : 'opacity-50'}`} 
+                          aria-hidden="true" 
+                        />
+                      )}
                     </div>
                   </th>
                 ))}
@@ -287,29 +322,29 @@ function CustomerOrdersPage() {
             </thead>
             <tbody>
               {filteredOrders.map(order => (
-                <tr key={order.id} className="border-t hover:bg-amber-50 transition-all duration-200">
-                  <td className="py-4 px-6 text-gray-600 text-lg">{order.id}</td>
-                  <td className="py-4 px-6 text-gray-600 text-lg">
+                <tr key={order.id} className="border-t hover:bg-amber-50 transition-all duration-200" role="row">
+                  <td className="py-4 px-6 text-gray-600 text-base">{order.id}</td>
+                  <td className="py-4 px-6 text-gray-600 text-base">
                     <ul className="space-y-1">
                       {order.items.map((item, idx) => (
                         <li key={idx} className="text-sm">{item.productName} (Qty: {item.quantity})</li>
                       ))}
                     </ul>
                   </td>
-                  <td className="py-4 px-6 text-gray-600 text-lg">{formatCurrency(calculateTotalAmount(order.items))}</td>
-                  <td className="py-4 px-6 text-gray-600 text-lg">
-                    <span className={`px-3 py-1 rounded-full text-white text-base font-medium ${
-                      order.status === 'Pending' ? 'bg-amber-400' :
-                      order.status === 'Processing' ? 'bg-yellow-500' :
-                      order.status === 'Shipped' ? 'bg-blue-500' :
-                      order.status === 'Delivered' ? 'bg-green-500' : 'bg-gray-500'
+                  <td className="py-4 px-6 text-gray-600 text-base">{formatCurrency(calculateTotalAmount(order.items))}</td>
+                  <td className="py-4 px-6 text-gray-600 text-base">
+                    <span className={`px-3 py-1 rounded-full text-white text-sm font-medium ${
+                      order.status === 'Pending' ? 'bg-amber-500' :
+                      order.status === 'Processing' ? 'bg-yellow-600' :
+                      order.status === 'Shipped' ? 'bg-blue-600' :
+                      order.status === 'Delivered' ? 'bg-green-600' : 'bg-gray-500'
                     }`}>
                       {order.status || 'Unknown'}
                     </span>
                   </td>
-                  <td className="py-4 px-6 text-gray-600 text-lg">{order.targetDeliveryDate ? formatDate(order.targetDeliveryDate) : 'Not Set'}</td>
-                  <td className="py-4 px-6 text-gray-600 text-lg">{order.paymentStatus || 'Unknown'}</td>
-                  <td className="py-4 px-6 text-gray-600 text-lg">
+                  <td className="py-4 px-6 text-gray-600 text-base">{order.targetDeliveryDate ? formatDate(order.targetDeliveryDate) : 'Not Set'}</td>
+                  <td className="py-4 px-6 text-gray-600 text-base">{order.paymentStatus || 'N/A'}</td>
+                  <td className="py-4 px-6 text-gray-600 text-base">
                     {new Date(order.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                   </td>
                 </tr>
@@ -326,52 +361,58 @@ function CustomerOrdersPage() {
                 <button
                   onClick={() => setCursor(null)}
                   disabled={!cursor}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
+                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  aria-label="Previous page"
                 >
                   <ChevronLeft size={20} />
                 </button>
                 <button
                   onClick={() => setCursor(orders[orders.length - 1]?.createdAt)}
                   disabled={orders.length < ordersPerPage || totalOrders <= orders.length}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
+                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  aria-label="Next page"
                 >
                   <ChevronRight size={20} />
                 </button>
               </div>
             </div>
           ) : (
-            <div className="text-center py-12 text-gray-500 text-xl">
-              <Filter className="mx-auto mb-4 text-gray-400" size={48} />
-              No orders found matching your search or filter.
+            <div className="text-center py-12 text-gray-500 flex flex-col items-center" role="alert">
+              <Filter className="mb-4 text-gray-400" size={48} />
+              <p className="text-lg">No orders found matching your search or filter.</p>
             </div>
           )}
         </div>
 
         {showCreateForm && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-lg relative overflow-y-auto max-h-[90vh]">
+          <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50" role="dialog" aria-labelledby="create-order-title">
+            <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-lg relative overflow-y-auto max-h-[90vh]">
               <button
                 onClick={() => setShowCreateForm(false)}
-                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                aria-label="Close create order form"
               >
                 <XCircle size={24} />
               </button>
-              <h2 className="text-2xl font-bold mb-6 text-gray-800 border-b border-amber-100 pb-3">Create New Order</h2>
+              <h2 id="create-order-title" className="text-2xl font-bold mb-6 text-gray-800 border-b border-amber-100 pb-3">Create New Order</h2>
               {formErrors.length > 0 && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded-lg mb-4 text-sm">
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded-lg mb-4 text-sm" role="alert">
                   {formErrors.map((err, idx) => <p key={idx}>{err}</p>)}
                 </div>
               )}
               <form onSubmit={handleCreateOrder} className="space-y-5">
                 <div className="space-y-2">
-                  <label className="text-gray-700 font-medium">Target Delivery Date</label>
+                  <label htmlFor="targetDeliveryDate" className="text-gray-700 font-medium">Target Delivery Date</label>
                   <input
+                    id="targetDeliveryDate"
                     type="date"
                     value={newOrder.targetDeliveryDate}
                     onChange={(e) => setNewOrder(prev => ({ ...prev, targetDeliveryDate: e.target.value }))}
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-sm"
+                    className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-base bg-white shadow-sm transition-all duration-200"
                     min={formatDate(new Date())}
                     required
+                    disabled={isSubmitting}
+                    aria-label="Select target delivery date"
                   />
                 </div>
                 <div className="space-y-3">
@@ -388,8 +429,10 @@ function CustomerOrdersPage() {
                             return { ...prev, items };
                           });
                         }}
-                        className="w-2/3 p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-base bg-white shadow-sm"
+                        className="w-2/3 p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-base bg-white shadow-sm transition-all duration-200 disabled:bg-gray-200"
                         required
+                        disabled={isSubmitting}
+                        aria-label={`Select product for item ${idx + 1}`}
                       >
                         <option value="">Select Product</option>
                         {products.map(product => {
@@ -417,16 +460,20 @@ function CustomerOrdersPage() {
                             return { ...prev, items };
                           });
                         }}
-                        className="w-1/3 p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-base bg-white shadow-sm"
+                        className="w-1/3 p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-base bg-white shadow-sm transition-all duration-200 disabled:bg-gray-200"
                         min="1"
                         max={getTotalStock(item.product_id) || 999}
                         required
+                        disabled={isSubmitting}
+                        aria-label={`Quantity for item ${idx + 1}`}
                       />
                       {newOrder.items.length > 1 && (
                         <button
                           type="button"
                           onClick={() => setNewOrder(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }))}
-                          className="text-red-500 hover:text-red-700"
+                          className="text-red-500 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-full p-1 disabled:opacity-50"
+                          disabled={isSubmitting}
+                          aria-label={`Remove item ${idx + 1}`}
                         >
                           <XCircle size={20} />
                         </button>
@@ -436,7 +483,9 @@ function CustomerOrdersPage() {
                   <button
                     type="button"
                     onClick={() => setNewOrder(prev => ({ ...prev, items: [...prev.items, { product_id: '', quantity: 1 }] }))}
-                    className="bg-amber-100 hover:bg-amber-200 text-amber-800 px-4 py-2 rounded-lg font-medium flex items-center"
+                    className="bg-amber-100 hover:bg-amber-200 text-amber-800 px-4 py-2 rounded-lg font-medium flex items-center transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-300 disabled:bg-gray-200"
+                    disabled={isSubmitting || products.length === 0}
+                    aria-label="Add another item"
                   >
                     <PlusCircle className="mr-1" size={20} /> Add Item
                   </button>
@@ -445,14 +494,17 @@ function CustomerOrdersPage() {
                   <button
                     type="button"
                     onClick={() => setShowCreateForm(false)}
-                    className="px-5 py-3 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium"
+                    className="px-5 py-3 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-300 disabled:bg-gray-400"
+                    disabled={isSubmitting}
+                    aria-label="Cancel order creation"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg shadow-md hover:shadow-lg font-semibold disabled:bg-gray-400"
+                    className="px-5 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg shadow-md hover:bg-amber-700 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 font-semibold disabled:bg-gray-400 disabled:shadow-none"
                     disabled={isSubmitting || isLoading || products.length === 0}
+                    aria-label="Submit order"
                   >
                     {isSubmitting ? 'Creating...' : 'Create Order'}
                   </button>
@@ -462,6 +514,7 @@ function CustomerOrdersPage() {
           </div>
         )}
       </div>
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </div>
   );
 }
