@@ -1,34 +1,13 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Package, MessageSquare, Truck, Users // Importing lucide-react icons
-} from 'lucide-react';
-import { io } from 'socket.io-client';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { Package, MessageSquare, Truck, Users } from 'lucide-react';
+import { toast } from 'react-toastify';
 
-// Use the environment variable for the backend URL
-const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-
-function AdminDashboard() {
+function AdminDashboard({ socket }) {
   useEffect(() => {
-    const socket = io(SOCKET_URL, {
-      reconnection: true, // Enable reconnection attempts
-      reconnectionAttempts: 5, // Number of reconnection attempts
-      reconnectionDelay: 1000, // Delay between reconnection attempts (ms)
-    });
+    if (!socket) return;
 
-    socket.on('connect', () => {
-      console.log('Connected to Socket.IO');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
-    });
-
-    // Real-time event listeners
+    // Real-time event listeners (unchanged from your backend setup)
     socket.on('orderUpdate', (updatedOrder) => {
       toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 3000 });
     });
@@ -45,12 +24,15 @@ function AdminDashboard() {
       toast.info(`Customer ${updatedCustomer.name} updated`, { autoClose: 3000 });
     });
 
-    // Cleanup on unmount
+    // Cleanup listeners on unmount
     return () => {
-      socket.disconnect();
-      console.log('Socket.IO disconnected');
+      socket.off('orderUpdate');
+      socket.off('newQuery');
+      socket.off('queryUpdate');
+      socket.off('stockUpdate');
+      socket.off('customerUpdate');
     };
-  }, []); // Empty dependency array since SOCKET_URL is constant
+  }, [socket]); // Depend on socket prop
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
@@ -108,8 +90,6 @@ function AdminDashboard() {
           <p className="text-gray-600 text-center mt-3 text-lg">View customer details</p>
         </Link>
       </div>
-
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </div>
   );
 }

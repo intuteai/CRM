@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import io from 'socket.io-client';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import Navbar from './components/Navbar';
 import AdminDashboard from './components/AdminDashboard';
 import OrdersPage from './components/OrdersPage';
@@ -31,10 +33,23 @@ function App() {
       path: '/socket.io',
       transports: ['websocket'],
     });
-    newSocket.on('connect', () => console.log('Connected to Socket.IO'));
-    newSocket.on('connect_error', (err) => console.error('Socket connection error:', err));
+
+    newSocket.on('connect', () => {
+      console.log('Connected to Socket.IO');
+      toast.success('Connected to real-time updates!', {
+        autoClose: 2000,
+        toastId: 'socket-connect', // Prevents duplicate toasts
+      });
+    });
+    newSocket.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+    });
+
     setSocket(newSocket);
-    return () => newSocket.disconnect();
+    return () => {
+      newSocket.disconnect();
+    };
   }, []);
 
   const handleLoginSubmit = (role, name, token) => {
@@ -127,6 +142,7 @@ function App() {
           onSubmit={handleLoginSubmit}
         />
       )}
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </>
   );
 }
