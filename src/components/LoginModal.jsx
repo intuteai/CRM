@@ -12,6 +12,7 @@ function LoginModal({ setShowLogin, onSubmit }) {
 
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      console.log('VITE_BACKEND_URL in LoginModal:', import.meta.env.VITE_BACKEND_URL); // Debug log
       const res = await fetch(`${backendUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -21,7 +22,7 @@ function LoginModal({ setShowLogin, onSubmit }) {
       const data = await res.json();
 
       if (res.ok) {
-        localStorage.setItem('token', data.token); // Store token
+        localStorage.setItem('token', data.token);
         onSubmit(data.role, data.name || email.split('@')[0], data.token);
         setShowLogin(false);
       } else {

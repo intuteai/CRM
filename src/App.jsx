@@ -25,6 +25,7 @@ function App() {
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    console.log('VITE_BACKEND_URL in App:', import.meta.env.VITE_BACKEND_URL); // Debug log
     const newSocket = io(backendUrl, {
       withCredentials: true,
     });
