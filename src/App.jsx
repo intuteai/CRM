@@ -18,15 +18,20 @@ import logo from './assets/intute-ai_logo.jpeg';
 function App() {
   const [userRole, setUserRole] = useState(localStorage.getItem('role') || null);
   const [userName, setUserName] = useState(localStorage.getItem('name') || 'User');
-  const [token, setToken] = useState(localStorage.getItem('token') || null); // Add token state
-  const [showLogin, setShowLogin] = useState(!localStorage.getItem('token')); // Show login if no token
+  const [token, setToken] = useState(localStorage.getItem('token') || null);
+  const [showLogin, setShowLogin] = useState(!localStorage.getItem('token'));
+  const [socket, setSocket] = useState(null);
   const location = useLocation();
 
   useEffect(() => {
-    const socket = io('http://localhost:5000');
-    socket.on('connect', () => console.log('Connected to Socket.IO'));
-    socket.on('connect_error', (err) => console.error('Socket connection error:', err));
-    return () => socket.disconnect();
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const newSocket = io(backendUrl, {
+      withCredentials: true,
+    });
+    newSocket.on('connect', () => console.log('Connected to Socket.IO'));
+    newSocket.on('connect_error', (err) => console.error('Socket connection error:', err));
+    setSocket(newSocket);
+    return () => newSocket.disconnect();
   }, []);
 
   const handleLoginSubmit = (role, name, token) => {
@@ -35,7 +40,7 @@ function App() {
     setToken(token);
     localStorage.setItem('role', role);
     localStorage.setItem('name', name);
-    localStorage.setItem('token', token); // Store token
+    localStorage.setItem('token', token);
     setShowLogin(false);
   };
 
@@ -46,6 +51,7 @@ function App() {
     localStorage.removeItem('role');
     localStorage.removeItem('name');
     localStorage.removeItem('token');
+    if (socket) socket.disconnect();
   };
 
   const showNavbar = userRole && location.pathname !== '/';
@@ -58,19 +64,19 @@ function App() {
           userName={userName}
           setUserRole={setUserRole}
           setShowLogin={() => setShowLogin(true)}
-          handleLogout={handleLogout} // Pass logout handler
+          handleLogout={handleLogout}
         />
       )}
       <Routes>
-        <Route path="/admin-dashboard" element={<AdminDashboard />} />
-        <Route path="/orders" element={userRole === 'admin' ? <OrdersPage /> : <Navigate to="/" replace />} />
-        <Route path="/queries" element={userRole === 'admin' ? <QueriesPage /> : <Navigate to="/" replace />} />
-        <Route path="/customer-list" element={userRole === 'admin' ? <CustomerList /> : <Navigate to="/" replace />} />
-        <Route path="/customer-dashboard" element={userRole === 'customer' ? <CustomerDashboard /> : <Navigate to="/" replace />} />
-        <Route path="/customer-orders" element={userRole === 'customer' ? <CustomerOrdersPage /> : <Navigate to="/" replace />} />
-        <Route path="/customer-queries" element={userRole === 'customer' ? <CustomerQueriesPage /> : <Navigate to="/" replace />} />
-        <Route path="/edit-profile" element={userRole ? <EditProfile /> : <Navigate to="/" replace />} />
-        <Route path="/inventory" element={userRole === 'admin' ? <InventoryPage userRole={userRole} /> : <Navigate to="/" replace />} />
+        <Route path="/admin-dashboard" element={<AdminDashboard socket={socket} />} />
+        <Route path="/orders" element={userRole === 'admin' ? <OrdersPage socket={socket} /> : <Navigate to="/" replace />} />
+        <Route path="/queries" element={userRole === 'admin' ? <QueriesPage socket={socket} /> : <Navigate to="/" replace />} />
+        <Route path="/customer-list" element={userRole === 'admin' ? <CustomerList socket={socket} /> : <Navigate to="/" replace />} />
+        <Route path="/customer-dashboard" element={userRole === 'customer' ? <CustomerDashboard socket={socket} /> : <Navigate to="/" replace />} />
+        <Route path="/customer-orders" element={userRole === 'customer' ? <CustomerOrdersPage socket={socket} /> : <Navigate to="/" replace />} />
+        <Route path="/customer-queries" element={userRole === 'customer' ? <CustomerQueriesPage socket={socket} /> : <Navigate to="/" replace />} />
+        <Route path="/edit-profile" element={userRole ? <EditProfile socket={socket} /> : <Navigate to="/" replace />} />
+        <Route path="/inventory" element={userRole === 'admin' ? <InventoryPage userRole={userRole} socket={socket} /> : <Navigate to="/" replace />} />
         <Route
           path="/"
           element={
@@ -81,14 +87,16 @@ function App() {
                     src={logo}
                     alt="Intute.ai Logo"
                     className="h-72 w-auto mx-auto mb-12 drop-shadow-2xl animate-float"
-                    style={{animation: 'float 6s ease-in-out infinite'}}
+                    style={{ animation: 'float 6s ease-in-out infinite' }}
                   />
                   <div className="relative">
-                    <p className="text-5xl font-semibold text-gray-800 mb-10 tracking-wider uppercase relative z-10" 
-                       style={{
-                         textShadow: '0 2px 4px rgba(0,0,0,0.1), 0 8px 16px rgba(222,170,50,0.2)',
-                         letterSpacing: '0.15em'
-                       }}>
+                    <p
+                      className="text-5xl font-semibold text-gray-800 mb-10 tracking-wider uppercase relative z-10"
+                      style={{
+                        textShadow: '0 2px 4px rgba(0,0,0,0.1), 0 8px 16px rgba(222,170,50,0.2)',
+                        letterSpacing: '0.15em',
+                      }}
+                    >
                       <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-900">Business</span>
                       <span className="px-3 text-gray-700">Planning</span>
                       <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-900 to-amber-600">Platform</span>
@@ -121,13 +129,12 @@ function App() {
   );
 }
 
-// Add this to your global CSS or component CSS
 const styleTag = document.createElement('style');
 styleTag.textContent = `
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
 `;
 document.head.appendChild(styleTag);
 

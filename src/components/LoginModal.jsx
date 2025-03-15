@@ -11,7 +11,8 @@ function LoginModal({ setShowLogin, onSubmit }) {
     setError(null);
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/login', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
