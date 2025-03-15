@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import logo from '../assets/intute-ai_logo.jpeg';
+import logo from '/intute-ai_logo.jpeg'; // Updated import from public folder
 
 function LoginModal({ setShowLogin, onSubmit }) {
   const [email, setEmail] = useState('');

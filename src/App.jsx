@@ -13,7 +13,7 @@ import EditProfile from './components/EditProfile';
 import InventoryPage from './components/InventoryPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginModal from './components/LoginModal';
-import logo from './assets/intute-ai_logo.jpeg';
+import logo from '/intute-ai_logo.jpeg'; // Updated import from public folder
 
 function App() {
   const [userRole, setUserRole] = useState(localStorage.getItem('role') || null);
@@ -28,8 +28,8 @@ function App() {
     console.log('VITE_BACKEND_URL in App:', import.meta.env.VITE_BACKEND_URL);
     const newSocket = io(backendUrl, {
       withCredentials: true,
-      path: '/socket.io', // Ensure consistent path
-      transports: ['websocket'], // Force WebSocket to avoid polling issues
+      path: '/socket.io',
+      transports: ['websocket'],
     });
     newSocket.on('connect', () => console.log('Connected to Socket.IO'));
     newSocket.on('connect_error', (err) => console.error('Socket connection error:', err));
@@ -101,8 +101,7 @@ function App() {
                       }}
                     >
                       <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-900">Business</span>
-                      <span className="px-3 text-gray-700">Planning</span>
-                      <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-900 to-amber-600">Platform</span>
+                      <span className="px-3 text-gray-700">Planner</span>
                     </p>
                     <div className="absolute -inset-1 blur-sm bg-gradient-to-r from-amber-200 via-transparent to-amber-200 opacity-20 z-0"></div>
                   </div>
