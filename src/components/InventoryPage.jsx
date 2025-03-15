@@ -22,7 +22,8 @@ const useFetchInventory = ({ limit, offset }) => {
       setIsLoading(true);
       const token = localStorage.getItem('token');
       if (!token) throw new Error("Authentication token missing. Please log in again.");
-      const url = `http://localhost:5000/api/inventory?limit=${limit}&offset=${offset}&force_refresh=true`;
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const url = `${backendUrl}/api/inventory?limit=${limit}&offset=${offset}&force_refresh=true`;
       const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
       if (!response.ok) throw new Error(`Inventory fetch failed: ${response.statusText}`);
       const { data, total } = await response.json();
@@ -70,6 +71,16 @@ function InventoryPage({ userRole }) {
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    console.log('Socket.IO connecting to:', backendUrl); // Debug log
+    const socket = io(backendUrl, {
+      withCredentials: true,
+      transports: ['websocket'], // Prefer WebSocket over polling
+    });
+    socket.on('connect', () => console.log('Connected to Socket.IO'));
+    socket.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+    });
     socket.on('stockUpdate', () => {
       refetchData();
       toast.info('Inventory updated in real-time', { autoClose: 2000 });
@@ -90,7 +101,8 @@ function InventoryPage({ userRole }) {
     const token = localStorage.getItem('token');
     try {
       if (!token) throw new Error("Authentication token missing.");
-      const response = await fetch('http://localhost:5000/api/inventory', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const response = await fetch(`${backendUrl}/api/inventory`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ product_name, stock_quantity, price, description, product_code }),
@@ -115,7 +127,8 @@ function InventoryPage({ userRole }) {
     const token = localStorage.getItem('token');
     try {
       if (!token) throw new Error("Authentication token missing.");
-      const response = await fetch(`http://localhost:5000/api/inventory/${itemId}`, {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const response = await fetch(`${backendUrl}/api/inventory/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ product_name, stock_quantity, price, description, product_code }),
@@ -139,7 +152,8 @@ function InventoryPage({ userRole }) {
     const token = localStorage.getItem('token');
     try {
       if (!token) throw new Error("Authentication token missing.");
-      const response = await fetch(`http://localhost:5000/api/inventory/${itemId}`, {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const response = await fetch(`${backendUrl}/api/inventory/${itemId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });
