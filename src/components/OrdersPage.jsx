@@ -1,28 +1,27 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
-  Edit2, CheckCircle, MoreVertical, Truck, ShoppingCart, DollarSign, XCircle, Trash2
+  Edit2, CheckCircle, MoreVertical, Truck, ShoppingCart, DollarSign, Trash2
 } from 'lucide-react';
-import { io } from 'socket.io-client';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import CreateOrderForm from './CreateOrderForm';
 import EditOrderForm from './EditOrderForm';
 
-const formatDate = (dateString) => dateString ? new Date(dateString).toISOString().split('T')[0] : '';
+const formatDate = (dateString) => (dateString ? new Date(dateString).toISOString().split('T')[0] : '');
 const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 const calculateTotalAmount = (items) => items.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 0), 0);
 
 const validateOrderItems = (items, products, getAvailableStock, editingOrderId = null) => {
   const errors = [];
   const productIds = new Set();
-  const isValid = items.every(item => {
+  const isValid = items.every((item) => {
     if (productIds.has(item.product_id)) {
       errors.push(`Duplicate product ID: ${item.product_id}`);
       return false;
     }
     productIds.add(item.product_id);
-    const product = products.find(p => String(p.product_id) === String(item.product_id));
+    const product = products.find((p) => String(p.product_id) === String(item.product_id));
     const quantity = parseInt(item.quantity) || 0;
     if (!product || quantity <= 0 || !item.price || parseFloat(item.price) <= 0) {
       errors.push(product ? `Invalid quantity or price for ${product.product_name}` : `Product not found: ${item.product_id}`);
@@ -52,31 +51,29 @@ const useFetchData = ({ limit, cursor }) => {
       setIsLoading(true);
       const token = localStorage.getItem('token');
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      console.log('Fetching data from:', backendUrl); // Debug log
       const url = cursor 
         ? `${backendUrl}/api/orders?limit=${limit}&cursor=${encodeURIComponent(cursor)}&force_refresh=true`
         : `${backendUrl}/api/orders?limit=${limit}&force_refresh=true`;
       
       const [ordersRes, productsRes, customersRes] = await Promise.all([
-        fetch(url, { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => ({ ok: false })),
-        fetch(`${backendUrl}/api/inventory/available`, { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => ({ ok: false })),
-        fetch(`${backendUrl}/api/users/customers`, { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => ({ ok: false })),
+        fetch(url, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ ok: false })),
+        fetch(`${backendUrl}/api/inventory/available`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ ok: false })),
+        fetch(`${backendUrl}/api/users/customers`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ ok: false })),
       ]);
 
       const [ordersData, productsData, customersData] = await Promise.all([
         ordersRes.ok ? ordersRes.json() : { orders: [], total: 0 },
-        productsRes.ok ? productsRes.json().then(data => data.data || []) : [],
+        productsRes.ok ? productsRes.json().then((data) => data.data || []) : [],
         customersRes.ok ? customersRes.json() : [],
       ]);
 
-      const validOrders = (ordersData.orders || []).filter(o => o && typeof o.id !== 'undefined');
+      const validOrders = (ordersData.orders || []).filter((o) => o && typeof o.id !== 'undefined');
       setOrders(validOrders);
       setTotalOrders(ordersData.total || 0);
-      setProducts((productsData || []).filter(p => p && typeof p.product_id !== 'undefined'));
-      setCustomers((customersData || []).filter(c => c && typeof c.user_id !== 'undefined'));
+      setProducts((productsData || []).filter((p) => p && typeof p.product_id !== 'undefined'));
+      setCustomers((customersData || []).filter((c) => c && typeof c.user_id !== 'undefined'));
       setIsEmpty(validOrders.length === 0 && productsData.length === 0 && customersData.length === 0);
       setError(null);
-      console.log('Fetched products:', productsData); // Debug log
     } catch (err) {
       setError(err.message || 'Failed to fetch data');
       setIsEmpty(false);
@@ -86,12 +83,14 @@ const useFetchData = ({ limit, cursor }) => {
     }
   }, [limit, cursor]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   return { orders, setOrders, totalOrders, products, customers, isLoading, error, isEmpty, refetchData: fetchData };
 };
 
-function OrdersPage() {
+function OrdersPage({ socket }) {
   const [cursor, setCursor] = useState(null);
   const [ordersPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
@@ -107,23 +106,15 @@ function OrdersPage() {
   const { orders, setOrders, totalOrders, products, customers, isLoading, error, isEmpty, refetchData } = useFetchData({ limit: ordersPerPage, cursor });
 
   useEffect(() => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    console.log('Socket.IO connecting to:', backendUrl); // Debug log
-    const socket = io(backendUrl, {
-      withCredentials: true,
-      transports: ['websocket'], // Prefer WebSocket over polling
-    });
-    socket.on('connect', () => console.log('Connected to Socket.IO'));
-    socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
-    });
+    if (!socket) return;
+
     socket.on('orderUpdate', (updatedOrder) => {
-      setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o));
+      setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o)));
       toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 3000 });
     });
-    return () => socket.disconnect();
-  }, [setOrders]);
+
+    return () => socket.off('orderUpdate');
+  }, [setOrders, socket]);
 
   const getAvailableStock = useMemo(() => {
     const cache = {};
@@ -131,25 +122,26 @@ function OrdersPage() {
       const cacheKey = `${productId}-${editingOrderId || 'new'}`;
       if (cache[cacheKey] !== undefined) return cache[cacheKey];
 
-      const validProducts = Array.isArray(products) ? products.filter(p => p && typeof p.product_id !== 'undefined') : [];
-      const product = validProducts.find(p => String(p.product_id) === String(productId));
+      const validProducts = Array.isArray(products) ? products.filter((p) => p && typeof p.product_id !== 'undefined') : [];
+      const product = validProducts.find((p) => String(p.product_id) === String(productId));
       if (!product) return (cache[cacheKey] = 0);
 
-      let baseStock = product.stock_quantity;
+      let baseStock = product.stock_quantity || 0;
       if (!editingOrderId) {
-        const validOrders = Array.isArray(orders) ? orders.filter(o => o && Array.isArray(o.items)) : [];
-        const reserved = validOrders.flatMap(o => o.items)
-          .filter(item => item && String(item.product_id) === String(productId))
+        const validOrders = Array.isArray(orders) ? orders.filter((o) => o && Array.isArray(o.items)) : [];
+        const reserved = validOrders
+          .flatMap((o) => o.items)
+          .filter((item) => item && String(item.product_id) === String(productId))
           .reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0) || 0;
         return (cache[cacheKey] = Math.max(0, baseStock - reserved));
       }
 
-      const originalOrder = orders.find(o => o && o.id === editingOrderId);
+      const originalOrder = orders.find((o) => o && o.id === editingOrderId);
       const originalQty = originalOrder?.items
-        ?.filter(item => item && String(item.product_id) === String(productId))
+        ?.filter((item) => item && String(item.product_id) === String(productId))
         .reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0) || 0;
       const currentQty = selectedOrder?.items
-        ?.filter(item => item && String(item.product_id) === String(productId))
+        ?.filter((item) => item && String(item.product_id) === String(productId))
         .reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0) || 0;
       return (cache[cacheKey] = Math.max(0, baseStock + originalQty - currentQty));
     };
@@ -160,7 +152,7 @@ function OrdersPage() {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       const res = await fetch(`${backendUrl}/api/orders`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify(newOrder),
       });
       if (!res.ok) {
@@ -180,7 +172,7 @@ function OrdersPage() {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
     const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
       body: JSON.stringify({ items, payment_status: paymentStatus, targetDeliveryDate: targetDeliveryDate || null, status: status || 'Processing' }),
     });
     if (!res.ok) throw new Error((await res.json()).error || 'Failed to update order');
@@ -197,7 +189,7 @@ function OrdersPage() {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       const res = await fetch(`${backendUrl}/api/orders/${orderId}/cancel`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to cancel order');
       await refetchData();
@@ -211,11 +203,11 @@ function OrdersPage() {
 
   const handleStatusChange = useCallback(async (orderId, newStatus) => {
     if (!window.confirm(`Are you sure you want to change the status to ${newStatus}?`)) return;
-    const order = orders.find(o => o.id === orderId);
+    const order = orders.find((o) => o.id === orderId);
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
     const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
       body: JSON.stringify({ items: order.items, payment_status: order.paymentStatus, targetDeliveryDate: order.targetDeliveryDate, status: newStatus }),
     });
     if (!res.ok) throw new Error((await res.json()).error || 'Failed to update status');
@@ -256,8 +248,13 @@ function OrdersPage() {
         </button>
         {isOpen && (
           <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
-            {actionItems.filter(item => item.visible).map((item, index) => (
-              <button key={index} onClick={item.action} className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50" disabled={isCancelling && item.label === 'Cancel Order'}>
+            {actionItems.filter((item) => item.visible).map((item, index) => (
+              <button
+                key={index}
+                onClick={item.action}
+                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                disabled={isCancelling && item.label === 'Cancel Order'}
+              >
                 {item.icon} {item.label}
               </button>
             ))}
@@ -271,7 +268,8 @@ function OrdersPage() {
     const sortableOrders = [...orders];
     if (sortConfig.key) {
       sortableOrders.sort((a, b) => {
-        let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
+        let aValue = a[sortConfig.key];
+        let bValue = b[sortConfig.key];
         if (sortConfig.key === 'totalAmount') {
           aValue = calculateTotalAmount(a.items);
           bValue = calculateTotalAmount(b.items);
@@ -289,67 +287,76 @@ function OrdersPage() {
   }, [orders, sortConfig]);
 
   const filteredOrders = useMemo(() => {
-    const validOrders = sortedOrders.filter(order => order && typeof order.id !== 'undefined');
-    return validOrders.filter(order => {
-      const matchesSearch = order.id.toString().includes(searchTerm.toLowerCase()) ||
-                            order.customerName.toLowerCase().includes(searchTerm.toLowerCase());
+    const validOrders = sortedOrders.filter((order) => order && typeof order.id !== 'undefined');
+    return validOrders.filter((order) => {
+      const matchesSearch =
+        order.id.toString().includes(searchTerm.toLowerCase()) ||
+        order.customerName.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = filterStatus === 'All' || order.status === filterStatus;
       return matchesSearch && matchesStatus;
     });
   }, [sortedOrders, searchTerm, filterStatus]);
 
   const handleSort = useCallback((key) => {
-    setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc',
+    }));
   }, []);
 
   const handleCreateButtonClick = useCallback(() => {
-    console.log('Create Order button clicked', { isLoading, productsLength: products.length });
     setShowCreateForm(true);
-  }, [isLoading, products.length]);
+  }, []);
 
-  if (isLoading && !orders.length) return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" aria-live="polite">
-      <div className="text-gray-600 text-xl animate-pulse">Loading orders...</div>
-    </div>
-  );
-
-  if (isEmpty) return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" role="status">
-      <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
-        <ShoppingCart className="mx-auto mb-4 text-gray-400" size={48} />
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">No Orders Yet</h2>
-        <p className="text-gray-600 mb-6">Your database is empty. Start by creating a new order!</p>
-        <button
-          onClick={handleCreateButtonClick}
-          className="p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 flex items-center mx-auto"
-        >
-          <PlusCircle className="mr-2" /> Create First Order
-        </button>
+  if (isLoading && !orders.length) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" aria-live="polite">
+        <div className="text-gray-600 text-xl animate-pulse">Loading orders...</div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  if (error && !showCreateForm && !showEditForm) return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" role="alert">
-      <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg flex flex-col items-center">
-        <p className="mb-4">{error}</p>
-        <div className="flex gap-4">
-          <button 
-            onClick={() => refetchData()} 
-            className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          >
-            Retry
-          </button>
-          <button 
+  if (isEmpty) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" role="status">
+        <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
+          <ShoppingCart className="mx-auto mb-4 text-gray-400" size={48} />
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">No Orders Yet</h2>
+          <p className="text-gray-600 mb-6">Your database is empty. Start by creating a new order!</p>
+          <button
             onClick={handleCreateButtonClick}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-300"
+            className="p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 flex items-center mx-auto"
           >
-            Create New Order
+            <PlusCircle className="mr-2" /> Create First Order
           </button>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (error && !showCreateForm && !showEditForm) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" role="alert">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg flex flex-col items-center">
+          <p className="mb-4">{error}</p>
+          <div className="flex gap-4">
+            <button
+              onClick={() => refetchData()}
+              className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
+            >
+              Retry
+            </button>
+            <button
+              onClick={handleCreateButtonClick}
+              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-300"
+            >
+              Create New Order
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
@@ -403,87 +410,137 @@ function OrdersPage() {
         </div>
 
         {isLoading && orders.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">Refreshing data...</div>
+          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">
+            Refreshing data...
+          </div>
         )}
 
         <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
-          <table 
-            className="w-full text-left border-collapse" 
-            role="grid" 
+          <table
+            className="w-full text-left border-collapse"
+            role="grid"
             aria-label="Orders table"
             ref={tableRef}
             tabIndex={0}
           >
             <thead>
               <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50" role="row">
-                {[
-                  { key: 'id', label: 'Order ID' },
-                  { key: 'customerName', label: 'Customer Name' },
-                  { key: 'items', label: 'Items' },
-                  { key: 'totalAmount', label: 'Total Amount' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'targetDeliveryDate', label: 'Target Delivery' },
-                  { key: 'paymentStatus', label: 'Payment Status' },
-                  { key: 'createdAt', label: 'Created At (IST)' },
-                  { key: 'actions', label: 'Actions' },
-                ].map(({ key, label }) => (
-                  <th
-                    key={key}
-                    className={`py-5 px-3 text-gray-800 text-base font-semibold ${key !== 'items' && key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''} transition-all duration-200`}
-                    onClick={() => key !== 'items' && key !== 'actions' && handleSort(key)}
-                    aria-sort={sortConfig.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    scope="col"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span>{label}</span>
-                      {key !== 'items' && key !== 'actions' && (
-                        <ArrowDownUp 
-                          size={16} 
-                          className={`ml-2 text-gray-600 ${sortConfig.key === key ? 'text-gray-900' : 'opacity-50'}`} 
-                          aria-hidden="true" 
-                        />
-                      )}
-                    </div>
-                  </th>
-                ))}
+                <th
+                  className="py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200"
+                  onClick={() => handleSort('id')}
+                  aria-sort={sortConfig.key === 'id' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  scope="col"
+                >
+                  <div className="flex items-center justify-between">
+                    <span>Order ID</span>
+                    <ArrowDownUp size={16} className={`ml-2 ${sortConfig.key === 'id' ? 'text-gray-900' : 'text-gray-600 opacity-50'}`} />
+                  </div>
+                </th>
+                <th
+                  className="py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200"
+                  onClick={() => handleSort('customerName')}
+                  aria-sort={sortConfig.key === 'customerName' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  scope="col"
+                >
+                  <div className="flex items-center justify-between">
+                    <span>Customer Name</span>
+                    <ArrowDownUp size={16} className={`ml-2 ${sortConfig.key === 'customerName' ? 'text-gray-900' : 'text-gray-600 opacity-50'}`} />
+                  </div>
+                </th>
+                <th className="py-5 px-3 text-gray-800 text-base font-semibold" scope="col">Items</th>
+                <th
+                  className="py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200"
+                  onClick={() => handleSort('totalAmount')}
+                  aria-sort={sortConfig.key === 'totalAmount' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  scope="col"
+                >
+                  <div className="flex items-center justify-between">
+                    <span>Total Amount</span>
+                    <ArrowDownUp size={16} className={`ml-2 ${sortConfig.key === 'totalAmount' ? 'text-gray-900' : 'text-gray-600 opacity-50'}`} />
+                  </div>
+                </th>
+                <th
+                  className="py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200"
+                  onClick={() => handleSort('status')}
+                  aria-sort={sortConfig.key === 'status' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  scope="col"
+                >
+                  <div className="flex items-center justify-between">
+                    <span>Status</span>
+                    <ArrowDownUp size={16} className={`ml-2 ${sortConfig.key === 'status' ? 'text-gray-900' : 'text-gray-600 opacity-50'}`} />
+                  </div>
+                </th>
+                <th
+                  className="py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200"
+                  onClick={() => handleSort('targetDeliveryDate')}
+                  aria-sort={sortConfig.key === 'targetDeliveryDate' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  scope="col"
+                >
+                  <div className="flex items-center justify-between">
+                    <span>Target Delivery</span>
+                    <ArrowDownUp size={16} className={`ml-2 ${sortConfig.key === 'targetDeliveryDate' ? 'text-gray-900' : 'text-gray-600 opacity-50'}`} />
+                  </div>
+                </th>
+                <th
+                  className="py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200"
+                  onClick={() => handleSort('paymentStatus')}
+                  aria-sort={sortConfig.key === 'paymentStatus' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  scope="col"
+                >
+                  <div className="flex items-center justify-between">
+                    <span>Payment Status</span>
+                    <ArrowDownUp size={16} className={`ml-2 ${sortConfig.key === 'paymentStatus' ? 'text-gray-900' : 'text-gray-600 opacity-50'}`} />
+                  </div>
+                </th>
+                <th
+                  className="py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200"
+                  onClick={() => handleSort('createdAt')}
+                  aria-sort={sortConfig.key === 'createdAt' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  scope="col"
+                >
+                  <div className="flex items-center justify-between">
+                    <span>Created At (IST)</span>
+                    <ArrowDownUp size={16} className={`ml-2 ${sortConfig.key === 'createdAt' ? 'text-gray-900' : 'text-gray-600 opacity-50'}`} />
+                  </div>
+                </th>
+                <th className="py-5 px-3 text-gray-800 text-base font-semibold" scope="col">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {filteredOrders.map(order => (
-                <tr key={order.id} className="border-t hover:bg-amber-50 transition-all duration-200" role="row">
+            <tbody className="divide-y divide-gray-200">
+              {filteredOrders.map((order) => (
+                <tr key={order.id} className="hover:bg-amber-50 transition-all duration-200" role="row">
                   <td className="py-4 px-3 text-gray-600 text-base">{order.id}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">{order.customerName || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    <ul className="space-y-1">
-                      {order.items.map((item, idx) => (
-                        <li key={idx} className="text-sm">{item.productName} (Qty: {item.quantity})</li>
-                      ))}
-                    </ul>
-                  </td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{order.items.length}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">{formatCurrency(calculateTotalAmount(order.items))}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">
-                    <span className={`px-3 py-1 rounded-full text-white text-sm font-medium ${
-                      order.status === 'Pending' ? 'bg-amber-500' :
-                      order.status === 'Processing' ? 'bg-yellow-600' :
-                      order.status === 'Shipped' ? 'bg-blue-600' :
-                      order.status === 'Delivered' ? 'bg-green-600' :
-                      order.status === 'Cancelled' ? 'bg-red-600' : 'bg-gray-500'
-                    }`}>
+                    <span
+                      className={`px-2 py-1 rounded-full text-white text-sm font-medium ${
+                        order.status === 'Pending' ? 'bg-amber-400' :
+                        order.status === 'Processing' ? 'bg-yellow-500' :
+                        order.status === 'Shipped' ? 'bg-blue-500' :
+                        order.status === 'Delivered' ? 'bg-green-500' :
+                        order.status === 'Cancelled' ? 'bg-red-500' : 'bg-gray-400'
+                      }`}
+                    >
                       {order.status}
                     </span>
                   </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{order.targetDeliveryDate ? formatDate(order.targetDeliveryDate) : 'Not Set'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{order.paymentStatus || 'N/A'}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{formatDate(order.targetDeliveryDate)}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">
-                    <div className="flex flex-col">
-                      <span>{new Date(order.createdAt).toLocaleDateString('en-IN')}</span>
-                      <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleTimeString('en-IN')}</span>
-                    </div>
+                    <span
+                      className={`px-2 py-1 rounded-full text-white text-sm font-medium ${
+                        order.paymentStatus === 'Paid' ? 'bg-green-500' : 'bg-red-500'
+                      }`}
+                    >
+                      {order.paymentStatus}
+                    </span>
                   </td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{formatDate(order.createdAt)}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">
-                    <ActionsDropdown 
-                      order={order} 
-                      onEdit={initiateEdit} 
+                    <ActionsDropdown
+                      order={order}
+                      onEdit={initiateEdit}
                       onStatusChange={handleStatusChange}
                       onCancel={handleCancelOrder}
                     />
@@ -492,77 +549,72 @@ function OrdersPage() {
               ))}
             </tbody>
           </table>
-
-          {totalOrders > 0 && (
-            <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600">
-                Showing {filteredOrders.length} of {totalOrders} orders
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setCursor(null)}
-                  disabled={!cursor}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <button
-                  onClick={() => setCursor(orders[orders.length - 1]?.createdAt)}
-                  disabled={orders.length < ordersPerPage}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                  aria-label="Next page"
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </div>
-            </div>
-          )}
-
           {filteredOrders.length === 0 && (
-            <div className="text-center py-12 text-gray-500 flex flex-col items-center" role="alert">
-              <Filter className="mb-4 text-gray-400" size={48} />
-              <p className="text-lg">No orders found matching your search or filter.</p>
+            <div className="text-center py-12 text-gray-500 text-xl" role="alert">
+              No orders found matching your filters.
             </div>
           )}
+        </div>
+
+        <div className="flex justify-between mt-4">
+          <button
+            onClick={() => setCursor(orders[0]?.id ? orders[0].id - ordersPerPage : null)}
+            disabled={!cursor || isLoading}
+            className="px-4 py-2 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 disabled:opacity-50 transition-all duration-300 flex items-center"
+          >
+            <ChevronLeft className="mr-2" /> Previous
+          </button>
+          <span className="text-gray-600">
+            Showing {filteredOrders.length} of {totalOrders} orders
+          </span>
+          <button
+            onClick={() => setCursor(orders[orders.length - 1]?.id || null)}
+            disabled={orders.length < ordersPerPage || isLoading}
+            className="px-4 py-2 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 disabled:opacity-50 transition-all duration-300 flex items-center"
+          >
+            Next <ChevronRight className="ml-2" />
+          </button>
         </div>
       </div>
 
       {showCreateForm && (
         <CreateOrderForm
-          customers={customers}
-          availableProducts={products}
           onClose={() => setShowCreateForm(false)}
           onSubmit={handleCreateOrder}
-          validateOrderItems={validateOrderItems}
+          products={products}
+          customers={customers}
           getAvailableStock={getAvailableStock}
-          formatDate={formatDate}
+          validateOrderItems={validateOrderItems}
         />
       )}
 
       {showEditForm && selectedOrder && (
         <EditOrderForm
           order={selectedOrder}
-          availableProducts={products}
-          onClose={() => setShowEditForm(false)}
+          onClose={() => {
+            setShowEditForm(false);
+            setSelectedOrder(null);
+          }}
           onSubmit={handleUpdateOrder}
-          validateOrderItems={validateOrderItems}
+          products={products}
           getAvailableStock={getAvailableStock}
-          formatDate={formatDate}
+          validateOrderItems={validateOrderItems}
         />
       )}
 
       {showPaymentDetails && selectedOrder && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50" role="dialog" aria-labelledby="payment-details-title">
-          <div className="bg-white p-8 rounded-2xl shadow-2xl w-[500px] relative">
-            <button onClick={() => setShowPaymentDetails(false)} className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Close payment details">
-              <XCircle size={24} />
-            </button>
+          <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
             <h2 id="payment-details-title" className="text-2xl font-bold text-gray-800 mb-6">Payment Details for Order #{selectedOrder.id}</h2>
-            <div className="space-y-4">
-              <div><label className="text-gray-700 font-medium">Payment Status:</label><p className="text-gray-600">{selectedOrder.paymentStatus || 'N/A'}</p></div>
-              <div><label className="text-gray-700 font-medium">Total Amount:</label><p className="text-gray-600">{formatCurrency(calculateTotalAmount(selectedOrder.items))}</p></div>
-            </div>
+            <p className="text-gray-600 mb-4"><strong>Customer:</strong> {selectedOrder.customerName}</p>
+            <p className="text-gray-600 mb-4"><strong>Total Amount:</strong> {formatCurrency(calculateTotalAmount(selectedOrder.items))}</p>
+            <p className="text-gray-600 mb-4"><strong>Payment Status:</strong> {selectedOrder.paymentStatus}</p>
+            <button
+              onClick={() => setShowPaymentDetails(false)}
+              className="mt-4 px-6 py-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-all duration-300"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

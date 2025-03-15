@@ -1,15 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import io from 'socket.io-client';
 import { formatDate } from '../utils/helpers';
 import { useQueries } from '../hooks/useQueries';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp } from 'lucide-react';
 
-// Use the environment variable for the backend URL
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
-function QueriesPage() {
+function QueriesPage({ socket }) {
   const { queries, setQueries, isLoading: queriesLoading, error: queryError, fetchQueries, setError } = useQueries();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -20,27 +18,11 @@ function QueriesPage() {
   const [pendingCloseId, setPendingCloseId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedResponses, setExpandedResponses] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' }); // Default to sorting by createdAt descending
+  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
   const tableRef = useRef(null);
 
   useEffect(() => {
-    const socket = io(BASE_URL, {
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      withCredentials: true,
-      transports: ['websocket'],
-    });
-
-    socket.on('connect', () => {
-      console.log('Connected to Socket.IO');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
-    });
+    if (!socket) return;
 
     socket.on('newQuery', (query) => {
       setQueries(prev => {
@@ -65,10 +47,10 @@ function QueriesPage() {
     fetchQueries();
 
     return () => {
-      socket.disconnect();
-      console.log('Socket.IO disconnected');
+      socket.off('newQuery');
+      socket.off('queryUpdate');
     };
-  }, [fetchQueries, setQueries]);
+  }, [fetchQueries, setQueries, socket]);
 
   const sortData = (key) => {
     let direction = 'asc';
@@ -252,7 +234,7 @@ function QueriesPage() {
             className="ml-4 text-red-700 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-300"
             aria-label="Dismiss error"
           >
-            <span aria-hidden="true">&times;</span>
+            <span aria-hidden="true">×</span>
           </button>
         </div>
       )}
@@ -318,7 +300,7 @@ function QueriesPage() {
                   { label: 'Customer Name', key: 'customerName' },
                   { label: 'Description', key: 'description' },
                   { label: 'Status', key: 'status' },
-                  { label: 'Created At', key: 'createdAt' }, // Added Created At column
+                  { label: 'Created At', key: 'createdAt' },
                   { label: 'Admin Responses', key: null },
                   { label: 'Actions', key: null },
                 ].map((header, idx) => (

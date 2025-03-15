@@ -15,7 +15,7 @@ import EditProfile from './components/EditProfile';
 import InventoryPage from './components/InventoryPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginModal from './components/LoginModal';
-import logo from '/intute-ai_logo.jpeg'; // Updated import from public folder
+import logo from '/intute-ai_logo.jpeg';
 
 function App() {
   const [userRole, setUserRole] = useState(localStorage.getItem('role') || null);
@@ -32,6 +32,9 @@ function App() {
       withCredentials: true,
       path: '/socket.io',
       transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
 
     newSocket.on('connect', () => {
@@ -41,14 +44,17 @@ function App() {
         toastId: 'socket-connect', // Prevents duplicate toasts
       });
     });
+
     newSocket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
       toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
 
     setSocket(newSocket);
+
     return () => {
       newSocket.disconnect();
+      console.log('Socket.IO disconnected from App');
     };
   }, []);
 
