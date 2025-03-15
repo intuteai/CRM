@@ -2,13 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/jpeg" href="/intute-ai_logo.jpeg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Intute-AI</title>
-    <script type="module" crossorigin src="/assets/index-BzazB9a2.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Cn_5gQps.css">
+    <!-- Favicon: Ensure intute-ai_logo.jpeg is in the public/ folder -->
+    <link rel="icon" type="image/jpeg" href="/intute-ai_logo.jpeg" />
+    <!-- CSS: Relative path to avoid base path issues -->
+    <link rel="stylesheet" href="./assets/index-Cn_5gQps.css" crossorigin />
   </head>
   <body>
     <div id="root"></div>
+    <!-- JS: Relative path to avoid base path issues -->
+    <script type="module" src="./assets/index-BzazB9a2.js" crossorigin></script>
   </body>
 </html>
