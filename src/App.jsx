@@ -21,12 +21,14 @@ function App() {
   const [userRole, setUserRole] = useState(localStorage.getItem('role') || null);
   const [userName, setUserName] = useState(localStorage.getItem('name') || 'User');
   const [token, setToken] = useState(localStorage.getItem('token') || null);
-  // Initialize showLogin based on whether token exists in localStorage
   const [showLogin, setShowLogin] = useState(!localStorage.getItem('token'));
   const [socket, setSocket] = useState(null);
   const location = useLocation();
 
+  // Socket.IO connection only when user is logged in
   useEffect(() => {
+    if (!userRole) return; // Skip if not logged in
+
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
     console.log('VITE_BACKEND_URL in App:', import.meta.env.VITE_BACKEND_URL);
     const newSocket = io(backendUrl, {
@@ -57,7 +59,7 @@ function App() {
       newSocket.disconnect();
       console.log('Socket.IO disconnected from App');
     };
-  }, []);
+  }, [userRole]); // Depend on userRole to connect only after login
 
   // Ensure state persists correctly on refresh
   useEffect(() => {
@@ -66,11 +68,11 @@ function App() {
       setUserRole(localStorage.getItem('role'));
       setUserName(localStorage.getItem('name'));
       setToken(storedToken);
-      setShowLogin(false); // Don't show login if token exists
+      setShowLogin(false);
     } else {
-      setShowLogin(true); // Show login if no token
+      setShowLogin(true);
     }
-  }, []); // Runs only on mount
+  }, []);
 
   const handleLoginSubmit = (role, name, token) => {
     setUserRole(role);
@@ -89,7 +91,7 @@ function App() {
     localStorage.removeItem('role');
     localStorage.removeItem('name');
     localStorage.removeItem('token');
-    setShowLogin(true); // Show login modal after logout
+    setShowLogin(true);
     if (socket) socket.disconnect();
   };
 
