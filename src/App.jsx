@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import io from 'socket.io-client';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import Navbar from './components/Navbar';
 import AdminDashboard from './components/AdminDashboard';
 import OrdersPage from './components/OrdersPage';
@@ -42,15 +40,12 @@ function App() {
 
     newSocket.on('connect', () => {
       console.log('Connected to Socket.IO');
-      toast.success('Connected to real-time updates!', {
-        autoClose: 2000,
-        toastId: 'socket-connect',
-      });
+      // Toast removed from here
     });
 
     newSocket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      // Toast removed from here
     });
 
     setSocket(newSocket);
@@ -59,7 +54,7 @@ function App() {
       newSocket.disconnect();
       console.log('Socket.IO disconnected from App');
     };
-  }, [userRole]); // Depend on userRole to connect only after login
+  }, [userRole]);
 
   // Ensure state persists correctly on refresh
   useEffect(() => {
@@ -165,7 +160,7 @@ function App() {
           onSubmit={handleLoginSubmit}
         />
       )}
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
+      {/* ToastContainer removed from here */}
     </>
   );
 }
