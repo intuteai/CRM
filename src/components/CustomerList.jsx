@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowDownUp } from 'lucide-react';
+import io from 'socket.io-client';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+// Use the environment variable for the backend URL
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-const API_URL = `${SOCKET_URL}/api/customers`; // Use SOCKET_URL to avoid redeclaration
+const API_URL = `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/customers`;
 
+// Simple debounce utility
 const debounce = (func, wait) => {
   let timeout;
   return (...args) => {
@@ -14,6 +17,7 @@ const debounce = (func, wait) => {
   };
 };
 
+// Error Boundary Component
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
 
@@ -34,7 +38,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-function CustomerList({ socket }) {
+function CustomerList() {
   const [customers, setCustomers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState(null);
@@ -42,57 +46,73 @@ function CustomerList({ socket }) {
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
-  const limit = 10; // Define limit as a const within the component
+  const limit = 10;
   const tableRef = useRef(null);
 
   const fetchCustomers = useCallback(() => {
     setIsLoading(true);
     fetch(`${API_URL}?limit=${limit}&offset=${page * limit}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
     })
-      .then((res) => {
+      .then(res => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
-      .then((data) => {
-        console.log('Fetched Customers:', data);
+      .then(data => {
+        console.log('Fetched Customers:', data); // Log API response for debugging
         setCustomers(data.data || []);
         setTotal(data.total || 0);
         setError(null);
         setIsLoading(false);
       })
-      .catch((err) => {
+      .catch(err => {
         console.error('Fetch error:', err);
         setError('Failed to load customers');
         setCustomers([]);
         setIsLoading(false);
       });
-  }, [page, limit]); // Include limit in dependency array
+  }, [page]);
 
   useEffect(() => {
     fetchCustomers();
 
-    if (!socket) return;
+    const socket = io(SOCKET_URL, {
+      reconnection: true, // Enable reconnection attempts
+      reconnectionAttempts: 5, // Number of reconnection attempts
+      reconnectionDelay: 1000, // Delay between reconnection attempts (ms)
+    });
+
+    socket.on('connect', () => {
+      console.log('Connected to Socket.IO');
+      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+      setError('Failed to connect to real-time updates.');
+      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+    });
 
     socket.on('customerUpdate', (updatedCustomer) => {
-      console.log('Socket Update:', updatedCustomer);
-      setCustomers((prev) => {
-        const exists = prev.some((c) => c.id === updatedCustomer.id);
+      console.log('Socket Update:', updatedCustomer); // Log real-time update for debugging
+      setCustomers(prev => {
+        const exists = prev.some(c => c.id === updatedCustomer.id);
         if (exists) {
-          return prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c));
-        } else if (prev.length < limit) {
+          return prev.map(c => (c.id === updatedCustomer.id ? updatedCustomer : c));
+        } else if (prev.length < limit) { // Only add if there's space on the current page
           return [...prev, updatedCustomer];
         }
-        return prev;
+        return prev; // Ignore if page is full
       });
       toast.info(`Customer ${updatedCustomer.name} updated in real-time`, { autoClose: 3000 });
       if (tableRef.current) tableRef.current.focus();
     });
 
     return () => {
-      socket.off('customerUpdate');
+      socket.disconnect();
+      console.log('Socket.IO disconnected');
     };
-  }, [fetchCustomers, socket]);
+  }, [fetchCustomers]);
 
   const debounceSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);
 
@@ -106,7 +126,7 @@ function CustomerList({ socket }) {
     setSortConfig({ key, direction });
   };
 
-  const filteredCustomers = customers.filter((customer) => {
+  const filteredCustomers = customers.filter(customer => {
     return (
       customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||

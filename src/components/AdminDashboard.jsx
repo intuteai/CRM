@@ -7,6 +7,7 @@ function AdminDashboard({ socket }) {
   useEffect(() => {
     if (!socket) return;
 
+    // Real-time event listeners (unchanged from your backend setup)
     socket.on('orderUpdate', (updatedOrder) => {
       toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 3000 });
     });
@@ -23,6 +24,7 @@ function AdminDashboard({ socket }) {
       toast.info(`Customer ${updatedCustomer.name} updated`, { autoClose: 3000 });
     });
 
+    // Cleanup listeners on unmount
     return () => {
       socket.off('orderUpdate');
       socket.off('newQuery');
@@ -30,12 +32,13 @@ function AdminDashboard({ socket }) {
       socket.off('stockUpdate');
       socket.off('customerUpdate');
     };
-  }, [socket]);
+  }, [socket]); // Depend on socket prop
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-12 text-center tracking-tight">Admin Dashboard</h1>
       <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
+        {/* Orders Card */}
         <Link
           to="/orders"
           className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
@@ -48,6 +51,7 @@ function AdminDashboard({ socket }) {
           <p className="text-gray-600 text-center mt-3 text-lg">Track and process orders</p>
         </Link>
 
+        {/* Queries Card */}
         <Link
           to="/queries"
           className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
@@ -60,6 +64,7 @@ function AdminDashboard({ socket }) {
           <p className="text-gray-600 text-center mt-3 text-lg">Manage customer inquiries</p>
         </Link>
 
+        {/* Inventory Card */}
         <Link
           to="/inventory"
           className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
@@ -72,6 +77,7 @@ function AdminDashboard({ socket }) {
           <p className="text-gray-600 text-center mt-3 text-lg">Manage stock levels</p>
         </Link>
 
+        {/* Customers Card */}
         <Link
           to="/customer-list"
           className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
