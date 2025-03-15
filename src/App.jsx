@@ -21,6 +21,7 @@ function App() {
   const [userRole, setUserRole] = useState(localStorage.getItem('role') || null);
   const [userName, setUserName] = useState(localStorage.getItem('name') || 'User');
   const [token, setToken] = useState(localStorage.getItem('token') || null);
+  // Initialize showLogin based on whether token exists in localStorage
   const [showLogin, setShowLogin] = useState(!localStorage.getItem('token'));
   const [socket, setSocket] = useState(null);
   const location = useLocation();
@@ -41,7 +42,7 @@ function App() {
       console.log('Connected to Socket.IO');
       toast.success('Connected to real-time updates!', {
         autoClose: 2000,
-        toastId: 'socket-connect', // Prevents duplicate toasts
+        toastId: 'socket-connect',
       });
     });
 
@@ -57,6 +58,19 @@ function App() {
       console.log('Socket.IO disconnected from App');
     };
   }, []);
+
+  // Ensure state persists correctly on refresh
+  useEffect(() => {
+    const storedToken = localStorage.getItem('token');
+    if (storedToken) {
+      setUserRole(localStorage.getItem('role'));
+      setUserName(localStorage.getItem('name'));
+      setToken(storedToken);
+      setShowLogin(false); // Don't show login if token exists
+    } else {
+      setShowLogin(true); // Show login if no token
+    }
+  }, []); // Runs only on mount
 
   const handleLoginSubmit = (role, name, token) => {
     setUserRole(role);
@@ -75,6 +89,7 @@ function App() {
     localStorage.removeItem('role');
     localStorage.removeItem('name');
     localStorage.removeItem('token');
+    setShowLogin(true); // Show login modal after logout
     if (socket) socket.disconnect();
   };
 
