@@ -4,7 +4,10 @@ import { formatDate } from '../utils/helpers';
 import { useQueries } from '../hooks/useQueries';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { ArrowDownUp } from 'lucide-react'; // Importing the sorting icon
+import { ArrowDownUp } from 'lucide-react';
+
+// Use the environment variable for the backend URL
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 function QueriesPage() {
   const { queries, setQueries, isLoading: queriesLoading, error: queryError, fetchQueries, setError } = useQueries();
@@ -17,48 +20,55 @@ function QueriesPage() {
   const [pendingCloseId, setPendingCloseId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedResponses, setExpandedResponses] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' }); // Default to sorting by createdAt descending
   const tableRef = useRef(null);
 
   useEffect(() => {
-    let socket;
-    try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      console.log('Socket.IO connecting to:', backendUrl); // Debug log
-      socket = io(backendUrl, {
-        withCredentials: true,
-        transports: ['websocket'], // Prefer WebSocket over polling
-      });
-      socket.on('connect', () => console.log('Connected to Socket.IO'));
-      socket.on('connect_error', (err) => {
-        console.error('Socket connection error:', err);
-        setError('Failed to connect to real-time updates.');
-      });
-      socket.on('newQuery', (query) => {
-        setQueries(prev => {
-          if (prev.some(q => q.queryId === query.queryId)) return prev;
-          return [...prev, query];
-        });
+    const socket = io(BASE_URL, {
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      withCredentials: true,
+      transports: ['websocket'],
+    });
+
+    socket.on('connect', () => {
+      console.log('Connected to Socket.IO');
+      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+    });
+
+    socket.on('newQuery', (query) => {
+      setQueries(prev => {
+        if (prev.some(q => q.queryId === query.queryId)) return prev;
         toast.info('New query has been added', { autoClose: 2000 });
-        if (tableRef.current) tableRef.current.focus();
+        return [...prev, query];
       });
-      socket.on('queryUpdate', (updatedQuery) => {
-        setQueries(prev => prev.map(q => 
+      if (tableRef.current) tableRef.current.focus();
+    });
+
+    socket.on('queryUpdate', (updatedQuery) => {
+      setQueries(prev => {
+        const updatedQueries = prev.map(q => 
           q.queryId === updatedQuery.queryId ? updatedQuery : q
-        ));
+        );
         toast.info(`Query #${updatedQuery.queryId} updated in real-time`, { autoClose: 2000 });
-        if (tableRef.current) tableRef.current.focus();
+        return updatedQueries;
       });
-      fetchQueries();
-    } catch (err) {
-      console.error('Socket initialization error:', err);
-      setError('Failed to initialize real-time updates.');
-      fetchQueries();
-    }
+      if (tableRef.current) tableRef.current.focus();
+    });
+
+    fetchQueries();
+
     return () => {
-      if (socket) socket.disconnect();
+      socket.disconnect();
+      console.log('Socket.IO disconnected');
     };
-  }, [fetchQueries, setQueries, setError]);
+  }, [fetchQueries, setQueries]);
 
   const sortData = (key) => {
     let direction = 'asc';
@@ -69,18 +79,19 @@ function QueriesPage() {
 
     setQueries(prev => {
       const sorted = [...prev].sort((a, b) => {
-        let aValue = a[key] || '';
-        let bValue = b[key] || '';
+        let aValue = a[key] ?? '';
+        let bValue = b[key] ?? '';
         if (key === 'queryId') {
           aValue = Number(aValue);
           bValue = Number(bValue);
+        } else if (key === 'createdAt') {
+          aValue = new Date(aValue || 0);
+          bValue = new Date(bValue || 0);
         } else {
           aValue = String(aValue).toLowerCase();
           bValue = String(bValue).toLowerCase();
         }
-        if (aValue < bValue) return direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return direction === 'asc' ? 1 : -1;
-        return 0;
+        return aValue < bValue ? (direction === 'asc' ? -1 : 1) : aValue > bValue ? (direction === 'asc' ? 1 : -1) : 0;
       });
       return sorted;
     });
@@ -115,8 +126,7 @@ function QueriesPage() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const res = await fetch(`${backendUrl}/api/queries/${respondingQuery.queryId}/respond`, {
+      const res = await fetch(`${BASE_URL}/api/queries/${respondingQuery.queryId}/respond`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -135,11 +145,11 @@ function QueriesPage() {
         setError(null);
         toast.success('Response submitted successfully', { autoClose: 3000 });
       } else {
-        toast.error(data.error || 'Failed to submit response', { autoClose: 3000 });
+        throw new Error(data.error || 'Failed to submit response');
       }
     } catch (err) {
       console.error('Error submitting response:', err);
-      toast.error('Network error. Please check your connection.', { autoClose: 3000 });
+      toast.error(err.message || 'Network error. Please try again.', { autoClose: 3000 });
     } finally {
       setIsLoading(false);
     }
@@ -152,8 +162,7 @@ function QueriesPage() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const res = await fetch(`${backendUrl}/api/queries/${queryId}/in-progress`, {
+      const res = await fetch(`${BASE_URL}/api/queries/${queryId}/in-progress`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -165,13 +174,12 @@ function QueriesPage() {
         setError(null);
         toast.success('Query set to In Progress', { autoClose: 3000 });
       } else {
-        await fetchQueries();
-        toast.error(data.error || 'Failed to update query status', { autoClose: 3000 });
+        throw new Error(data.error || 'Failed to update query status');
       }
     } catch (err) {
       console.error('Error updating query status:', err);
       await fetchQueries();
-      toast.error('Network error. Please check your connection.', { autoClose: 3000 });
+      toast.error(err.message || 'Network error. Please try again.', { autoClose: 3000 });
     } finally {
       setIsLoading(false);
     }
@@ -191,8 +199,7 @@ function QueriesPage() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const res = await fetch(`${backendUrl}/api/queries/${pendingCloseId}/close`, {
+      const res = await fetch(`${BASE_URL}/api/queries/${pendingCloseId}/close`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -204,13 +211,12 @@ function QueriesPage() {
         setError(null);
         toast.success('Query closed successfully', { autoClose: 3000 });
       } else {
-        await fetchQueries();
-        toast.error(data.error || 'Failed to close query', { autoClose: 3000 });
+        throw new Error(data.error || 'Failed to close query');
       }
     } catch (err) {
       console.error('Error closing query:', err);
       await fetchQueries();
-      toast.error('Network error. Please check your connection.', { autoClose: 3000 });
+      toast.error(err.message || 'Network error. Please try again.', { autoClose: 3000 });
     } finally {
       setPendingCloseId(null);
       setIsLoading(false);
@@ -228,10 +234,8 @@ function QueriesPage() {
 
   if (queriesLoading && !queries.length) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8" aria-live="polite">
-        <div className="flex justify-center items-center h-64">
-          <div className="text-gray-600 text-xl animate-pulse">Loading queries...</div>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" aria-live="polite">
+        <div className="text-gray-600 text-xl animate-pulse">Loading queries...</div>
       </div>
     );
   }
@@ -241,29 +245,30 @@ function QueriesPage() {
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">Queries</h1>
       
       {queryError && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg mb-6 max-w-4xl mx-auto shadow-md" role="alert">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg mb-6 max-w-4xl mx-auto shadow-md flex items-center" role="alert">
           {queryError}
           <button 
-            className="float-right text-red-700 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-300"
             onClick={() => setError(null)}
+            className="ml-4 text-red-700 hover:text-red-900 focus:outline-none focus:ring-2 focus:ring-red-300"
             aria-label="Dismiss error"
           >
-            ×
+            <span aria-hidden="true">&times;</span>
           </button>
         </div>
       )}
       
-      <div className="flex mb-8 gap-6 max-w-4xl mx-auto">
-        <div className="relative flex-grow">
+      <div className="flex mb-8 gap-6 max-w-4xl mx-auto flex-wrap">
+        <div className="relative flex-1 min-w-0">
           <label htmlFor="search-queries" className="sr-only">Search Queries</label>
           <input
             id="search-queries"
             type="text"
-            placeholder="Search Queries..."
+            placeholder="Search by Query ID, Customer Name, or Description..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
+            className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
           />
+          <ArrowDownUp className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
         </div>
         <div>
           <label htmlFor="status-filter" className="sr-only">Filter by Status</label>
@@ -271,7 +276,7 @@ function QueriesPage() {
             id="status-filter"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
+            className="p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md w-40"
           >
             <option value="All">All Queries</option>
             <option value="Open">Open</option>
@@ -281,10 +286,11 @@ function QueriesPage() {
         </div>
         <button 
           onClick={fetchQueries}
-          className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
+          className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg w-32"
+          disabled={isLoading || queriesLoading}
           aria-label="Refresh queries"
         >
-          Refresh
+          {isLoading || (queriesLoading && queries.length > 0) ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
       
@@ -312,6 +318,7 @@ function QueriesPage() {
                   { label: 'Customer Name', key: 'customerName' },
                   { label: 'Description', key: 'description' },
                   { label: 'Status', key: 'status' },
+                  { label: 'Created At', key: 'createdAt' }, // Added Created At column
                   { label: 'Admin Responses', key: null },
                   { label: 'Actions', key: null },
                 ].map((header, idx) => (
@@ -353,6 +360,9 @@ function QueriesPage() {
                       >
                         {query.status}
                       </span>
+                    </td>
+                    <td className="py-3 px-4 text-gray-600 text-base">
+                      {query.createdAt ? formatDate(query.createdAt) : 'N/A'}
                     </td>
                     <td className="py-3 px-4 text-gray-600 text-base">
                       {Array.isArray(query.adminResponses) && query.adminResponses.length > 0 ? (
@@ -406,7 +416,7 @@ function QueriesPage() {
                   </tr>
                   {expandedResponses === query.queryId && Array.isArray(query.adminResponses) && query.adminResponses.length > 0 && (
                     <tr className="bg-blue-50" role="row">
-                      <td colSpan="6" className="py-4 px-6">
+                      <td colSpan="7" className="py-4 px-6">
                         <div className="border-l-4 border-blue-400 pl-4 space-y-3">
                           <div className="text-sm font-medium text-blue-700 mb-2">Admin Responses:</div>
                           {query.adminResponses.map((resp, idx) => (
@@ -439,7 +449,7 @@ function QueriesPage() {
                 value={responseText}
                 onChange={(e) => setResponseText(e.target.value)}
                 required
-                className="w-full p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-gray-50 shadow-md"
+                className="w-full p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-gray-50 shadow-md transition-all duration-200 disabled:bg-gray-200"
                 placeholder="Enter your response here..."
                 rows="6"
                 disabled={isLoading}
@@ -448,7 +458,7 @@ function QueriesPage() {
                 <button
                   type="button"
                   onClick={() => setShowRespondForm(false)}
-                  className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed"
                   disabled={isLoading}
                   aria-label="Cancel response"
                 >
@@ -456,7 +466,7 @@ function QueriesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-3 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg hover:from-amber-600 hover:to-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed"
                   disabled={isLoading}
                   aria-label="Submit response"
                 >
@@ -476,7 +486,7 @@ function QueriesPage() {
             <div className="flex justify-end space-x-4">
               <button
                 onClick={cancelClose}
-                className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed"
                 disabled={isLoading}
                 aria-label="Cancel close action"
               >
@@ -484,7 +494,7 @@ function QueriesPage() {
               </button>
               <button
                 onClick={handleClose}
-                className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-lg hover:from-gray-700 hover:to-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-300 shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed"
                 disabled={isLoading}
                 aria-label="Confirm close action"
               >
