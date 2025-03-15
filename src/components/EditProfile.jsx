@@ -41,7 +41,8 @@ function EditProfile() {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/update-password', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const response = await fetch(`${backendUrl}/api/auth/update-password`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

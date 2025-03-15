@@ -8,6 +8,9 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useQueries } from '../hooks/useQueries';
 import { formatDate } from '../utils/helpers';
 
+// Use the environment variable for the backend URL
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
 function CustomerQueriesPage() {
   const { queries, setQueries, isLoading, error, fetchQueries, setError } = useQueries();
   const [searchTerm, setSearchTerm] = useState('');
@@ -16,14 +19,23 @@ function CustomerQueriesPage() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingCloseId, setPendingCloseId] = useState(null);
   const [newQuery, setNewQuery] = useState({ description: '' });
-  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'descending' }); // Changed to createdAt, descending
+  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'descending' });
   const [formIsLoading, setFormIsLoading] = useState(false);
   const [expandedResponses, setExpandedResponses] = useState(null);
   const tableRef = useRef(null);
 
   useEffect(() => {
-    const socket = io('http://localhost:5000');
-    socket.on('connect', () => console.log('Connected to Socket.IO'));
+    const socket = io(BASE_URL, {
+      reconnection: true, // Enable reconnection attempts
+      reconnectionAttempts: 5, // Number of reconnection attempts
+      reconnectionDelay: 1000, // Delay between reconnection attempts (ms)
+    });
+
+    socket.on('connect', () => {
+      console.log('Connected to Socket.IO');
+      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+    });
+
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
       toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
@@ -51,7 +63,10 @@ function CustomerQueriesPage() {
 
     fetchQueries();
 
-    return () => socket.disconnect();
+    return () => {
+      socket.disconnect();
+      console.log('Socket.IO disconnected');
+    };
   }, [fetchQueries, setQueries]);
 
   const handleCreateQuery = async (e) => {
@@ -64,7 +79,7 @@ function CustomerQueriesPage() {
     setFormIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/queries', {
+      const res = await fetch(`${BASE_URL}/api/queries`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -109,7 +124,7 @@ function CustomerQueriesPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/queries/${pendingCloseId}/close`, {
+      const res = await fetch(`${BASE_URL}/api/queries/${pendingCloseId}/close`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -271,7 +286,7 @@ function CustomerQueriesPage() {
                   { key: 'queryId', label: 'Query ID' },
                   { key: 'description', label: 'Description' },
                   { key: 'status', label: 'Status' },
-                  { key: 'createdAt', label: 'Created At' }, // Added createdAt column
+                  { key: 'createdAt', label: 'Created At' },
                   { key: null, label: 'Admin Responses' },
                   { key: null, label: 'Actions' },
                 ].map(({ key, label }) => (
@@ -312,7 +327,7 @@ function CustomerQueriesPage() {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-gray-600 text-base">
-                      {query.createdAt ? formatDate(query.createdAt) : 'N/A'} {/* Display creation date */}
+                      {query.createdAt ? formatDate(query.createdAt) : 'N/A'}
                     </td>
                     <td className="py-3 px-4 text-gray-600 text-base">
                       {Array.isArray(query.adminResponses) && query.adminResponses.length > 0 ? (
@@ -345,7 +360,7 @@ function CustomerQueriesPage() {
                   </tr>
                   {expandedResponses === query.queryId && Array.isArray(query.adminResponses) && query.adminResponses.length > 0 && (
                     <tr className="bg-blue-50">
-                      <td colSpan="6" className="py-4 px-6"> {/* Updated colSpan to 6 */}
+                      <td colSpan="6" className="py-4 px-6">
                         <div className="border-l-4 border-blue-400 pl-4 space-y-3">
                           <div className="text-sm font-medium text-blue-700 mb-2">Admin Responses:</div>
                           {query.adminResponses.map((resp, idx) => (

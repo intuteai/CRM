@@ -4,6 +4,10 @@ import io from 'socket.io-client';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+// Use the environment variable for the backend URL
+const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const API_URL = `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/customers`;
+
 // Simple debounce utility
 const debounce = (func, wait) => {
   let timeout;
@@ -47,7 +51,7 @@ function CustomerList() {
 
   const fetchCustomers = useCallback(() => {
     setIsLoading(true);
-    fetch(`/api/customers?limit=${limit}&offset=${page * limit}`, {
+    fetch(`${API_URL}?limit=${limit}&offset=${page * limit}`, {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
     })
       .then(res => {
@@ -72,27 +76,42 @@ function CustomerList() {
   useEffect(() => {
     fetchCustomers();
 
-    const socket = io('http://localhost:5000');
-    socket.on('connect', () => console.log('Connected to Socket.IO'));
+    const socket = io(SOCKET_URL, {
+      reconnection: true, // Enable reconnection attempts
+      reconnectionAttempts: 5, // Number of reconnection attempts
+      reconnectionDelay: 1000, // Delay between reconnection attempts (ms)
+    });
+
+    socket.on('connect', () => {
+      console.log('Connected to Socket.IO');
+      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+    });
+
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
       setError('Failed to connect to real-time updates.');
+      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
+
     socket.on('customerUpdate', (updatedCustomer) => {
       console.log('Socket Update:', updatedCustomer); // Log real-time update for debugging
       setCustomers(prev => {
         const exists = prev.some(c => c.id === updatedCustomer.id);
         if (exists) {
           return prev.map(c => (c.id === updatedCustomer.id ? updatedCustomer : c));
-        } else {
+        } else if (prev.length < limit) { // Only add if there's space on the current page
           return [...prev, updatedCustomer];
         }
+        return prev; // Ignore if page is full
       });
       toast.info(`Customer ${updatedCustomer.name} updated in real-time`, { autoClose: 3000 });
       if (tableRef.current) tableRef.current.focus();
     });
 
-    return () => socket.disconnect();
+    return () => {
+      socket.disconnect();
+      console.log('Socket.IO disconnected');
+    };
   }, [fetchCustomers]);
 
   const debounceSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);

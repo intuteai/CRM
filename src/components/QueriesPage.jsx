@@ -23,7 +23,12 @@ function QueriesPage() {
   useEffect(() => {
     let socket;
     try {
-      socket = io('http://localhost:5000');
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      console.log('Socket.IO connecting to:', backendUrl); // Debug log
+      socket = io(backendUrl, {
+        withCredentials: true,
+        transports: ['websocket'], // Prefer WebSocket over polling
+      });
       socket.on('connect', () => console.log('Connected to Socket.IO'));
       socket.on('connect_error', (err) => {
         console.error('Socket connection error:', err);
@@ -110,7 +115,8 @@ function QueriesPage() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/queries/${respondingQuery.queryId}/respond`, {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/queries/${respondingQuery.queryId}/respond`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -146,7 +152,8 @@ function QueriesPage() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/queries/${queryId}/in-progress`, {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/queries/${queryId}/in-progress`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -184,7 +191,8 @@ function QueriesPage() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/queries/${pendingCloseId}/close`, {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/queries/${pendingCloseId}/close`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` },
       });

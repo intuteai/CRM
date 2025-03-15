@@ -20,7 +20,12 @@ function Navbar({ userRole, userName, token, setUserRole, setShowLogin, handleLo
   }, []);
 
   useEffect(() => {
-    const socket = io('http://localhost:5000');
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    console.log('Socket.IO connecting to:', backendUrl); // Debug log
+    const socket = io(backendUrl, {
+      withCredentials: true,
+      transports: ['websocket'], // Prefer WebSocket over polling
+    });
     socket.on('connect', () => console.log('Connected to Socket.IO'));
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
@@ -57,7 +62,8 @@ function Navbar({ userRole, userName, token, setUserRole, setShowLogin, handleLo
   }, [userRole]);
 
   const handleLogoutClick = () => {
-    fetch('http://localhost:5000/api/auth/logout', {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    fetch(`${backendUrl}/api/auth/logout`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,

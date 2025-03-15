@@ -25,9 +25,11 @@ function App() {
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    console.log('VITE_BACKEND_URL in App:', import.meta.env.VITE_BACKEND_URL); // Debug log
+    console.log('VITE_BACKEND_URL in App:', import.meta.env.VITE_BACKEND_URL);
     const newSocket = io(backendUrl, {
       withCredentials: true,
+      path: '/socket.io', // Ensure consistent path
+      transports: ['websocket'], // Force WebSocket to avoid polling issues
     });
     newSocket.on('connect', () => console.log('Connected to Socket.IO'));
     newSocket.on('connect_error', (err) => console.error('Socket connection error:', err));

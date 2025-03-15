@@ -6,6 +6,9 @@ import { io } from 'socket.io-client';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+// Use the environment variable for the backend URL
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
 // Utility functions
 const formatDate = (dateString) => (dateString ? new Date(dateString).toISOString().split('T')[0] : '');
 const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
@@ -48,11 +51,11 @@ const useFetchData = ({ limit, cursor }) => {
       setIsLoading(true);
       const token = localStorage.getItem('token');
       const url = cursor 
-        ? `/api/orders?limit=${limit}&cursor=${encodeURIComponent(cursor)}&force_refresh=${forceRefresh}`
-        : `/api/orders?limit=${limit}&force_refresh=${forceRefresh}`;
+        ? `${BASE_URL}/api/orders?limit=${limit}&cursor=${encodeURIComponent(cursor)}&force_refresh=${forceRefresh}`
+        : `${BASE_URL}/api/orders?limit=${limit}&force_refresh=${forceRefresh}`;
       const [ordersRes, productsRes] = await Promise.all([
         fetch(url, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`/api/inventory/stock?force_refresh=${forceRefresh}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${BASE_URL}/api/inventory/stock?force_refresh=${forceRefresh}`, { headers: { 'Authorization': `Bearer ${token}` } }),
       ]);
 
       const [ordersData, productsData] = await Promise.all([
@@ -93,29 +96,45 @@ function CustomerOrdersPage() {
   const { orders, setOrders, totalOrders, products, isLoading, error, refetchData } = useFetchData({ limit: ordersPerPage, cursor });
 
   useEffect(() => {
-    const socket = io('http://localhost:5000');
-    socket.on('connect', () => console.log('Connected to Socket.IO'));
+    const socket = io(BASE_URL, {
+      reconnection: true, // Enable reconnection attempts
+      reconnectionAttempts: 5, // Number of reconnection attempts
+      reconnectionDelay: 1000, // Delay between reconnection attempts (ms)
+    });
+
+    socket.on('connect', () => {
+      console.log('Connected to Socket.IO');
+      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+    });
+
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
       toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
+
     socket.on('stockUpdate', () => {
       refetchData(true);
       toast.info('Inventory stock levels updated', { autoClose: 3000 });
     });
+
     socket.on('orderUpdate', (updatedOrder) => {
       setOrders(prev => {
         const exists = prev.some(o => o.id === updatedOrder.id);
         if (exists) {
           return prev.map(o => (o.id === updatedOrder.id ? updatedOrder : o));
-        } else {
+        } else if (prev.length < ordersPerPage) { // Only add if there's space on the current page
           return [...prev, updatedOrder];
         }
+        return prev; // Ignore if page is full
       });
       toast.info(`Your order #${updatedOrder.id} updated`, { autoClose: 3000 });
       if (tableRef.current) tableRef.current.focus();
     });
-    return () => socket.disconnect();
+
+    return () => {
+      socket.disconnect();
+      console.log('Socket.IO disconnected');
+    };
   }, [refetchData, setOrders]);
 
   const getTotalStock = useMemo(() => {
@@ -150,7 +169,7 @@ function CustomerOrdersPage() {
           quantity: parseInt(item.quantity, 10),
         })),
       };
-      const res = await fetch('/api/orders', {
+      const res = await fetch(`${BASE_URL}/api/orders`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 

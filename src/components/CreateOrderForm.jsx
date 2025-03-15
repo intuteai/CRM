@@ -15,7 +15,8 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
     const fetchStock = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch('http://localhost:5000/api/inventory/stock', {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const response = await fetch(`${backendUrl}/api/inventory/stock`, {
           headers: { 'Authorization': `Bearer ${token}` },
         });
         if (!response.ok) throw new Error('Failed to fetch available stock');

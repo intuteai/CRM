@@ -51,14 +51,16 @@ const useFetchData = ({ limit, cursor }) => {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('token');
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      console.log('Fetching data from:', backendUrl); // Debug log
       const url = cursor 
-        ? `http://localhost:5000/api/orders?limit=${limit}&cursor=${encodeURIComponent(cursor)}&force_refresh=true`
-        : `http://localhost:5000/api/orders?limit=${limit}&force_refresh=true`;
+        ? `${backendUrl}/api/orders?limit=${limit}&cursor=${encodeURIComponent(cursor)}&force_refresh=true`
+        : `${backendUrl}/api/orders?limit=${limit}&force_refresh=true`;
       
       const [ordersRes, productsRes, customersRes] = await Promise.all([
         fetch(url, { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => ({ ok: false })),
-        fetch('http://localhost:5000/api/inventory/available', { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => ({ ok: false })),
-        fetch('http://localhost:5000/api/users/customers', { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => ({ ok: false })),
+        fetch(`${backendUrl}/api/inventory/available`, { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => ({ ok: false })),
+        fetch(`${backendUrl}/api/users/customers`, { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => ({ ok: false })),
       ]);
 
       const [ordersData, productsData, customersData] = await Promise.all([
@@ -105,7 +107,12 @@ function OrdersPage() {
   const { orders, setOrders, totalOrders, products, customers, isLoading, error, isEmpty, refetchData } = useFetchData({ limit: ordersPerPage, cursor });
 
   useEffect(() => {
-    const socket = io('http://localhost:5000');
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    console.log('Socket.IO connecting to:', backendUrl); // Debug log
+    const socket = io(backendUrl, {
+      withCredentials: true,
+      transports: ['websocket'], // Prefer WebSocket over polling
+    });
     socket.on('connect', () => console.log('Connected to Socket.IO'));
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
@@ -150,7 +157,8 @@ function OrdersPage() {
 
   const handleCreateOrder = useCallback(async (newOrder) => {
     try {
-      const res = await fetch('http://localhost:5000/api/orders', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify(newOrder),
@@ -169,7 +177,8 @@ function OrdersPage() {
   }, [refetchData]);
 
   const handleUpdateOrder = useCallback(async (orderId, items, paymentStatus, targetDeliveryDate, status) => {
-    const res = await fetch(`http://localhost:5000/api/orders/${orderId}/update`, {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
       body: JSON.stringify({ items, payment_status: paymentStatus, targetDeliveryDate: targetDeliveryDate || null, status: status || 'Processing' }),
@@ -185,7 +194,8 @@ function OrdersPage() {
     if (!window.confirm('Are you sure you want to cancel this order? This action cannot be undone.')) return;
     setIsCancelling(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/orders/${orderId}/cancel`, {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/orders/${orderId}/cancel`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
       });
@@ -202,7 +212,8 @@ function OrdersPage() {
   const handleStatusChange = useCallback(async (orderId, newStatus) => {
     if (!window.confirm(`Are you sure you want to change the status to ${newStatus}?`)) return;
     const order = orders.find(o => o.id === orderId);
-    const res = await fetch(`http://localhost:5000/api/orders/${orderId}/update`, {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
       body: JSON.stringify({ items: order.items, payment_status: order.paymentStatus, targetDeliveryDate: order.targetDeliveryDate, status: newStatus }),
@@ -384,7 +395,7 @@ function OrdersPage() {
           <button
             onClick={handleCreateButtonClick}
             className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md flex items-center"
-            disabled={isLoading} // Removed !products.length condition
+            disabled={isLoading}
             aria-label="Create new order"
           >
             <PlusCircle className="mr-2" /> Create Order
