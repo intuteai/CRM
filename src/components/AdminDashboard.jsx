@@ -1,13 +1,16 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, MessageSquare, Truck, Users } from 'lucide-react';
-import { toast } from 'react-toastify';
+import {
+  Package, MessageSquare, Truck, Users, FileText, BarChart,
+  PenTool, DollarSign, CheckSquare, Mail, MapPin
+} from 'lucide-react';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 function AdminDashboard({ socket }) {
   useEffect(() => {
     if (!socket) return;
 
-    // Real-time event listeners (unchanged from your backend setup)
     socket.on('orderUpdate', (updatedOrder) => {
       toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 3000 });
     });
@@ -24,7 +27,6 @@ function AdminDashboard({ socket }) {
       toast.info(`Customer ${updatedCustomer.name} updated`, { autoClose: 3000 });
     });
 
-    // Cleanup listeners on unmount
     return () => {
       socket.off('orderUpdate');
       socket.off('newQuery');
@@ -32,63 +34,72 @@ function AdminDashboard({ socket }) {
       socket.off('stockUpdate');
       socket.off('customerUpdate');
     };
-  }, [socket]); // Depend on socket prop
+  }, [socket]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-12 text-center tracking-tight">Admin Dashboard</h1>
-      <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
-        {/* Orders Card */}
-        <Link
-          to="/orders"
-          className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          aria-label="Navigate to Orders page"
-        >
-          <div className="flex items-center justify-center mb-6">
-            <Truck className="w-12 h-12 text-gray-700" aria-hidden="true" />
-          </div>
-          <h2 className="text-2xl font-semibold text-gray-800 text-center">Orders</h2>
-          <p className="text-gray-600 text-center mt-3 text-lg">Track and process orders</p>
-        </Link>
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
+      <h1 className="text-3xl font-bold text-gray-800 mb-10 text-center tracking-tight">Admin Dashboard</h1>
 
-        {/* Queries Card */}
-        <Link
-          to="/queries"
-          className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          aria-label="Navigate to Queries page"
-        >
-          <div className="flex items-center justify-center mb-6">
-            <MessageSquare className="w-12 h-12 text-gray-700" aria-hidden="true" />
-          </div>
-          <h2 className="text-2xl font-semibold text-gray-800 text-center">Queries</h2>
-          <p className="text-gray-600 text-center mt-3 text-lg">Manage customer inquiries</p>
-        </Link>
+      <div className="max-w-7xl mx-auto space-y-12">
+        {/* Sales & Customer Management */}
+        <Section title="Sales & Customer Management">
+          <DashboardCard to="/orders" icon={<Truck />} title="Orders" desc="Track and process orders" />
+          <DashboardCard to="/customer-invoices" icon={<FileText />} title="Customer Invoices" desc="View customer invoices" />
+          <DashboardCard to="/customer-list" icon={<Users />} title="Customers" desc="View customer details" />
+          <DashboardCard to="/enquiries" icon={<Mail />} title="Enquiries" desc="Manage enquiries" />
+          <DashboardCard to="/queries" icon={<MessageSquare />} title="Queries" desc="Manage customer inquiries" />
+        </Section>
 
-        {/* Inventory Card */}
-        <Link
-          to="/inventory"
-          className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          aria-label="Navigate to Inventory page"
-        >
-          <div className="flex items-center justify-center mb-6">
-            <Package className="w-12 h-12 text-gray-700" aria-hidden="true" />
-          </div>
-          <h2 className="text-2xl font-semibold text-gray-800 text-center">Inventory</h2>
-          <p className="text-gray-600 text-center mt-3 text-lg">Manage stock levels</p>
-        </Link>
+        {/* Inventory & Materials */}
+        <Section title="Inventory & Materials">
+          <DashboardCard to="/inventory" icon={<Package />} title="Inventory" desc="Manage stock levels" />
+          <DashboardCard to="/stock" icon={<Package />} title="Stock" desc="Monitor stock levels" />
+          <DashboardCard to="/price-list" icon={<DollarSign />} title="Price List" desc="View pricing details" />
+          <DashboardCard to="/bom" icon={<BarChart />} title="Bill of Materials" desc="Bill of materials" />
+          <DashboardCard to="/part-drawings" icon={<PenTool />} title="Part Drawings" desc="Access part drawings" />
+        </Section>
 
-        {/* Customers Card */}
-        <Link
-          to="/customer-list"
-          className="bg-white p-8 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          aria-label="Navigate to Customers page"
-        >
-          <div className="flex items-center justify-center mb-6">
-            <Users className="w-12 h-12 text-gray-700" aria-hidden="true" />
-          </div>
-          <h2 className="text-2xl font-semibold text-gray-800 text-center">Customers</h2>
-          <p className="text-gray-600 text-center mt-3 text-lg">View customer details</p>
-        </Link>
+        {/* Quality & Logistics */}
+        <Section title="Quality & Logistics">
+          <DashboardCard to="/pdi" icon={<CheckSquare />} title="PDI" desc="Pre-dispatch inspections" />
+          <DashboardCard to="/dispatch-tracking" icon={<MapPin />} title="Dispatch Tracking" desc="Track dispatch status" />
+        </Section>
+
+        {/* Procurement */}
+        <Section title="Procurement">
+          <DashboardCard to="/purchase-invoices" icon={<FileText />} title="Purchase Invoices" desc="View supplier invoices" />
+        </Section>
+      </div>
+
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
+    </div>
+  );
+}
+
+// Card Component
+function DashboardCard({ to, icon, title, desc }) {
+  return (
+    <Link
+      to={to}
+      className="bg-white p-5 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
+      aria-label={`Navigate to ${title}`}
+    >
+      <div className="flex items-center justify-center mb-3">
+        {React.cloneElement(icon, { className: 'w-9 h-9 text-gray-700' })}
+      </div>
+      <h2 className="text-xl font-semibold text-gray-800 text-center">{title}</h2>
+      <p className="text-gray-600 text-center mt-1 text-base">{desc}</p>
+    </Link>
+  );
+}
+
+// Grid Section Wrapper
+function Section({ title, children }) {
+  return (
+    <div>
+      <h3 className="text-xl font-bold text-gray-700 mb-4">{title}</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {children}
       </div>
     </div>
   );

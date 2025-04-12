@@ -1,1 +1,33 @@
 
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  @keyframes form-pop {
+    0% { opacity: 0; transform: scale(0.9) rotate(-2deg); }
+    60% { opacity: 1; transform: scale(1.05) rotate(1deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  }
+  
+  @keyframes table-pop {
+    0% { opacity: 0; transform: scale(0.98); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  
+  @keyframes tableRowFade {
+    0% { opacity: 0; transform: translateY(5px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+  
+  .animate-form-pop {
+    animation: form-pop 0.4s ease-out;
+  }
+  
+  .animate-table-pop {
+    animation: table-pop 0.3s ease-out;
+  }

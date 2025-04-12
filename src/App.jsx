@@ -11,6 +11,17 @@ import CustomerOrdersPage from './components/CustomerOrdersPage';
 import CustomerQueriesPage from './components/CustomerQueriesPage';
 import EditProfile from './components/EditProfile';
 import InventoryPage from './components/InventoryPage';
+import StockPage from './components/StockPage';
+import PriceListPage from './components/PriceListPage';
+import PdiPage from './components/PdiPage';
+import CustomerInvoicesPage from './components/CustomerInvoicesPage';
+import PartDrawingsSelector from './components/PartDrawingsSelector';
+import PartDrawingsPage from './components/PartDrawingsPage';
+import PartDrawingsRawPage from './components/PartDrawingsRawPage';
+import EnquiryPage from './components/EnquiryPage'; // Updated import (singular)
+import DispatchTrackingPage from './components/DispatchTrackingPage';
+import PurchaseInvoicesPage from './components/PurchaseInvoicesPage';
+import BOMPage from './components/BOMPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginModal from './components/LoginModal';
 import logo from '/intute-ai_logo.jpeg';
@@ -40,12 +51,10 @@ function App() {
 
     newSocket.on('connect', () => {
       console.log('Connected to Socket.IO');
-      // Toast removed from here
     });
 
     newSocket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
-      // Toast removed from here
     });
 
     setSocket(newSocket);
@@ -113,6 +122,41 @@ function App() {
         <Route path="/customer-queries" element={userRole === 'customer' ? <CustomerQueriesPage socket={socket} /> : <Navigate to="/" replace />} />
         <Route path="/edit-profile" element={userRole ? <EditProfile socket={socket} /> : <Navigate to="/" replace />} />
         <Route path="/inventory" element={userRole === 'admin' ? <InventoryPage userRole={userRole} socket={socket} /> : <Navigate to="/" replace />} />
+        <Route path="/stock" element={userRole === 'admin' ? <StockPage socket={socket} /> : <Navigate to="/" replace />} />
+        <Route path="/price-list" element={userRole === 'admin' ? <PriceListPage socket={socket} /> : <Navigate to="/" replace />} />
+        <Route path="/pdi" element={userRole === 'admin' ? <PdiPage socket={socket} /> : <Navigate to="/" replace />} />
+        <Route
+          path="/dispatch-tracking"
+          element={userRole === 'admin' ? <DispatchTrackingPage socket={socket} /> : <Navigate to="/" replace />}
+        />
+        <Route 
+          path="/customer-invoices" 
+          element={userRole === 'admin' ? <CustomerInvoicesPage socket={socket} /> : <Navigate to="/" replace />} 
+        />
+        <Route 
+          path="/part-drawings" 
+          element={userRole === 'admin' ? <PartDrawingsSelector /> : <Navigate to="/" replace />} 
+        />
+        <Route 
+          path="/part-drawings/finished" 
+          element={userRole === 'admin' ? <PartDrawingsPage socket={socket} /> : <Navigate to="/" replace />} 
+        />
+        <Route 
+          path="/part-drawings/raw" 
+          element={userRole === 'admin' ? <PartDrawingsRawPage socket={socket} /> : <Navigate to="/" replace />} 
+        />
+        <Route 
+          path="/enquiries" 
+          element={userRole === 'admin' ? <EnquiryPage socket={socket} /> : <Navigate to="/" replace />} 
+        /> {/* Updated to EnquiryPage */}
+        <Route 
+          path="/purchase-invoices" 
+          element={userRole === 'admin' ? <PurchaseInvoicesPage socket={socket} /> : <Navigate to="/" replace />} 
+        />
+        <Route 
+          path="/bom" 
+          element={userRole === 'admin' ? <BOMPage socket={socket} /> : <Navigate to="/" replace />} 
+        />
         <Route
           path="/"
           element={
@@ -160,7 +204,6 @@ function App() {
           onSubmit={handleLoginSubmit}
         />
       )}
-      {/* ToastContainer removed from here */}
     </>
   );
 }
