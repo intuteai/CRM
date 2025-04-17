@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import logo from '/intute-ai_logo.jpeg'; // Updated import from public folder
+import { Eye, EyeOff } from 'lucide-react';
+import logo from '/intute-ai_logo.jpeg';
 
 function LoginModal({ setShowLogin, onSubmit }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -12,7 +14,7 @@ function LoginModal({ setShowLogin, onSubmit }) {
 
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      console.log('VITE_BACKEND_URL in LoginModal:', import.meta.env.VITE_BACKEND_URL); // Debug log
+      console.log('VITE_BACKEND_URL in LoginModal:', import.meta.env.VITE_BACKEND_URL);
       const res = await fetch(`${backendUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -54,14 +56,24 @@ function LoginModal({ setShowLogin, onSubmit }) {
             className="w-full p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-gray-50 transition-all duration-200"
             required
           />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            className="w-full p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-gray-50 transition-all duration-200"
-            required
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              className="w-full p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-gray-50 transition-all duration-200"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-full p-1"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+            </button>
+          </div>
           <button
             type="submit"
             className="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-gray-900 text-lg font-semibold p-4 rounded-lg hover:from-amber-500 hover:to-amber-600 transition-all duration-300 shadow-md"
