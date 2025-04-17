@@ -1,25 +1,29 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { formatDate as importedFormatDate } from '../utils/helpers';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { format, parse, utcToZonedTime } from 'date-fns';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
-// Fallback formatDate function
+// Format date to convert UTC PostgreSQL timestamp to IST
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
-  if (typeof importedFormatDate === 'function') {
-    return importedFormatDate(dateString);
-  }
+
   try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString();
+    // Parse PostgreSQL timestamp (e.g., "2025-04-11 17:07:32.736791")
+    const date = parse(dateString, 'yyyy-MM-dd HH:mm:ss.SSSSSS', new Date());
+    
+    // Convert UTC to IST (Asia/Kolkata)
+    const istDate = utcToZonedTime(date, 'Asia/Kolkata');
+    
+    // Format as "M/d/yyyy, h:mm:ss a" (e.g., "4/11/2025, 10:37:32 PM")
+    return format(istDate, 'M/d/yyyy, h:mm:ss a');
   } catch (error) {
     console.error('Error formatting date:', error);
-    return dateString;
+    return dateString; // Fallback to raw string
   }
 };
 
@@ -32,7 +36,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
   const [showModal, setShowModal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedDrawing, setSelectedDrawing] = useState(null);
-  const [formData, setFormData] = useState({ drawingLink: '' }); // Removed updatedAt
+  const [formData, setFormData] = useState({ drawingLink: '' });
   const [sortConfig, setSortConfig] = useState({ key: 'drawingId', direction: 'desc' });
   const [page, setPage] = useState(0);
   const [limit] = useState(10);
@@ -248,7 +252,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
 
   const handleEdit = useCallback((drawing) => {
     setSelectedDrawing(drawing);
-    setFormData({ drawingLink: drawing.drawingLink || '' }); // Removed updatedAt
+    setFormData({ drawingLink: drawing.drawingLink || '' });
     setShowModal(true);
   }, []);
 
@@ -269,7 +273,6 @@ function PartDrawingsPage({ socket: providedSocket }) {
           body: JSON.stringify({
             drawing_link: formData.drawingLink.trim(),
             product_id: selectedDrawing.productId,
-            // updated_at is omitted, letting the backend set it
           }),
         });
 
