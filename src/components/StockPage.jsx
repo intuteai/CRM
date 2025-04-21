@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { formatDate } from '../utils/helpers';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { ArrowDownUp, X, RefreshCw, Search, AlertCircle, Plus, Edit2, XCircle, MoreVertical, Download } from 'lucide-react';
+import { ArrowDownUp, X, RefreshCw, Search, AlertCircle, Plus, Edit2, XCircle, MoreVertical, Download, Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -64,6 +64,7 @@ function StockPage({ socket }) {
   const tableRef = useRef(null);
   const searchInputRef = useRef(null);
   const modalRef = useRef(null);
+  const fileInputRef = useRef(null);
   const debouncedSearch = useDebounce(searchInput, 300);
 
   // Socket Connection Management
@@ -224,6 +225,133 @@ function StockPage({ socket }) {
     });
   }, [stockItems, debouncedSearch, sortConfig]);
 
+  const validateImportRow = useCallback((row, index) => {
+    const errors = [];
+
+    if (!row['Product Name'] || !String(row['Product Name']).trim()) {
+      errors.push(`Row ${index + 1}: Product Name is required`);
+    }
+    if (!row['Product Code'] || !String(row['Product Code']).trim()) {
+      errors.push(`Row ${index + 1}: Product Code is required`);
+    }
+    const price = parseFloat(String(row['Price (₹)']).replace(/₹/g, ''));
+    if (isNaN(price) || price < 0) {
+      errors.push(`Row ${index + 1}: Price must be a positive number`);
+    }
+    const stockQuantity = parseFloat(row['Stock Quantity']);
+    if (isNaN(stockQuantity) || stockQuantity < 0) {
+      errors.push(`Row ${index + 1}: Stock Quantity must be a non-negative number`);
+    }
+
+    return errors;
+  }, []);
+
+  const importFromExcel = useCallback(async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        if (!jsonData.length) {
+          toast.error('Excel file is empty', { autoClose: 3000 });
+          return;
+        }
+
+        const errors = [];
+        const validRows = [];
+
+        jsonData.forEach((row, index) => {
+          const rowErrors = validateImportRow(row, index);
+          if (rowErrors.length > 0) {
+            errors.push(...rowErrors);
+          } else {
+            validRows.push({
+              productName: String(row['Product Name'] || '').trim(),
+              productCode: String(row['Product Code'] || '').trim(),
+              price: parseFloat(String(row['Price (₹)'] || '0').replace(/₹/g, '')),
+              stockQuantity: parseFloat(row['Stock Quantity'] || 0),
+              qtyRequired: parseInt(row['Qty Required'] || 0),
+              description: String(row['Description'] || '').trim() || undefined,
+              productId: row['Product ID'] ? parseInt(row['Product ID']) : undefined
+            });
+          }
+        });
+
+        if (errors.length > 0) {
+          errors.forEach(error => toast.error(error, { autoClose: 5000 }));
+          if (validRows.length === 0) return;
+        }
+
+        const token = localStorage.getItem('token');
+        let createdCount = 0;
+        let updatedCount = 0;
+        let failedCount = 0;
+
+        for (const row of validRows) {
+          try {
+            const { productId, ...body } = row;
+            const url = productId ? `${BASE_URL}/api/stock/${productId}` : `${BASE_URL}/api/stock`;
+            const method = productId ? 'PUT' : 'POST';
+
+            const response = await fetch(url, {
+              method,
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(body),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || `Failed to ${productId ? 'update' : 'create'} product`);
+            }
+
+            const updatedItem = await response.json();
+            if (productId) {
+              updatedCount++;
+              setStockItems(prev => prev.map(item =>
+                item.productId === productId ? { ...item, ...body } : item
+              ));
+            } else {
+              createdCount++;
+              setStockItems(prev => [{
+                ...body,
+                productId: updatedItem.productId,
+                createdAt: new Date().toISOString()
+              }, ...prev]);
+            }
+          } catch (err) {
+            failedCount++;
+            toast.error(`Row ${validRows.indexOf(row) + 1}: ${err.message}`, { autoClose: 3000 });
+          }
+        }
+
+        if (createdCount > 0 || updatedCount > 0) {
+          await fetchStock();
+          toast.success(
+            `Imported successfully: ${createdCount} created, ${updatedCount} updated${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
+            { autoClose: 5000 }
+          );
+        } else if (failedCount > 0) {
+          toast.error(`Import failed: ${failedCount} rows could not be processed`, { autoClose: 5000 });
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+      event.target.value = ''; // Reset file input
+    } catch (err) {
+      toast.error(`Import failed: ${err.message}`, { autoClose: 3000 });
+    }
+  }, [fetchStock, validateImportRow]);
+
   const exportToExcel = useCallback(() => {
     const data = filteredStock.map(item => ({
       'Product ID': item.productId || 'N/A',
@@ -333,7 +461,7 @@ function StockPage({ socket }) {
       errors.price = 'Price must be a positive number';
     }
     const stockQuantity = parseFloat(formData.stockQuantity);
-    if ((modalMode === 'edit' || modalMode === 'create') && (isNaN(stockQuantity) || stockQuantity < 0)) {
+    if ((modalMode === 'create' || modalMode === 'edit') && (isNaN(stockQuantity) || stockQuantity < 0)) {
       errors.stockQuantity = 'Stock quantity must be a non-negative number';
     }
 
@@ -520,6 +648,22 @@ function StockPage({ socket }) {
               <RefreshCw size={20} className="mr-2" /> {isLoading && stockItems.length > 0 ? 'Refreshing...' : 'Refresh'}
             </button>
             <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg flex items-center"
+              disabled={isLoading}
+              aria-label="Import from Excel"
+            >
+              <Upload size={20} className="mr-2" /> Import from Excel
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={importFromExcel}
+              accept=".xlsx,.xls"
+              className="hidden"
+              aria-hidden="true"
+            />
+            <button
               onClick={exportToExcel}
               className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg flex items-center"
               disabled={isLoading || filteredStock.length === 0}
@@ -646,7 +790,7 @@ function StockPage({ socket }) {
 
               {totalItems > 0 && (
                 <div className="flex justify-between items-center p-4 bg-gray-50">
-                  <div className="text-gray-600">
+                  <div className="text-gray Nickel-600">
                     Showing {filteredStock.length} of {totalItems} products
                   </div>
                   <div className="flex items-center gap-4">

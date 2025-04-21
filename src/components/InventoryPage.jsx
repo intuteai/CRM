@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
-  Edit2, MoreVertical, Package, XCircle, Trash2, Eye, Download
+  Edit2, MoreVertical, Package, XCircle, Trash2, Eye, Download, Upload
 } from 'lucide-react';
 import { debounce } from 'lodash';
 import { io } from 'socket.io-client';
@@ -25,10 +25,16 @@ const useFetchInventory = ({ limit, offset }) => {
       if (!token) throw new Error("Authentication token missing. Please log in again.");
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       const url = `${backendUrl}/api/inventory?limit=${limit}&offset=${offset}&force_refresh=true`;
-      const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (!response.ok) throw new Error(`Inventory fetch failed: ${response.statusText}`);
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Inventory fetch failed: ${response.statusText}`);
+      }
       const { data, total } = await response.json();
-      
+
       if (isMounted) {
         const normalizedData = data.map(item => ({
           ...item,
@@ -66,16 +72,17 @@ function InventoryPage({ userRole }) {
   const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [selectedDescription, setSelectedDescription] = useState('');
-  const tableRef = useRef(null); // For focus management
+  const tableRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const { inventory, totalItems, isLoading, error, refetchData } = useFetchInventory({ limit: itemsPerPage, offset: page * itemsPerPage });
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    console.log('Socket.IO connecting to:', backendUrl); // Debug log
+    console.log('Socket.IO connecting to:', backendUrl);
     const socket = io(backendUrl, {
       withCredentials: true,
-      transports: ['websocket'], // Prefer WebSocket over polling
+      transports: ['websocket'],
     });
     socket.on('connect', () => console.log('Connected to Socket.IO'));
     socket.on('connect_error', (err) => {
@@ -85,12 +92,144 @@ function InventoryPage({ userRole }) {
     socket.on('stockUpdate', () => {
       refetchData();
       toast.info('Inventory updated in real-time', { autoClose: 2000 });
-      if (tableRef.current) tableRef.current.focus(); // Refocus table for screen readers
+      if (tableRef.current) tableRef.current.focus();
     });
     return () => socket.disconnect();
   }, [refetchData]);
 
   const debouncedSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);
+
+  const validateImportRow = useCallback((row, index) => {
+    const errors = [];
+
+    if (!row['Product Name'] || !String(row['Product Name']).trim()) {
+      errors.push(`Row ${index + 1}: Product Name is required`);
+    }
+    if (!row['Product Code'] || String(row['Product Code']).trim().length !== 10) {
+      errors.push(`Row ${index + 1}: Product Code must be exactly 10 characters`);
+    }
+    const stockQuantity = parseInt(row['Stock Quantity']);
+    if (isNaN(stockQuantity) || stockQuantity < 0 || !Number.isInteger(Number(row['Stock Quantity']))) {
+      errors.push(`Row ${index + 1}: Stock Quantity must be a non-negative integer`);
+    }
+    const price = parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, ''));
+    if (isNaN(price) || price < 0) {
+      errors.push(`Row ${index + 1}: Price must be a non-negative number`);
+    }
+
+    return errors;
+  }, []);
+
+  const importFromExcel = useCallback(async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        if (!jsonData.length) {
+          toast.error('Excel file is empty', { autoClose: 3000 });
+          return;
+        }
+
+        const errors = [];
+        const validRows = [];
+
+        jsonData.forEach((row, index) => {
+          const rowErrors = validateImportRow(row, index);
+          if (rowErrors.length > 0) {
+            errors.push(...rowErrors);
+          } else {
+            validRows.push({
+              product_name: String(row['Product Name'] || '').trim(),
+              product_code: String(row['Product Code'] || '').trim(),
+              stock_quantity: parseInt(row['Stock Quantity'] || 0),
+              price: parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, '')),
+              description: String(row['Description'] || '').trim() || undefined,
+              product_id: row['Product ID'] ? parseInt(row['Product ID']) : undefined,
+            });
+          }
+        });
+
+        if (errors.length > 0) {
+          errors.forEach(error => toast.error(error, { autoClose: 5000 }));
+        }
+        if (!validRows.length) {
+          toast.error('No valid rows to import. Check validation errors.', { autoClose: 5000 });
+          return;
+        }
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+          toast.error('Authentication token missing. Please log in.', { autoClose: 5000 });
+          return;
+        }
+
+        let createdCount = 0;
+        let updatedCount = 0;
+        let failedCount = 0;
+
+        for (const row of validRows) {
+          try {
+            const { product_id, ...body } = row;
+            const url = product_id
+              ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory/${product_id}`
+              : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory`;
+            const method = product_id ? 'PUT' : 'POST';
+
+            const response = await fetch(url, {
+              method,
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(body),
+              credentials: 'include',
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              console.error(`Row ${validRows.indexOf(row) + 1} failed:`, { status: response.status, errorData });
+              throw new Error(errorData.error || `Failed to ${product_id ? 'update' : 'create'} item (Status: ${response.status})`);
+            }
+
+            if (product_id) {
+              updatedCount++;
+            } else {
+              createdCount++;
+            }
+          } catch (err) {
+            failedCount++;
+            console.error(`Row ${validRows.indexOf(row) + 1} error:`, err);
+            toast.error(`Row ${validRows.indexOf(row) + 1}: ${err.message}`, { autoClose: 3000 });
+          }
+        }
+
+        if (createdCount > 0 || updatedCount > 0) {
+          await refetchData();
+          setPage(0);
+          toast.success(
+            `Imported successfully: ${createdCount} created, ${updatedCount} updated${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
+            { autoClose: 5000 }
+          );
+        } else {
+          toast.error(`Import failed: ${failedCount} rows could not be processed`, { autoClose: 5000 });
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+      event.target.value = '';
+    } catch (err) {
+      console.error('Import error:', err);
+      toast.error(`Import failed: ${err.message}`, { autoClose: 3000 });
+    }
+  }, [validateImportRow, refetchData]);
 
   const sortedInventory = useMemo(() => {
     const sortableInventory = [...inventory];
@@ -115,7 +254,7 @@ function InventoryPage({ userRole }) {
       const matchesSearch = item.product_id.toString().includes(searchTerm) ||
                             item.product_name.toLowerCase().includes(searchTerm) ||
                             item.product_code.toLowerCase().includes(searchTerm);
-      const matchesStock = filterStock === 'All' || 
+      const matchesStock = filterStock === 'All' ||
                            (filterStock === 'In Stock' && item.stock_quantity > 0) ||
                            (filterStock === 'Out of Stock' && item.stock_quantity === 0);
       return matchesSearch && matchesStock;
@@ -137,6 +276,7 @@ function InventoryPage({ userRole }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ product_name, stock_quantity, price, description, product_code }),
+        credentials: 'include',
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -154,7 +294,9 @@ function InventoryPage({ userRole }) {
     }
   }, [refetchData]);
 
-  const handleUpdateItem = useCallback(async (itemId, { product_name, stock_quantity, price, description, product_code }) => {
+  const handleUpdateItem = useCallback(async (
+
+itemId, { product_name, stock_quantity, price, description, product_code }) => {
     const token = localStorage.getItem('token');
     try {
       if (!token) throw new Error("Authentication token missing.");
@@ -163,6 +305,7 @@ function InventoryPage({ userRole }) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ product_name, stock_quantity, price, description, product_code }),
+        credentials: 'include',
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -187,6 +330,7 @@ function InventoryPage({ userRole }) {
       const response = await fetch(`${backendUrl}/api/inventory/${itemId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include',
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -222,14 +366,13 @@ function InventoryPage({ userRole }) {
       'Description': item.description || 'N/A',
       'Stock Quantity': Number(item.stock_quantity),
       'Price (₹)': formatCurrency(Number(item.price)),
-      'Created At (IST)': item.created_at ? `${new Date(item.created_at).toLocaleDateString('en-IN')} ${new Date(item.created_at).toLocaleTimeString('en-IN')}` : 'N/A'
+      'Created At (IST)': item.created_at ? `${new Date(item.created_at).toLocaleDateString('en-IN')} ${new Date(item.created_at).toLocaleTimeString('en-IN')}` : 'N/A',
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Finished Goods');
 
-    // Auto-size columns
     const colWidths = data.reduce((acc, row) => {
       Object.keys(row).forEach((key, idx) => {
         const value = String(row[key]).replace(/<[^>]*>/g, '');
@@ -245,17 +388,41 @@ function InventoryPage({ userRole }) {
 
   const ActionsDropdown = ({ item, onEdit }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+          setIsOpen(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     return (
-      <div className="relative">
-        <button onClick={() => setIsOpen(!isOpen)} className="p-2 hover:bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label={`Actions for item ${item.product_name}`} aria-haspopup="true" aria-expanded={isOpen}>
+      <div ref={dropdownRef} className="relative">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="p-2 hover:bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-amber-300"
+          aria-label={`Actions for item ${item.product_name}`}
+          aria-haspopup="true"
+          aria-expanded={isOpen}
+        >
           <MoreVertical size={20} />
         </button>
         {isOpen && (
           <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
-            <button onClick={() => { onEdit(item); setIsOpen(false); }} className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:bg-gray-100">
+            <button
+              onClick={() => { onEdit(item); setIsOpen(false); }}
+              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
+            >
               <Edit2 size={16} className="mr-2" /> Edit
             </button>
-            <button onClick={() => { handleDeleteItem(item.product_id); setIsOpen(false); }} className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-100 focus:outline-none focus:bg-red-100">
+            <button
+              onClick={() => { handleDeleteItem(item.product_id); setIsOpen(false); }}
+              className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-100 focus:outline-none focus:bg-red-100"
+            >
               <Trash2 size={16} className="mr-2" /> Delete
             </button>
           </div>
@@ -268,7 +435,11 @@ function InventoryPage({ userRole }) {
     setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
   }, []);
 
-  if (userRole !== 'admin') return <div className="min-h-screen flex items-center justify-center text-gray-800 text-2xl" role="alert">Access Denied</div>;
+  if (userRole !== 'admin') return (
+    <div className="min-h-screen flex items-center justify-center text-gray-800 text-2xl" role="alert">
+      Access Denied
+    </div>
+  );
 
   if (isLoading && !inventory.length) return (
     <div className="min-h-screen flex items-center justify-center" aria-live="polite">
@@ -279,7 +450,12 @@ function InventoryPage({ userRole }) {
   if (error && !showEditForm && !showCreateForm) return (
     <div className="min-h-screen flex items-center justify-center text-red-700" role="alert">
       {error}
-      <button onClick={() => refetchData()} className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300">Retry</button>
+      <button
+        onClick={() => refetchData()}
+        className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
+      >
+        Retry
+      </button>
     </div>
   );
 
@@ -296,7 +472,7 @@ function InventoryPage({ userRole }) {
               placeholder="Search by ID, Name, or Code..."
               value={searchInput}
               onChange={handleSearchChange}
-              className="w-full p-4 pl-12 border rounded-lg focus:ring-2 focus:ring-amber-300"
+              className="w-full p-4 pl-12 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md"
             />
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" aria-hidden="true" />
           </div>
@@ -306,26 +482,59 @@ function InventoryPage({ userRole }) {
               id="stock-filter"
               value={filterStock}
               onChange={(e) => setFilterStock(e.target.value)}
-              className="p-4 border rounded-lg focus:ring-2 focus:ring-amber-300"
+              className="p-4 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md"
             >
               <option value="All">All Stock</option>
               <option value="In Stock">In Stock</option>
               <option value="Out of Stock">Out of Stock</option>
             </select>
           </div>
-          <button onClick={() => refetchData()} className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg" disabled={isLoading} aria-label="Refresh inventory">
+          <button
+            onClick={() => refetchData()}
+            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
+            disabled={isLoading}
+            aria-label="Refresh inventory"
+          >
             Refresh
           </button>
-          <button onClick={() => setShowCreateForm(true)} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center" disabled={isLoading} aria-label="Create new item">
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md"
+            disabled={isLoading}
+            aria-label="Create new item"
+          >
             <PlusCircle className="mr-2" /> Add Item
           </button>
-          <button onClick={exportToExcel} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center" disabled={isLoading || filteredInventory.length === 0} aria-label="Export to Excel">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md"
+            disabled={isLoading}
+            aria-label="Import from Excel"
+          >
+            <Upload className="mr-2" /> Import from Excel
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={importFromExcel}
+            accept=".xlsx,.xls"
+            className="hidden"
+            aria-hidden="true"
+          />
+          <button
+            onClick={exportToExcel}
+            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md"
+            disabled={isLoading || filteredInventory.length === 0}
+            aria-label="Export to Excel"
+          >
             <Download className="mr-2" /> Export to Excel
           </button>
         </div>
 
         {isLoading && inventory.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">Refreshing data...</div>
+          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">
+            Refreshing data...
+          </div>
         )}
 
         <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
@@ -400,10 +609,20 @@ function InventoryPage({ userRole }) {
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600">Showing {filteredInventory.length} of {totalItems} items</div>
               <div className="flex space-x-2">
-                <button onClick={() => setPage(p => p > 0 ? p - 1 : 0)} disabled={page === 0} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Previous page">
+                <button
+                  onClick={() => setPage(p => p > 0 ? p - 1 : 0)}
+                  disabled={page === 0}
+                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  aria-label="Previous page"
+                >
                   <ChevronLeft size={20} aria-hidden="true" />
                 </button>
-                <button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * itemsPerPage >= totalItems} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Next page">
+                <button
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={(page + 1) * itemsPerPage >= totalItems}
+                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  aria-label="Next page"
+                >
                   <ChevronRight size={20} aria-hidden="true" />
                 </button>
               </div>
@@ -417,7 +636,10 @@ function InventoryPage({ userRole }) {
               {searchTerm || filterStock !== 'All' ? (
                 <p className="mt-2">Try adjusting your search or filters.</p>
               ) : (
-                <button onClick={() => setShowCreateForm(true)} className="mt-4 p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center">
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="mt-4 p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
+                >
                   <PlusCircle className="mr-2" aria-hidden="true" /> Add Your First Item
                 </button>
               )}
@@ -429,7 +651,11 @@ function InventoryPage({ userRole }) {
       {showCreateForm && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="create-form-title">
-            <button onClick={() => setShowCreateForm(false)} className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Close create form">
+            <button
+              onClick={() => setShowCreateForm(false)}
+              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+              aria-label="Close create form"
+            >
               <XCircle size={24} aria-hidden="true" />
             </button>
             <h2 id="create-form-title" className="text-2xl font-bold mb-6">Add New Item</h2>
@@ -441,7 +667,11 @@ function InventoryPage({ userRole }) {
       {showEditForm && selectedItem && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="edit-form-title">
-            <button onClick={() => setShowEditForm(false)} className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Close edit form">
+            <button
+              onClick={() => setShowEditForm(false)}
+              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+              aria-label="Close edit form"
+            >
               <XCircle size={24} aria-hidden="true" />
             </button>
             <h2 id="edit-form-title" className="text-2xl font-bold mb-6">Edit Item #{selectedItem.product_id}</h2>
@@ -453,7 +683,11 @@ function InventoryPage({ userRole }) {
       {showDescriptionModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="description-modal-title">
-            <button onClick={() => setShowDescriptionModal(false)} className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Close description modal">
+            <button
+              onClick={() => setShowDescriptionModal(false)}
+              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+              aria-label="Close description modal"
+            >
               <XCircle size={24} aria-hidden="true" />
             </button>
             <h2 id="description-modal-title" className="text-2xl font-bold mb-6">Description</h2>
@@ -492,7 +726,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
       stock_quantity: validateField('stock_quantity', formData.stock_quantity),
       price: validateField('price', formData.price),
       product_code: validateField('product_code', formData.product_code),
-      description: ''
+      description: '',
     };
     setErrors(fieldErrors);
     if (Object.values(fieldErrors).some(err => err)) return;
@@ -509,38 +743,109 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div>
         <label htmlFor="create-product-name" className="text-gray-700 font-medium">Product Name</label>
-        <input id="create-product-name" type="text" name="product_name" value={formData.product_name} onChange={handleChange} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" aria-invalid={!!errors.product_name} aria-describedby={errors.product_name ? "create-product-name-error" : undefined} disabled={isSubmitting} />
+        <input
+          id="create-product-name"
+          type="text"
+          name="product_name"
+          value={formData.product_name}
+          onChange={handleChange}
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          aria-invalid={!!errors.product_name}
+          aria-describedby={errors.product_name ? "create-product-name-error" : undefined}
+          disabled={isSubmitting}
+        />
         {errors.product_name && <p id="create-product-name-error" className="text-red-600 text-sm mt-1">{errors.product_name}</p>}
       </div>
       <div>
         <label htmlFor="create-product-code" className="text-gray-700 font-medium">Product Code (10 chars)</label>
-        <input id="create-product-code" type="text" name="product_code" value={formData.product_code} onChange={handleChange} maxLength={10} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" aria-invalid={!!errors.product_code} aria-describedby={errors.product_code ? "create-product-code-error" : undefined} disabled={isSubmitting} />
+        <input
+          id="create-product-code"
+          type="text"
+          name="product_code"
+          value={formData.product_code}
+          onChange={handleChange}
+          maxLength={10}
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          aria-invalid={!!errors.product_code}
+          aria-describedby={errors.product_code ? "create-product-code-error" : undefined}
+          disabled={isSubmitting}
+        />
         {errors.product_code && <p id="create-product-code-error" className="text-red-600 text-sm mt-1">{errors.product_code}</p>}
       </div>
       <div>
         <label htmlFor="create-description" className="text-gray-700 font-medium">Description</label>
-        <textarea id="create-description" name="description" value={formData.description} onChange={handleChange} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <textarea
+          id="create-description"
+          name="description"
+          value={formData.description}
+          onChange={handleChange}
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          disabled={isSubmitting}
+        />
       </div>
       <div>
         <label htmlFor="create-stock-quantity" className="text-gray-700 font-medium">Stock Quantity</label>
-        <input id="create-stock-quantity" type="number" name="stock_quantity" value={formData.stock_quantity} onChange={handleChange} min="0" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" aria-invalid={!!errors.stock_quantity} aria-describedby={errors.stock_quantity ? "create-stock-quantity-error" : undefined} disabled={isSubmitting} />
+        <input
+          id="create-stock-quantity"
+          type="number"
+          name="stock_quantity"
+          value={formData.stock_quantity}
+          onChange={handleChange}
+          min="0"
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          aria-invalid={!!errors.stock_quantity}
+          aria-describedby={errors.stock_quantity ? "create-stock-quantity-error" : undefined}
+          disabled={isSubmitting}
+        />
         {errors.stock_quantity && <p id="create-stock-quantity-error" className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
       </div>
       <div>
         <label htmlFor="create-price" className="text-gray-700 font-medium">Price (₹)</label>
-        <input id="create-price" type="number" name="price" value={formData.price} onChange={handleChange} min="0" step="0.01" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" aria-invalid={!!errors.price} aria-describedby={errors.price ? "create-price-error" : undefined} disabled={isSubmitting} />
+        <input
+          id="create-price"
+          type="number"
+          name="price"
+          value={formData.price}
+          onChange={handleChange}
+          min="0"
+          step="0.01"
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          aria-invalid={!!errors.price}
+          aria-describedby={errors.price ? "create-price-error" : undefined}
+          disabled={isSubmitting}
+        />
         {errors.price && <p id="create-price-error" className="text-red-600 text-sm mt-1">{errors.price}</p>}
       </div>
       <div className="flex justify-end space-x-4">
-        <button type="button" onClick={onClose} className="p-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-300" disabled={isSubmitting}>Cancel</button>
-        <button type="button" onClick={handleSave} className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center" disabled={isSubmitting}>{isSubmitting ? 'Creating...' : 'Create'}</button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          disabled={isSubmitting}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Creating...' : 'Create'}
+        </button>
       </div>
     </form>
   );
 };
 
 const EditItemForm = ({ item, onSubmit, onClose }) => {
-  const [formData, setFormData] = useState({ product_name: item.product_name, stock_quantity: item.stock_quantity, price: item.price, description: item.description || '', product_code: item.product_code });
+  const [formData, setFormData] = useState({
+    product_name: item.product_name,
+    stock_quantity: item.stock_quantity,
+    price: item.price,
+    description: item.description || '',
+    product_code: item.product_code,
+  });
   const [errors, setErrors] = useState({ product_name: '', stock_quantity: '', price: '', description: '', product_code: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -564,7 +869,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
       stock_quantity: validateField('stock_quantity', formData.stock_quantity),
       price: validateField('price', formData.price),
       product_code: validateField('product_code', formData.product_code),
-      description: ''
+      description: '',
     };
     setErrors(fieldErrors);
     if (Object.values(fieldErrors).some(err => err)) return;
@@ -581,31 +886,96 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div>
         <label htmlFor="edit-product-name" className="text-gray-700 font-medium">Product Name</label>
-        <input id="edit-product-name" type="text" name="product_name" value={formData.product_name} onChange={handleChange} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" aria-invalid={!!errors.product_name} aria-describedby={errors.product_name ? "edit-product-name-error" : undefined} disabled={isSubmitting} />
+        <input
+          id="edit-product-name"
+          type="text"
+          name="product_name"
+          value={formData.product_name}
+          onChange={handleChange}
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          aria-invalid={!!errors.product_name}
+          aria-describedby={errors.product_name ? "edit-product-name-error" : undefined}
+          disabled={isSubmitting}
+        />
         {errors.product_name && <p id="edit-product-name-error" className="text-red-600 text-sm mt-1">{errors.product_name}</p>}
       </div>
       <div>
         <label htmlFor="edit-product-code" className="text-gray-700 font-medium">Product Code (10 chars)</label>
-        <input id="edit-product-code" type="text" name="product_code" value={formData.product_code} onChange={handleChange} maxLength={10} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" aria-invalid={!!errors.product_code} aria-describedby={errors.product_code ? "edit-product-code-error" : undefined} disabled={isSubmitting} />
+        <input
+          id="edit-product-code"
+          type="text"
+          name="product_code"
+          value={formData.product_code}
+          onChange={handleChange}
+          maxLength={10}
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          aria-invalid={!!errors.product_code}
+          aria-describedby={errors.product_code ? "edit-product-code-error" : undefined}
+          disabled={isSubmitting}
+        />
         {errors.product_code && <p id="edit-product-code-error" className="text-red-600 text-sm mt-1">{errors.product_code}</p>}
       </div>
       <div>
         <label htmlFor="edit-description" className="text-gray-700 font-medium">Description</label>
-        <textarea id="edit-description" name="description" value={formData.description} onChange={handleChange} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <textarea
+          id="edit-description"
+          name="description"
+          value={formData.description}
+          onChange={handleChange}
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          disabled={isSubmitting}
+        />
       </div>
       <div>
         <label htmlFor="edit-stock-quantity" className="text-gray-700 font-medium">Stock Quantity</label>
-        <input id="edit-stock-quantity" type="number" name="stock_quantity" value={formData.stock_quantity} onChange={handleChange} min="0" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" aria-invalid={!!errors.stock_quantity} aria-describedby={errors.stock_quantity ? "edit-stock-quantity-error" : undefined} disabled={isSubmitting} />
+        <input
+          id="edit-stock-quantity"
+          type="number"
+          name="stock_quantity"
+          value={formData.stock_quantity}
+          onChange={handleChange}
+          min="0"
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          aria-invalid={!!errors.stock_quantity}
+          aria-describedby={errors.stock_quantity ? "edit-stock-quantity-error" : undefined}
+          disabled={isSubmitting}
+        />
         {errors.stock_quantity && <p id="edit-stock-quantity-error" className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
       </div>
       <div>
         <label htmlFor="edit-price" className="text-gray-700 font-medium">Price (₹)</label>
-        <input id="edit-price" type="number" name="price" value={formData.price} onChange={handleChange} min="0" step="0.01" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" aria-invalid={!!errors.price} aria-describedby={errors.price ? "edit-price-error" : undefined} disabled={isSubmitting} />
+        <input
+          id="edit-price"
+          type="number"
+          name="price"
+          value={formData.price}
+          onChange={handleChange}
+          min="0"
+          step="0.01"
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          aria-invalid={!!errors.price}
+          aria-describedby={errors.price ? "edit-price-error" : undefined}
+          disabled={isSubmitting}
+        />
         {errors.price && <p id="edit-price-error" className="text-red-600 text-sm mt-1">{errors.price}</p>}
       </div>
       <div className="flex justify-end space-x-4">
-        <button type="button" onClick={onClose} className="p-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-300" disabled={isSubmitting}>Cancel</button>
-        <button type="button" onClick={handleSave} className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : 'Save'}</button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          disabled={isSubmitting}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Saving...' : 'Save'}
+        </button>
       </div>
     </form>
   );
