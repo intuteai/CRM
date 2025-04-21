@@ -8,6 +8,7 @@ import { io } from 'socket.io-client';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import * as XLSX from 'xlsx';
+import QRCode from 'qrcode';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 
@@ -72,10 +73,32 @@ function InventoryPage({ userRole }) {
   const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [selectedDescription, setSelectedDescription] = useState('');
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
+  const [selectedBarcode, setSelectedBarcode] = useState('');
+  const [selectedProductName, setSelectedProductName] = useState('');
+  const [selectedProductDescription, setSelectedProductDescription] = useState('');
   const tableRef = useRef(null);
   const fileInputRef = useRef(null);
 
   const { inventory, totalItems, isLoading, error, refetchData } = useFetchInventory({ limit: itemsPerPage, offset: page * itemsPerPage });
+
+  const generateQRCode = useCallback(async (productCode, productName, description, elementId) => {
+    try {
+      const data = JSON.stringify({
+        product_code: productCode,
+        product_name: productName,
+        description: description || 'No description available',
+      });
+      await QRCode.toCanvas(document.getElementById(elementId), data, {
+        width: 200,
+        margin: 2,
+        errorCorrectionLevel: 'H', // High error correction for reliability
+      });
+    } catch (err) {
+      console.error('QR code generation failed:', err);
+      toast.error('Failed to generate QR code', { autoClose: 3000 });
+    }
+  }, []);
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -97,11 +120,16 @@ function InventoryPage({ userRole }) {
     return () => socket.disconnect();
   }, [refetchData]);
 
+  useEffect(() => {
+    if (showBarcodeModal && selectedBarcode) {
+      generateQRCode(selectedBarcode, selectedProductName, selectedProductDescription, 'qrcode-canvas');
+    }
+  }, [showBarcodeModal, selectedBarcode, selectedProductName, selectedProductDescription, generateQRCode]);
+
   const debouncedSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);
 
   const validateImportRow = useCallback((row, index) => {
     const errors = [];
-
     if (!row['Product Name'] || !String(row['Product Name']).trim()) {
       errors.push(`Row ${index + 1}: Product Name is required`);
     }
@@ -116,7 +144,6 @@ function InventoryPage({ userRole }) {
     if (isNaN(price) || price < 0) {
       errors.push(`Row ${index + 1}: Price must be a non-negative number`);
     }
-
     return errors;
   }, []);
 
@@ -294,9 +321,7 @@ function InventoryPage({ userRole }) {
     }
   }, [refetchData]);
 
-  const handleUpdateItem = useCallback(async (
-
-itemId, { product_name, stock_quantity, price, description, product_code }) => {
+  const handleUpdateItem = useCallback(async (itemId, { product_name, stock_quantity, price, description, product_code }) => {
     const token = localStorage.getItem('token');
     try {
       if (!token) throw new Error("Authentication token missing.");
@@ -356,6 +381,13 @@ itemId, { product_name, stock_quantity, price, description, product_code }) => {
   const showDescription = useCallback((description) => {
     setSelectedDescription(description);
     setShowDescriptionModal(true);
+  }, []);
+
+  const showBarcode = useCallback((productCode, productName, description) => {
+    setSelectedBarcode(productCode);
+    setSelectedProductName(productName);
+    setSelectedProductDescription(description || 'No description available');
+    setShowBarcodeModal(true);
   }, []);
 
   const exportToExcel = useCallback(() => {
@@ -549,20 +581,21 @@ itemId, { product_name, stock_quantity, price, description, product_code }) => {
                   { key: 'stock_quantity', label: 'Stock Quantity' },
                   { key: 'price', label: 'Price' },
                   { key: 'created_at', label: 'Created At (IST)' },
+                  { key: 'qrcode', label: 'QR Code' },
                   { key: 'actions', label: 'Actions' },
                 ].map(({ key, label }) => (
                   <th
                     key={key}
-                    onClick={() => key !== 'actions' && handleSort(key)}
-                    onKeyDown={(e) => key !== 'actions' && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSort(key))}
-                    className={`py-5 px-3 ${key !== 'actions' ? 'cursor-pointer hover:bg-amber-200 focus:outline-none focus:bg-amber-200' : ''}`}
-                    tabIndex={key !== 'actions' ? 0 : undefined}
+                    onClick={() => key !== 'actions' && key !== 'qrcode' && handleSort(key)}
+                    onKeyDown={(e) => key !== 'actions' && key !== 'qrcode' && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSort(key))}
+                    className={`py-5 px-3 ${key !== 'actions' && key !== 'qrcode' ? 'cursor-pointer hover:bg-amber-200 focus:outline-none focus:bg-amber-200' : ''}`}
+                    tabIndex={key !== 'actions' && key !== 'qrcode' ? 0 : undefined}
                     aria-sort={sortConfig.key === key ? sortConfig.direction : 'none'}
                     role="columnheader"
                   >
                     <div className="flex items-center">
                       {label}
-                      {key !== 'actions' && <ArrowDownUp className="ml-2" size={16} aria-hidden="true" />}
+                      {key !== 'actions' && key !== 'qrcode' && <ArrowDownUp className="ml-2" size={16} aria-hidden="true" />}
                     </div>
                   </th>
                 ))}
@@ -596,6 +629,15 @@ itemId, { product_name, stock_quantity, price, description, product_code }) => {
                       <span>{new Date(item.created_at).toLocaleDateString('en-IN')}</span>
                       <span className="text-sm text-gray-500">{new Date(item.created_at).toLocaleTimeString('en-IN')}</span>
                     </div>
+                  </td>
+                  <td className="py-4 px-3">
+                    <button
+                      onClick={() => showBarcode(item.product_code, item.product_name, item.description)}
+                      className="text-amber-600 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
+                      aria-label={`View QR code for ${item.product_name}`}
+                    >
+                      <Eye size={16} className="mr-1" aria-hidden="true" /> QR Code
+                    </button>
                   </td>
                   <td className="py-4 px-3">
                     <ActionsDropdown item={item} onEdit={initiateEdit} />
@@ -692,6 +734,39 @@ itemId, { product_name, stock_quantity, price, description, product_code }) => {
             </button>
             <h2 id="description-modal-title" className="text-2xl font-bold mb-6">Description</h2>
             <p className="text-gray-700 whitespace-pre-wrap">{selectedDescription || 'No description available'}</p>
+          </div>
+        </div>
+      )}
+
+      {showBarcodeModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="qrcode-modal-title">
+            <button
+              onClick={() => setShowBarcodeModal(false)}
+              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+              aria-label="Close QR code modal"
+            >
+              <XCircle size={24} aria-hidden="true" />
+            </button>
+            <h2 id="qrcode-modal-title" className="text-2xl font-bold mb-4">QR Code for {selectedProductName}</h2>
+            <div className="mb-4">
+              <p className="text-gray-700"><strong>Product Code:</strong> {selectedBarcode}</p>
+              <p className="text-gray-700 whitespace-pre-wrap"><strong>Description:</strong> {selectedProductDescription}</p>
+            </div>
+            <canvas id="qrcode-canvas" className="w-full max-w-[200px] mx-auto mb-4" aria-label={`QR code for ${selectedProductName}`}></canvas>
+            <button
+              onClick={() => {
+                const canvas = document.getElementById('qrcode-canvas');
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = `qrcode_${selectedBarcode}.png`;
+                link.click();
+                toast.success('QR code downloaded successfully', { autoClose: 2000 });
+              }}
+              className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
+            >
+              <Download className="mr-2" aria-hidden="true" /> Download QR Code
+            </button>
           </div>
         </div>
       )}
