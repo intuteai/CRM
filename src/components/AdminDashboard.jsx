@@ -52,8 +52,8 @@ function AdminDashboard({ socket }) {
 
         {/* Inventory & Materials */}
         <Section title="Inventory & Materials">
-          <DashboardCard to="/inventory" icon={<Package />} title="Inventory" desc="Manage stock levels" />
-          <DashboardCard to="/stock" icon={<Package />} title="Stock" desc="Monitor stock levels" />
+          <DashboardCard to="/inventory" icon={<Package />} title="Finished Goods" desc="Manage finished goods inventory" />
+          <DashboardCard to="/stock" icon={<Package />} title="Raw Materials" desc="Monitor raw material levels" />
           <DashboardCard to="/price-list" icon={<DollarSign />} title="Price List" desc="View pricing details" />
           <DashboardCard to="/bom" icon={<BarChart />} title="Bill of Materials" desc="Bill of materials" />
           <DashboardCard to="/part-drawings" icon={<PenTool />} title="Part Drawings" desc="Access part drawings" />

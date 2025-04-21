@@ -256,7 +256,7 @@ function InventoryPage({ userRole }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Inventory</h1>
+      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Finished Goods Stock</h1>
       <div className="max-w-7xl mx-auto">
         <div className="flex mb-8 gap-6 flex-wrap">
           <div className="relative flex-grow">
