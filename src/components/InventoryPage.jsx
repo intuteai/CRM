@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
-  Edit2, MoreVertical, Package, XCircle, Trash2, Eye
+  Edit2, MoreVertical, Package, XCircle, Trash2, Eye, Download
 } from 'lucide-react';
 import { debounce } from 'lodash';
 import { io } from 'socket.io-client';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import * as XLSX from 'xlsx';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 
@@ -91,6 +92,36 @@ function InventoryPage({ userRole }) {
 
   const debouncedSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);
 
+  const sortedInventory = useMemo(() => {
+    const sortableInventory = [...inventory];
+    if (sortConfig.key) {
+      sortableInventory.sort((a, b) => {
+        let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
+        if (sortConfig.key === 'price' || sortConfig.key === 'stock_quantity') {
+          aValue = Number(aValue);
+          bValue = Number(bValue);
+        } else if (sortConfig.key === 'created_at') {
+          aValue = new Date(aValue || 0);
+          bValue = new Date(bValue || 0);
+        }
+        return aValue < bValue ? (sortConfig.direction === 'asc' ? -1 : 1) : aValue > bValue ? (sortConfig.direction === 'asc' ? 1 : -1) : 0;
+      });
+    }
+    return sortableInventory;
+  }, [inventory, sortConfig]);
+
+  const filteredInventory = useMemo(() => {
+    return sortedInventory.filter(item => {
+      const matchesSearch = item.product_id.toString().includes(searchTerm) ||
+                            item.product_name.toLowerCase().includes(searchTerm) ||
+                            item.product_code.toLowerCase().includes(searchTerm);
+      const matchesStock = filterStock === 'All' || 
+                           (filterStock === 'In Stock' && item.stock_quantity > 0) ||
+                           (filterStock === 'Out of Stock' && item.stock_quantity === 0);
+      return matchesSearch && matchesStock;
+    });
+  }, [sortedInventory, searchTerm, filterStock]);
+
   const handleSearchChange = (e) => {
     const value = e.target.value.toLowerCase();
     setSearchInput(value);
@@ -165,7 +196,6 @@ function InventoryPage({ userRole }) {
       toast.success('Item deleted successfully');
     } catch (err) {
       toast.error(err.message);
-      throw err;
     }
   }, [refetchData]);
 
@@ -183,6 +213,35 @@ function InventoryPage({ userRole }) {
     setSelectedDescription(description);
     setShowDescriptionModal(true);
   }, []);
+
+  const exportToExcel = useCallback(() => {
+    const data = filteredInventory.map(item => ({
+      'Product ID': item.product_id,
+      'Product Code': item.product_code || 'N/A',
+      'Product Name': item.product_name.replace(/<[^>]*>/g, '') || 'N/A',
+      'Description': item.description || 'N/A',
+      'Stock Quantity': Number(item.stock_quantity),
+      'Price (₹)': formatCurrency(Number(item.price)),
+      'Created At (IST)': item.created_at ? `${new Date(item.created_at).toLocaleDateString('en-IN')} ${new Date(item.created_at).toLocaleTimeString('en-IN')}` : 'N/A'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Finished Goods');
+
+    // Auto-size columns
+    const colWidths = data.reduce((acc, row) => {
+      Object.keys(row).forEach((key, idx) => {
+        const value = String(row[key]).replace(/<[^>]*>/g, '');
+        acc[idx] = Math.max(acc[idx] || 10, value.length + 2);
+      });
+      return acc;
+    }, []);
+    worksheet['!cols'] = colWidths.map(width => ({ wch: width }));
+
+    XLSX.writeFile(workbook, 'Finished_Goods_Inventory.xlsx');
+    toast.success('Finished Goods exported to Excel!', { autoClose: 2000 });
+  }, [filteredInventory]);
 
   const ActionsDropdown = ({ item, onEdit }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -204,36 +263,6 @@ function InventoryPage({ userRole }) {
       </div>
     );
   };
-
-  const sortedInventory = useMemo(() => {
-    const sortableInventory = [...inventory];
-    if (sortConfig.key) {
-      sortableInventory.sort((a, b) => {
-        let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
-        if (sortConfig.key === 'price' || sortConfig.key === 'stock_quantity') {
-          aValue = Number(aValue);
-          bValue = Number(bValue);
-        } else if (sortConfig.key === 'created_at') {
-          aValue = new Date(aValue || 0);
-          bValue = new Date(bValue || 0);
-        }
-        return aValue < bValue ? (sortConfig.direction === 'asc' ? -1 : 1) : aValue > bValue ? (sortConfig.direction === 'asc' ? 1 : -1) : 0;
-      });
-    }
-    return sortableInventory;
-  }, [inventory, sortConfig]);
-
-  const filteredInventory = useMemo(() => {
-    return sortedInventory.filter(item => {
-      const matchesSearch = item.product_id.toString().includes(searchTerm) ||
-                            item.product_name.toLowerCase().includes(searchTerm) ||
-                            item.product_code.toLowerCase().includes(searchTerm);
-      const matchesStock = filterStock === 'All' || 
-                           (filterStock === 'In Stock' && item.stock_quantity > 0) ||
-                           (filterStock === 'Out of Stock' && item.stock_quantity === 0);
-      return matchesSearch && matchesStock;
-    });
-  }, [sortedInventory, searchTerm, filterStock]);
 
   const handleSort = useCallback((key) => {
     setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
@@ -289,6 +318,9 @@ function InventoryPage({ userRole }) {
           </button>
           <button onClick={() => setShowCreateForm(true)} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center" disabled={isLoading} aria-label="Create new item">
             <PlusCircle className="mr-2" /> Add Item
+          </button>
+          <button onClick={exportToExcel} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center" disabled={isLoading || filteredInventory.length === 0} aria-label="Export to Excel">
+            <Download className="mr-2" /> Export to Excel
           </button>
         </div>
 

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { formatDate } from '../utils/helpers';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { ArrowDownUp, X, RefreshCw, Search, AlertCircle, Plus, Edit2, XCircle, MoreVertical } from 'lucide-react';
+import { ArrowDownUp, X, RefreshCw, Search, AlertCircle, Plus, Edit2, XCircle, MoreVertical, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -199,6 +200,60 @@ function StockPage({ socket }) {
     };
   }, [fetchStock]);
 
+  const filteredStock = useMemo(() => {
+    if (!Array.isArray(stockItems)) return [];
+
+    const sortedItems = [...stockItems].sort((a, b) => {
+      const valueA = a[sortConfig.key] ?? '';
+      const valueB = b[sortConfig.key] ?? '';
+      if (valueA < valueB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valueA > valueB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return sortedItems.filter(item => {
+      const productName = (item.productName || '').toLowerCase();
+      const productId = String(item.productId || '');
+      const productCode = (item.productCode || '').toLowerCase();
+      const searchTermLower = debouncedSearch.toLowerCase();
+      return (
+        productName.includes(searchTermLower) ||
+        productId.includes(searchTermLower) ||
+        productCode.includes(searchTermLower)
+      );
+    });
+  }, [stockItems, debouncedSearch, sortConfig]);
+
+  const exportToExcel = useCallback(() => {
+    const data = filteredStock.map(item => ({
+      'Product ID': item.productId || 'N/A',
+      'Product Name': item.productName || 'N/A',
+      'Stock Quantity': Number(item.stockQuantity) || 0,
+      'Qty Required': Number(item.qtyRequired) || 0,
+      'Price (₹)': !isNaN(Number(item.price)) ? `₹${Number(item.price).toFixed(2)}` : 'N/A',
+      'Product Code': item.productCode || 'N/A',
+      'Created At': item.createdAt ? formatDate(item.createdAt) : 'N/A',
+      'Description': item.description || 'N/A'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Raw Materials');
+
+    // Auto-size columns
+    const colWidths = data.reduce((acc, row) => {
+      Object.keys(row).forEach((key, idx) => {
+        const value = String(row[key]).replace(/<[^>]*>/g, '');
+        acc[idx] = Math.max(acc[idx] || 10, value.length + 2);
+      });
+      return acc;
+    }, []);
+    worksheet['!cols'] = colWidths.map(width => ({ wch: width }));
+
+    XLSX.writeFile(workbook, 'Raw_Material_Inventory.xlsx');
+    toast.success('Raw Materials exported to Excel!', { autoClose: 2000 });
+  }, [filteredStock]);
+
   const sortData = useCallback((key) => {
     setSortConfig(prev => {
       const direction = prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc';
@@ -383,30 +438,6 @@ function StockPage({ socket }) {
     );
   };
 
-  const filteredStock = useMemo(() => {
-    if (!Array.isArray(stockItems)) return [];
-
-    const sortedItems = [...stockItems].sort((a, b) => {
-      const valueA = a[sortConfig.key] ?? '';
-      const valueB = b[sortConfig.key] ?? '';
-      if (valueA < valueB) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (valueA > valueB) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return sortedItems.filter(item => {
-      const productName = (item.productName || '').toLowerCase();
-      const productId = String(item.productId || '');
-      const productCode = (item.productCode || '').toLowerCase();
-      const searchTermLower = debouncedSearch.toLowerCase();
-      return (
-        productName.includes(searchTermLower) ||
-        productId.includes(searchTermLower) ||
-        productCode.includes(searchTermLower)
-      );
-    });
-  }, [stockItems, debouncedSearch, sortConfig]);
-
   if (isLoading && !stockItems.length) {
     return (
       <div
@@ -482,11 +513,19 @@ function StockPage({ socket }) {
             </button>
             <button
               onClick={fetchStock}
-              className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
+              className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg flex items-center"
               disabled={isLoading}
               aria-label="Refresh stock"
             >
-              {isLoading && stockItems.length > 0 ? 'Refreshing...' : 'Refresh'}
+              <RefreshCw size={20} className="mr-2" /> {isLoading && stockItems.length > 0 ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <button
+              onClick={exportToExcel}
+              className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg flex items-center"
+              disabled={isLoading || filteredStock.length === 0}
+              aria-label="Export to Excel"
+            >
+              <Download size={20} className="mr-2" /> Export to Excel
             </button>
           </div>
 
