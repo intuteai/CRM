@@ -32,6 +32,7 @@ function EnquiryPage({ socket: providedSocket }) {
   const [isEditing, setIsEditing] = useState(false);
   const [selectedEnquiry, setSelectedEnquiry] = useState(null);
   const [newEnquiry, setNewEnquiry] = useState({
+    enquiry_id: '',
     company_name: '',
     contact_person: '',
     mail_id: '',
@@ -208,6 +209,8 @@ function EnquiryPage({ socket: providedSocket }) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const phoneRegex = /^[0-9]{10}$/;
 
+    if (newEnquiry.enquiry_id && newEnquiry.enquiry_id.length < 3)
+      newErrors.enquiry_id = 'Enquiry ID must be at least 3 characters if provided';
     if (!newEnquiry.company_name || newEnquiry.company_name.length < 3)
       newErrors.company_name = 'Company name must be at least 3 characters';
     if (newEnquiry.contact_person && newEnquiry.contact_person.length < 3)
@@ -223,6 +226,7 @@ function EnquiryPage({ socket: providedSocket }) {
 
   const resetForm = () => {
     setNewEnquiry({
+      enquiry_id: '',
       company_name: '',
       contact_person: '',
       mail_id: '',
@@ -246,6 +250,7 @@ function EnquiryPage({ socket: providedSocket }) {
     setIsEditing(true);
     setSelectedEnquiry(enquiry);
     setNewEnquiry({
+      enquiry_id: enquiry.enquiry_id || '',
       company_name: enquiry.company_name || '',
       contact_person: enquiry.contact_person || '',
       mail_id: enquiry.mail_id || '',
@@ -276,22 +281,27 @@ function EnquiryPage({ socket: providedSocket }) {
         : API_URL;
       const method = isEditing ? 'PUT' : 'POST';
 
+      const body = {
+        company_name: newEnquiry.company_name,
+        contact_person: newEnquiry.contact_person || null,
+        mail_id: newEnquiry.mail_id || null,
+        phone_no: newEnquiry.phone_no || null,
+        items_required: newEnquiry.items_required || null,
+        status: newEnquiry.status,
+        last_discussion: newEnquiry.last_discussion || null,
+        next_interaction: newEnquiry.next_interaction || null,
+      };
+      if (newEnquiry.enquiry_id) body.enquiry_id = newEnquiry.enquiry_id;
+
+      console.log('Sending request body:', body);
+
       const response = await fetch(url, {
         method,
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          company_name: newEnquiry.company_name,
-          contact_person: newEnquiry.contact_person || null,
-          mail_id: newEnquiry.mail_id || null,
-          phone_no: newEnquiry.phone_no || null,
-          items_required: newEnquiry.items_required || null,
-          status: newEnquiry.status,
-          last_discussion: newEnquiry.last_discussion || null,
-          next_interaction: newEnquiry.next_interaction || null,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -318,7 +328,10 @@ function EnquiryPage({ socket: providedSocket }) {
       fetchEnquiries();
     } catch (err) {
       console.error(`${isEditing ? 'Update' : 'Create'} error:`, err);
-      toast.error(err.message || `${isEditing ? 'Update' : 'Create'} failed`, {
+      const errorMessage = err.message.includes('Enquiry ID already exists')
+        ? 'Enquiry ID already exists. Please use a unique ID.'
+        : err.message || `${isEditing ? 'Update' : 'Create'} failed`;
+      toast.error(errorMessage, {
         className: 'bg-amber-100 border-amber-300',
       });
     }
@@ -374,7 +387,7 @@ function EnquiryPage({ socket: providedSocket }) {
 
   if (error && !enquiries.length) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 propietario-gray-100 p-8 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
         <div className="text-red-600 text-xl font-medium bg-red-100 px-6 py-3 rounded-lg shadow">{error}</div>
       </div>
     );
@@ -554,6 +567,12 @@ function EnquiryPage({ socket: providedSocket }) {
               </h2>
               <form onSubmit={handleSubmit}>
                 {[
+                  {
+                    label: 'Enquiry ID (Optional)',
+                    key: 'enquiry_id',
+                    required: false,
+                    icon: 'M3 12h18M3 6h18M3 18h18',
+                  },
                   {
                     label: 'Company Name',
                     key: 'company_name',
