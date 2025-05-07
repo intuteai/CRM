@@ -268,6 +268,45 @@ function EnquiryPage({ socket: providedSocket }) {
     setIsModalOpen(true);
   }, []);
 
+  const handleDelete = useCallback(async (enquiryId) => {
+    if (!window.confirm(`Are you sure you want to delete enquiry #${enquiryId}?`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const url = `${API_URL}/${enquiryId}`;
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Delete failed with status: ${response.status}`);
+      }
+
+      toast.success(`Enquiry #${enquiryId} deleted successfully!`, {
+        className: 'bg-amber-100 border-amber-300',
+      });
+
+      // Fallback: Refresh enquiries if Socket.IO doesn't update
+      setTimeout(() => {
+        fetchEnquiries();
+      }, 1000);
+    } catch (err) {
+      console.error('Delete error:', err);
+      const errorMessage = err.message || 'Failed to delete enquiry';
+      toast.error(errorMessage, {
+        className: 'bg-amber-100 border-amber-300',
+      });
+    }
+  }, [fetchEnquiries]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) {
@@ -514,12 +553,18 @@ function EnquiryPage({ socket: providedSocket }) {
                   <td className="px-6 md:px-8 py-4 text-gray-600">
                     {enquiry.next_interaction ? formatDate(enquiry.next_interaction) : 'N/A'}
                   </td>
-                  <td className="px-6 md:px-8 py-4 text-gray-600">
+                  <td className="px-6 md:px-8 py-4 text-gray-600 flex gap-2">
                     <button
                       onClick={() => handleEdit(enquiry)}
                       className="px-4 py-2 bg-amber-400 text-gray-900 rounded-full font-semibold hover:bg-amber-500 transition-all duration-300"
                     >
                       Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(enquiry.enquiry_id)}
+                      className="px-4 py-2 bg-red-500 text-white rounded-full font-semibold hover:bg-red-600 transition-all duration-300"
+                    >
+                      Delete
                     </button>
                   </td>
                 </tr>
