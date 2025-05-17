@@ -5,12 +5,24 @@ import autoprefixer from 'autoprefixer';
 
 export default defineConfig({
   plugins: [react()],
-  build: {
-    outDir: 'dist'
+  server: {
+    host: '0.0.0.0',
+    port: process.env.PORT ? parseInt(process.env.PORT) : 5173,
+    strictPort: false,
+    proxy: {
+      '/api': {
+        target: 'https://crmbackend-production-c426.up.railway.app',
+        changeOrigin: true,
+        secure: true
+      }
+    }
   },
   css: {
     postcss: {
       plugins: [tailwindcss, autoprefixer]
     }
+  },
+  build: {
+    outDir: 'dist'
   }
 });
