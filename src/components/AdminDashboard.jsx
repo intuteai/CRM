@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Package, MessageSquare, Truck, Users, FileText, BarChart,
-  PenTool, DollarSign, CheckSquare, Mail, MapPin
+  PenTool, DollarSign, CheckSquare, Mail, MapPin, AlertTriangle
 } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -26,6 +26,12 @@ function AdminDashboard({ socket }) {
     socket.on('customerUpdate', (updatedCustomer) => {
       toast.info(`Customer ${updatedCustomer.name} updated`, { autoClose: 3000 });
     });
+    socket.on('problem:created', (newProblem) => {
+      toast.info(`New problem #${newProblem.id} reported`, { autoClose: 3000 });
+    });
+    socket.on('solution:created', (data) => {
+      toast.info(`Solution added to problem #${data.problem_id}`, { autoClose: 3000 });
+    });
 
     return () => {
       socket.off('orderUpdate');
@@ -33,6 +39,8 @@ function AdminDashboard({ socket }) {
       socket.off('queryUpdate');
       socket.off('stockUpdate');
       socket.off('customerUpdate');
+      socket.off('problem:created');
+      socket.off('solution:created');
     };
   }, [socket]);
 
@@ -63,6 +71,7 @@ function AdminDashboard({ socket }) {
         <Section title="Quality & Logistics">
           <DashboardCard to="/pdi" icon={<CheckSquare />} title="PDI" desc="Pre-dispatch inspections" />
           <DashboardCard to="/dispatch-tracking" icon={<MapPin />} title="Dispatch Tracking" desc="Track dispatch status" />
+          <DashboardCard to="/problems" icon={<AlertTriangle />} title="Problems" desc="Manage reported problems" />
         </Section>
 
         {/* Procurement */}

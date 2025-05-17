@@ -18,10 +18,11 @@ import CustomerInvoicesPage from './components/CustomerInvoicesPage';
 import PartDrawingsSelector from './components/PartDrawingsSelector';
 import PartDrawingsPage from './components/PartDrawingsPage';
 import PartDrawingsRawPage from './components/PartDrawingsRawPage';
-import EnquiryPage from './components/EnquiryPage'; // Updated import (singular)
+import EnquiryPage from './components/EnquiryPage';
 import DispatchTrackingPage from './components/DispatchTrackingPage';
 import PurchaseInvoicesPage from './components/PurchaseInvoicesPage';
 import BOMPage from './components/BOMPage';
+import ProblemsPage from './components/ProblemsPage'; // New import
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginModal from './components/LoginModal';
 import logo from '/intute-ai_logo.jpeg';
@@ -148,7 +149,7 @@ function App() {
         <Route 
           path="/enquiries" 
           element={userRole === 'admin' ? <EnquiryPage socket={socket} /> : <Navigate to="/" replace />} 
-        /> {/* Updated to EnquiryPage */}
+        />
         <Route 
           path="/purchase-invoices" 
           element={userRole === 'admin' ? <PurchaseInvoicesPage socket={socket} /> : <Navigate to="/" replace />} 
@@ -156,6 +157,10 @@ function App() {
         <Route 
           path="/bom" 
           element={userRole === 'admin' ? <BOMPage socket={socket} /> : <Navigate to="/" replace />} 
+        />
+        <Route 
+          path="/problems" 
+          element={userRole === 'admin' ? <ProblemsPage socket={socket} /> : <Navigate to="/" replace />} 
         />
         <Route
           path="/"
