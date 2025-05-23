@@ -62,6 +62,17 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
   const handleSubmit = async (e) => {
     e.preventDefault();
     const { isValid, errors } = validateOrderItems(newOrder.items, availableProducts, getAvailableStock);
+    
+    // Optional: Warn about past dates
+    if (newOrder.targetDeliveryDate) {
+      const selectedDate = new Date(newOrder.targetDeliveryDate + 'T00:00:00'); // Treat as local date
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Reset time for comparison
+      if (selectedDate < today) {
+        errors.push('Warning: The selected delivery date is in the past.');
+      }
+    }
+
     if (!isValid) {
       setFormErrors(errors);
       return;
@@ -120,7 +131,6 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
               value={newOrder.targetDeliveryDate}
               onChange={handleInputChange}
               className="w-full p-3 border rounded-lg"
-              min={formatDate(new Date())}
             />
           </div>
           <div>
