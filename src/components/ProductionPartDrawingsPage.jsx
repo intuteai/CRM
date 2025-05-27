@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { formatDate as importedFormatDate } from '../utils/helpers';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle } from 'lucide-react';
+import { ArrowDownUp, RefreshCw, Search } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 
@@ -30,16 +30,12 @@ const formatDate = (dateString) => {
   }
 };
 
-function PartDrawingsPage({ socket: providedSocket }) {
+function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
   const [drawings, setDrawings] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [selectedDrawing, setSelectedDrawing] = useState(null);
-  const [formData, setFormData] = useState({ drawingLink: '' });
   const [sortConfig, setSortConfig] = useState({ key: 'updatedAt', direction: 'desc' });
   const [page, setPage] = useState(0);
   const [limit] = useState(10);
@@ -53,9 +49,10 @@ function PartDrawingsPage({ socket: providedSocket }) {
       providedSocket ||
       io(BASE_URL, {
         withCredentials: true,
-        transports: ['websocket'],
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
+        transports: ['websocket', 'polling'],
+        reconnectionAttempts: 10,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 5000,
       }),
     [providedSocket]
   );
@@ -83,6 +80,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('Error response:', errorText);
         throw new Error(errorText || `Server responded with status: ${response.status}`);
       }
 
@@ -125,7 +123,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
 
   useEffect(() => {
     const handleConnect = () => {
-      console.log('Connected to Socket.IO in PartDrawingsPage');
+      console.log('Connected to Socket.IO in ProductionPartDrawingsPage');
       toast.success('Connected to real-time updates!', { autoClose: 2000 });
     };
 
@@ -140,17 +138,17 @@ function PartDrawingsPage({ socket: providedSocket }) {
 
         if (type === 'CREATE') {
           const newDrawing = {
-            srNo: item.srNo || null,
-            drawingId: item.drawingId || 0,
+            srNo: item.srNo || item.sr_no || null,
+            drawingId: item.drawingId || item.drawing_id || 0,
             productName: item.productName || 'N/A',
-            itemName: item.itemName || 'N/A',
-            drawingLink: item.drawingLink || '',
-            updatedAt: item.updatedAt || timestamp,
-            productId: item.productId || null,
+            itemName: item.itemName || item.item_name || 'N/A',
+            drawingLink: item.drawingLink || item.drawing_link || '',
+            updatedAt: item.updatedAt || item.updated_at || timestamp,
+            productId: item.productId || item.product_id || null,
           };
           // Only add if on the first page or matches search
           if (page === 0 && (!searchTerm || newDrawing.itemName.toLowerCase().includes(searchTerm.toLowerCase()))) {
-            toast.info(`New drawing #${item.srNo} added`, { autoClose: 2000 });
+            toast.info(`New drawing #${newDrawing.srNo} added`, { autoClose: 2000 });
             return [newDrawing, ...prev].slice(0, limit);
           }
           setTotalItems((prev) => prev + 1);
@@ -158,18 +156,18 @@ function PartDrawingsPage({ socket: providedSocket }) {
         }
 
         if (type === 'UPDATE') {
-          const drawingIndex = prev.findIndex((drawing) => drawing.srNo === item.srNo);
+          const drawingIndex = prev.findIndex((drawing) => drawing.srNo === (item.srNo || item.sr_no));
           if (drawingIndex === -1) return prev;
 
           const drawingToUpdate = prev[drawingIndex];
           const updatedDrawing = {
             ...drawingToUpdate,
-            drawingId: item.drawingId || drawingToUpdate.drawingId,
+            drawingId: item.drawingId || item.drawing_id || drawingToUpdate.drawingId,
             productName: item.productName || drawingToUpdate.productName,
-            itemName: item.itemName || drawingToUpdate.itemName,
-            drawingLink: item.drawingLink || drawingToUpdate.drawingLink,
-            updatedAt: item.updatedAt || timestamp,
-            productId: item.productId || drawingToUpdate.productId,
+            itemName: item.itemName || item.item_name || drawingToUpdate.itemName,
+            drawingLink: item.drawingLink || item.drawing_link || drawingToUpdate.drawingLink,
+            updatedAt: item.updatedAt || item.updated_at || timestamp,
+            productId: item.productId || item.product_id || drawingToUpdate.productId,
           };
 
           if (
@@ -185,7 +183,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
 
           const updatedDrawings = [...prev];
           updatedDrawings[drawingIndex] = updatedDrawing;
-          toast.info(`Drawing #${item.srNo} updated`, { autoClose: 2000 });
+          toast.info(`Drawing #${updatedDrawing.srNo} updated`, { autoClose: 2000 });
           return updatedDrawings;
         }
 
@@ -228,108 +226,35 @@ function PartDrawingsPage({ socket: providedSocket }) {
     }
   }, []);
 
-  const handleEdit = useCallback((drawing) => {
-    setSelectedDrawing(drawing);
-    setFormData({ drawingLink: drawing.drawingLink || '' });
-    setShowModal(true);
-  }, []);
+  const sortedDrawings = useMemo(() => {
+    if (!drawings.length) return [];
 
-  const handleUpdate = useCallback(
-    async (e) => {
-      e.preventDefault();
-      if (!selectedDrawing) return;
-      setUploading(true);
+    const sortableDrawings = [...drawings];
 
-      try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${BASE_URL}/api/part-drawings/${selectedDrawing.srNo}`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            drawing_link: formData.drawingLink.trim(),
-            product_id: selectedDrawing.productId,
-          }),
-        });
+    return sortableDrawings.sort((a, b) => {
+      let aValue = a[sortConfig.key] ?? '';
+      let bValue = b[sortConfig.key] ?? '';
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `Update failed with status: ${response.status}`);
-        }
-
-        const updatedDrawing = await response.json();
-        setDrawings((prev) =>
-          prev.map((d) =>
-            d.srNo === updatedDrawing.srNo
-              ? {
-                  ...d,
-                  drawingId: updatedDrawing.drawingId || d.drawingId,
-                  productName: updatedDrawing.productName || d.productName,
-                  itemName: updatedDrawing.itemName || d.itemName,
-                  drawingLink: updatedDrawing.drawingLink || d.drawingLink,
-                  updatedAt: updatedDrawing.updatedAt || d.updatedAt,
-                  productId: updatedDrawing.productId || d.productId,
-                }
-              : d
-          )
-        );
-        setShowModal(false);
-        toast.success(`Drawing #${updatedDrawing.srNo} updated successfully!`, {
-          autoClose: 2000,
-        });
-      } catch (err) {
-        console.error('Update error:', err);
-        toast.error(err.message || 'Update failed', { autoClose: 3000 });
-      } finally {
-        setUploading(false);
+      if (sortConfig.key === 'drawingId' || sortConfig.key === 'srNo' || sortConfig.key === 'productId') {
+        aValue = Number(aValue) || 0;
+        bValue = Number(bValue) || 0;
+      } else if (sortConfig.key === 'updatedAt') {
+        aValue = aValue ? new Date(aValue).getTime() : 0;
+        bValue = bValue ? new Date(bValue).getTime() : 0;
+      } else {
+        aValue = String(aValue).toLowerCase();
+        bValue = String(bValue).toLowerCase();
       }
-    },
-    [selectedDrawing, formData]
-  );
 
-  const ActionsDropdown = useCallback(
-    ({ drawing, onEdit }) => {
-      const [isOpen, setIsOpen] = useState(false);
-      const dropdownRef = useRef(null);
-
-      useEffect(() => {
-        const handleClickOutside = (event) => {
-          if (dropdownRef.current && !dropdownRef.current.contains(event.target))
-            setIsOpen(false);
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-      }, []);
-
-      return (
-        <div ref={dropdownRef} className="relative">
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="p-2 hover:bg-gray-100 rounded-full"
-            aria-label={`Actions for drawing ${drawing.srNo}`}
-          >
-            <MoreVertical size={20} />
-          </button>
-          {isOpen && (
-            <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
-              <button
-                onClick={() => {
-                  onEdit(drawing);
-                  setIsOpen(false);
-                }}
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                <Edit2 size={16} className="mr-2" /> Edit
-              </button>
-            </div>
-          )}
-        </div>
-      );
-    },
-    []
-  );
+      if (aValue < bValue) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+  }, [drawings, sortConfig]);
 
   const handlePrevPage = useCallback(() => {
     if (page > 0) {
@@ -361,7 +286,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
     );
   }
 
-  if (error && !showModal) {
+  if (error) {
     return (
       <div
         className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
@@ -393,7 +318,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
       >
         <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
           <RefreshCw className="mx-auto mb-4 text-gray-400" size={48} />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">No Part Drawings Yet</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">No Part Drawings</h2>
           <p className="text-gray-600 mb-6">
             Your database is empty or no drawings match your search. Try refreshing or adjusting your search.
           </p>
@@ -404,11 +329,11 @@ function PartDrawingsPage({ socket: providedSocket }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-        Finished Goods Drawings
+      <h1 className="text-4xl font-bold text-gray-800 mb-6 text-center tracking-tight">
+        Production Part Drawings
       </h1>
       <div className="max-w-7xl mx-auto">
-        <div className="flex mb-8 gap-6 flex-wrap">
+        <div className="flex mb-6 gap-6 flex-wrap">
           <div className="relative flex-grow">
             <label htmlFor="search-drawings" className="sr-only">
               Search Part Drawings
@@ -459,14 +384,11 @@ function PartDrawingsPage({ socket: providedSocket }) {
                   { key: 'productId', label: 'Product ID' },
                   { key: 'drawingLink', label: 'Drawing Link' },
                   { key: 'updatedAt', label: 'Updated At' },
-                  { key: 'actions', label: 'Actions' },
                 ].map(({ key, label }) => (
                   <th
                     key={key}
-                    className={`py-5 px-3 text-gray-800 text-base font-semibold ${
-                      key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''
-                    } transition-all duration-200`}
-                    onClick={() => key !== 'actions' && handleSort(key)}
+                    className="py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200"
+                    onClick={() => handleSort(key)}
                     aria-sort={
                       sortConfig.key === key
                         ? sortConfig.direction === 'asc'
@@ -478,22 +400,20 @@ function PartDrawingsPage({ socket: providedSocket }) {
                   >
                     <div className="flex items-center justify-between">
                       <span>{label}</span>
-                      {key !== 'actions' && (
-                        <ArrowDownUp
-                          size={16}
-                          className={`ml-2 text-gray-600 ${
-                            sortConfig.key === key ? 'text-gray-900' : 'opacity-50'
-                          }`}
-                          aria-hidden="true"
-                        />
-                      )}
+                      <ArrowDownUp
+                        size={16}
+                        className={`ml-2 text-gray-600 ${
+                          sortConfig.key === key ? 'text-gray-900' : 'opacity-50'
+                        }`}
+                        aria-hidden="true"
+                      />
                     </div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {drawings.map((drawing) => (
+              {sortedDrawings.map((drawing) => (
                 <tr
                   key={drawing.srNo}
                   className="border-t hover:bg-amber-50 transition-all duration-200"
@@ -522,17 +442,15 @@ function PartDrawingsPage({ socket: providedSocket }) {
                   <td className="py-4 px-3 text-gray-600 text-base">
                     {drawing.updatedAt ? formatDate(drawing.updatedAt) : 'N/A'}
                   </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    <ActionsDropdown drawing={drawing} onEdit={handleEdit} />
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600">
-                Showing {drawings.length} of {totalItems} drawings
+                Showing {Math.min(page * limit + 1, totalItems)} to {Math.min((page + 1) * limit, totalItems)} of {totalItems} drawings
               </div>
               <div className="flex space-x-2">
                 <button
@@ -546,7 +464,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
                 <button
                   onClick={handleNextPage}
                   disabled={page >= Math.ceil(totalItems / limit) - 1 || isLoading}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 text-right"
+                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Next page"
                 >
                   <ChevronRight size={20} />
@@ -555,57 +473,17 @@ function PartDrawingsPage({ socket: providedSocket }) {
             </div>
           )}
 
-          {drawings.length === 0 && (
+          {sortedDrawings.length === 0 && (
             <div
               className="text-center py-12 text-gray-500 flex flex-col items-center"
               role="alert"
             >
-              <Search className="mb-4 text-gray-400" size={40} />
+              <Search className="mb-4 text-gray-400" size={48} />
               <p className="text-lg">No drawings found matching your search.</p>
             </div>
           )}
         </div>
       </div>
-
-      {showModal && selectedDrawing && (
-        <div
-          className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50"
-          role="dialog"
-          aria-labelledby="edit-drawing-title"
-        >
-          <div className="bg-white p-8 rounded-2xl shadow-2xl w-[600px] relative">
-            <button
-              onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
-              aria-label="Close edit modal"
-            >
-              <XCircle size={24} />
-            </button>
-            <h2 id="edit-drawing-title" className="text-2xl font-bold text-gray-800 mb-6">
-              Edit Drawing #{selectedDrawing.srNo}
-            </h2>
-            <form onSubmit={handleUpdate} className="space-y-4">
-              <div>
-                <label className="block text-gray-700 font-medium mb-1">Drawing Link</label>
-                <input
-                  type="url"
-                  placeholder="Enter drawing link"
-                  value={formData.drawingLink}
-                  onChange={(e) => setFormData({ ...formData, drawingLink: e.target.value })}
-                  className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={uploading}
-                className="w-full bg-amber-500 text-white py-3 rounded-lg hover:bg-amber-600 transition-all duration-300 font-semibold"
-              >
-                {uploading ? 'Updating...' : 'Update'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       <ToastContainer
         position="top-right"
@@ -619,4 +497,4 @@ function PartDrawingsPage({ socket: providedSocket }) {
   );
 }
 
-export default PartDrawingsPage;
+export default ProductionPartDrawingsPage;

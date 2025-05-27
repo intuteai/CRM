@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { formatDate as importedFormatDate } from '../utils/helpers';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -11,37 +11,37 @@ const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 // Fallback formatDate function
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
+  
   if (typeof importedFormatDate === 'function') {
     return importedFormatDate(dateString);
   }
+  
   try {
     const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
+    return date.toLocaleDateString();
   } catch (error) {
     console.error('Error formatting date:', error);
     return dateString;
   }
 };
 
-function PartDrawingsPage({ socket: providedSocket }) {
-  const [drawings, setDrawings] = useState([]);
+function ProductionPDIPage({ socket: providedSocket, userRole }) {
+  const [pdiReports, setPdiReports] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [selectedDrawing, setSelectedDrawing] = useState(null);
-  const [formData, setFormData] = useState({ drawingLink: '' });
-  const [sortConfig, setSortConfig] = useState({ key: 'updatedAt', direction: 'desc' });
-  const [page, setPage] = useState(0);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [formData, setFormData] = useState({
+    report_link: '',
+    inspection_date: '',
+    status: 'Pending',
+  });
+  const [sortConfig, setSortConfig] = useState({ key: 'report_id', direction: 'desc' });
+  const [cursor, setCursor] = useState(null);
+  const [cursorStack, setCursorStack] = useState([]);
   const [limit] = useState(10);
   const tableRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -60,25 +60,23 @@ function PartDrawingsPage({ socket: providedSocket }) {
     [providedSocket]
   );
 
-  const fetchDrawings = useCallback(async () => {
+  const fetchPdiReports = useCallback(async () => {
     if (isFetching.current) return;
-
+    
     isFetching.current = true;
     setIsLoading(true);
     setError(null);
-
+    
     try {
       const token = localStorage.getItem('token');
-      if (!token) throw new Error('Authentication token missing.');
-
-      const url = `${BASE_URL}/api/part-drawings?limit=${limit}&offset=${page * limit}&force_refresh=true&search=${encodeURIComponent(searchTerm)}`;
-      console.log('Fetching part drawings from:', url);
-
+      const url = cursor
+        ? `${BASE_URL}/api/pdi?limit=${limit}&cursor=${encodeURIComponent(cursor)}&force_refresh=true`
+        : `${BASE_URL}/api/pdi?limit=${limit}&force_refresh=true`;
+      
+      console.log('Fetching PDI reports from:', url);
+      
       const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
 
       if (!response.ok) {
@@ -88,25 +86,38 @@ function PartDrawingsPage({ socket: providedSocket }) {
 
       const responseData = await response.json();
       console.log('Fetched response:', responseData);
-
-      if (!responseData.drawings || typeof responseData.total !== 'number') {
-        throw new Error('Invalid data format: Expected { drawings: array, total: number }');
+      
+      if (!responseData.data || !Array.isArray(responseData.data)) {
+        throw new Error('Invalid data format');
       }
-
-      const normalizedData = responseData.drawings.map((item) => ({
-        srNo: item.srNo || null,
-        drawingId: item.drawingId || 0,
-        productName: item.productName || 'N/A',
-        itemName: item.itemName || 'N/A',
-        drawingLink: item.drawingLink || '',
-        updatedAt: item.updatedAt || '',
-        productId: item.productId || null,
-      }));
-
-      setDrawings(normalizedData);
-      setTotalItems(responseData.total);
+      
+      if (responseData.data.length > 0 || cursor === null) {
+        setPdiReports(responseData.data);
+        setTotalItems(responseData.total || 0);
+        
+        if (responseData.cursor && responseData.cursor !== cursor) {
+          if (cursor !== null) {
+            setCursorStack(prev => [...prev, cursor]);
+          }
+          setCursor(responseData.cursor);
+        } else if (!responseData.cursor && responseData.data.length === 0) {
+          if (cursorStack.length > 0) {
+            // No-op: handled by prev/next navigation
+          } else {
+            setCursor(null);
+          }
+        }
+      } else if (responseData.data.length === 0 && cursor !== null) {
+        if (cursorStack.length > 0) {
+          const previousCursor = cursorStack[cursorStack.length - 1];
+          setCursorStack(prev => prev.slice(0, -1));
+          setCursor(previousCursor);
+        } else {
+          setCursor(null);
+        }
+      }
     } catch (err) {
-      console.error('Error fetching part drawings:', err);
+      console.error('Error fetching PDI reports:', err);
       const errorMessage = err.message || 'Network error. Please try again later.';
       setError(errorMessage);
       toast.error(errorMessage, { autoClose: 3000 });
@@ -114,18 +125,16 @@ function PartDrawingsPage({ socket: providedSocket }) {
       setIsLoading(false);
       isFetching.current = false;
     }
-  }, [page, limit, searchTerm]);
+  }, [cursor, limit, cursorStack]);
 
   useEffect(() => {
-    if (!hasFetched.current || searchTerm !== '') {
-      fetchDrawings();
+    if (!hasFetched.current) {
+      fetchPdiReports();
       hasFetched.current = true;
     }
-  }, [fetchDrawings, page, searchTerm]);
 
-  useEffect(() => {
     const handleConnect = () => {
-      console.log('Connected to Socket.IO in PartDrawingsPage');
+      console.log('Connected to Socket.IO in ProductionPDIPage');
       toast.success('Connected to real-time updates!', { autoClose: 2000 });
     };
 
@@ -134,85 +143,46 @@ function PartDrawingsPage({ socket: providedSocket }) {
       toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
     };
 
-    const handleDrawingsUpdate = ({ type, item, itemId, timestamp }) => {
-      setDrawings((prev) => {
+    const handlePdiUpdate = ({ report_id, status, inspection_date, report_link }) => {
+      setPdiReports((prev) => {
         if (!Array.isArray(prev)) return prev || [];
 
-        if (type === 'CREATE') {
-          const newDrawing = {
-            srNo: item.srNo || null,
-            drawingId: item.drawingId || 0,
-            productName: item.productName || 'N/A',
-            itemName: item.itemName || 'N/A',
-            drawingLink: item.drawingLink || '',
-            updatedAt: item.updatedAt || timestamp,
-            productId: item.productId || null,
-          };
-          // Only add if on the first page or matches search
-          if (page === 0 && (!searchTerm || newDrawing.itemName.toLowerCase().includes(searchTerm.toLowerCase()))) {
-            toast.info(`New drawing #${item.srNo} added`, { autoClose: 2000 });
-            return [newDrawing, ...prev].slice(0, limit);
-          }
-          setTotalItems((prev) => prev + 1);
+        const reportIndex = prev.findIndex((report) => report.report_id === report_id);
+        if (reportIndex === -1) return prev;
+
+        const reportToUpdate = prev[reportIndex];
+        if (
+          reportToUpdate.status === status &&
+          reportToUpdate.inspection_date === inspection_date &&
+          reportToUpdate.report_link === report_link
+        ) {
           return prev;
         }
 
-        if (type === 'UPDATE') {
-          const drawingIndex = prev.findIndex((drawing) => drawing.srNo === item.srNo);
-          if (drawingIndex === -1) return prev;
+        const updatedReports = [...prev];
+        updatedReports[reportIndex] = {
+          ...reportToUpdate,
+          status,
+          inspection_date,
+          report_link,
+        };
 
-          const drawingToUpdate = prev[drawingIndex];
-          const updatedDrawing = {
-            ...drawingToUpdate,
-            drawingId: item.drawingId || drawingToUpdate.drawingId,
-            productName: item.productName || drawingToUpdate.productName,
-            itemName: item.itemName || drawingToUpdate.itemName,
-            drawingLink: item.drawingLink || drawingToUpdate.drawingLink,
-            updatedAt: item.updatedAt || timestamp,
-            productId: item.productId || drawingToUpdate.productId,
-          };
-
-          if (
-            drawingToUpdate.drawingId === updatedDrawing.drawingId &&
-            drawingToUpdate.productName === updatedDrawing.productName &&
-            drawingToUpdate.itemName === updatedDrawing.itemName &&
-            drawingToUpdate.drawingLink === updatedDrawing.drawingLink &&
-            drawingToUpdate.updatedAt === updatedDrawing.updatedAt &&
-            drawingToUpdate.productId === updatedDrawing.productId
-          ) {
-            return prev;
-          }
-
-          const updatedDrawings = [...prev];
-          updatedDrawings[drawingIndex] = updatedDrawing;
-          toast.info(`Drawing #${item.srNo} updated`, { autoClose: 2000 });
-          return updatedDrawings;
-        }
-
-        if (type === 'DELETE') {
-          const drawingIndex = prev.findIndex((drawing) => drawing.srNo === itemId);
-          if (drawingIndex === -1) return prev;
-
-          toast.info(`Drawing #${itemId} deleted`, { autoClose: 2000 });
-          setTotalItems((prev) => prev - 1);
-          return prev.filter((drawing) => drawing.srNo !== itemId);
-        }
-
-        return prev;
+        toast.info(`PDI report #${report_id} updated`, { autoClose: 2000 });
+        return updatedReports;
       });
     };
 
     socket.on('connect', handleConnect);
     socket.on('connect_error', handleConnectError);
-    socket.on('partDrawingsUpdate', handleDrawingsUpdate);
+    socket.on('pdiUpdate', handlePdiUpdate);
 
     return () => {
       socket.off('connect', handleConnect);
       socket.off('connect_error', handleConnectError);
-      socket.off('partDrawingsUpdate', handleDrawingsUpdate);
+      socket.off('pdiUpdate', handlePdiUpdate);
       if (!providedSocket) socket.disconnect();
     };
-  }, [socket, providedSocket, page, searchTerm, limit]);
+  }, [fetchPdiReports, socket, providedSocket]);
 
   const handleSort = useCallback((key) => {
     setSortConfig((prev) => ({
@@ -228,29 +198,76 @@ function PartDrawingsPage({ socket: providedSocket }) {
     }
   }, []);
 
-  const handleEdit = useCallback((drawing) => {
-    setSelectedDrawing(drawing);
-    setFormData({ drawingLink: drawing.drawingLink || '' });
+  const filteredPdiReports = useMemo(() => {
+    if (!Array.isArray(pdiReports)) return [];
+
+    return pdiReports.filter((item) => {
+      if (!item) return false;
+
+      const searchFields = [
+        String(item.report_id || ''),
+        String(item.sr_no || ''),
+        String(item.customer_id || ''),
+        String(item.order_id || ''),
+        String(item.status || ''),
+        String(item.inspected_by || ''),
+      ];
+
+      return searchFields.some((field) =>
+        field.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    });
+  }, [pdiReports, searchTerm]);
+
+  const sortedPdiReports = useMemo(() => {
+    if (!filteredPdiReports.length) return [];
+
+    const sortableReports = [...filteredPdiReports];
+
+    return sortableReports.sort((a, b) => {
+      const valueA = a[sortConfig.key] ?? '';
+      const valueB = b[sortConfig.key] ?? '';
+
+      if (valueA < valueB) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (valueA > valueB) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+  }, [filteredPdiReports, sortConfig]);
+
+  const handleEdit = useCallback((report) => {
+    setSelectedReport(report);
+    setFormData({
+      report_link: report.report_link || '',
+      inspection_date: report.inspection_date
+        ? new Date(report.inspection_date).toISOString().split('T')[0]
+        : '',
+      status: report.status || 'Pending',
+    });
     setShowModal(true);
   }, []);
 
   const handleUpdate = useCallback(
     async (e) => {
       e.preventDefault();
-      if (!selectedDrawing) return;
+      if (!selectedReport) return;
       setUploading(true);
 
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${BASE_URL}/api/part-drawings/${selectedDrawing.srNo}`, {
+        const response = await fetch(`${BASE_URL}/api/pdi/${selectedReport.report_id}`, {
           method: 'PUT',
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            drawing_link: formData.drawingLink.trim(),
-            product_id: selectedDrawing.productId,
+            report_link: formData.report_link,
+            inspection_date: formData.inspection_date,
+            status: formData.status,
           }),
         });
 
@@ -259,24 +276,12 @@ function PartDrawingsPage({ socket: providedSocket }) {
           throw new Error(errorText || `Update failed with status: ${response.status}`);
         }
 
-        const updatedDrawing = await response.json();
-        setDrawings((prev) =>
-          prev.map((d) =>
-            d.srNo === updatedDrawing.srNo
-              ? {
-                  ...d,
-                  drawingId: updatedDrawing.drawingId || d.drawingId,
-                  productName: updatedDrawing.productName || d.productName,
-                  itemName: updatedDrawing.itemName || d.itemName,
-                  drawingLink: updatedDrawing.drawingLink || d.drawingLink,
-                  updatedAt: updatedDrawing.updatedAt || d.updatedAt,
-                  productId: updatedDrawing.productId || d.productId,
-                }
-              : d
-          )
+        const updatedReport = await response.json();
+        setPdiReports((prev) =>
+          prev.map((r) => (r.report_id === updatedReport.report_id ? updatedReport : r))
         );
         setShowModal(false);
-        toast.success(`Drawing #${updatedDrawing.srNo} updated successfully!`, {
+        toast.success(`PDI report #${updatedReport.report_id} updated successfully!`, {
           autoClose: 2000,
         });
       } catch (err) {
@@ -286,11 +291,11 @@ function PartDrawingsPage({ socket: providedSocket }) {
         setUploading(false);
       }
     },
-    [selectedDrawing, formData]
+    [selectedReport, formData]
   );
 
   const ActionsDropdown = useCallback(
-    ({ drawing, onEdit }) => {
+    ({ report, onEdit }) => {
       const [isOpen, setIsOpen] = useState(false);
       const dropdownRef = useRef(null);
 
@@ -308,7 +313,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
           <button
             onClick={() => setIsOpen(!isOpen)}
             className="p-2 hover:bg-gray-100 rounded-full"
-            aria-label={`Actions for drawing ${drawing.srNo}`}
+            aria-label={`Actions for PDI report ${report.report_id}`}
           >
             <MoreVertical size={20} />
           </button>
@@ -316,7 +321,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
             <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
               <button
                 onClick={() => {
-                  onEdit(drawing);
+                  onEdit(report);
                   setIsOpen(false);
                 }}
                 className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -332,31 +337,41 @@ function PartDrawingsPage({ socket: providedSocket }) {
   );
 
   const handlePrevPage = useCallback(() => {
-    if (page > 0) {
-      setPage((prev) => prev - 1);
+    if (cursorStack.length > 0) {
+      const previousCursor = cursorStack.pop();
+      setCursorStack([...cursorStack]);
+      setCursor(previousCursor);
+    } else {
+      setCursor(null);
     }
-  }, [page]);
+  }, [cursorStack]);
 
   const handleNextPage = useCallback(() => {
-    if (page < Math.ceil(totalItems / limit) - 1 && !isLoading) {
-      setPage((prev) => prev + 1);
+    if (pdiReports.length > 0 && !isLoading) {
+      const lastReport = pdiReports[pdiReports.length - 1];
+      if (lastReport && lastReport.inspection_date) {
+        if (cursor !== null) {
+          setCursorStack(prev => [...prev, cursor]);
+        }
+        setCursor(lastReport.inspection_date);
+      }
     }
-  }, [totalItems, limit, isLoading]);
+  }, [pdiReports, cursor, isLoading]);
 
   const handleRefresh = useCallback(() => {
-    setPage(0);
-    setSearchTerm('');
+    setCursor(null);
+    setCursorStack([]);
     hasFetched.current = false;
-    fetchDrawings();
-  }, [fetchDrawings]);
+    fetchPdiReports();
+  }, [fetchPdiReports]);
 
-  if (isLoading && !drawings.length) {
+  if (isLoading && !pdiReports.length) {
     return (
       <div
         className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
         aria-live="polite"
       >
-        <div className="text-gray-600 text-xl animate-pulse">Loading Part Drawings...</div>
+        <div className="text-gray-600 text-xl animate-pulse">Loading PDI Reports...</div>
       </div>
     );
   }
@@ -373,8 +388,9 @@ function PartDrawingsPage({ socket: providedSocket }) {
             onClick={() => {
               setError(null);
               hasFetched.current = false;
-              setPage(0);
-              fetchDrawings();
+              setCursor(null);
+              setCursorStack([]);
+              fetchPdiReports();
             }}
             className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
           >
@@ -385,7 +401,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
     );
   }
 
-  if (drawings.length === 0 && !isLoading) {
+  if (pdiReports.length === 0 && !isLoading) {
     return (
       <div
         className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
@@ -393,9 +409,9 @@ function PartDrawingsPage({ socket: providedSocket }) {
       >
         <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
           <RefreshCw className="mx-auto mb-4 text-gray-400" size={48} />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">No Part Drawings Yet</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">No PDI Reports Yet</h2>
           <p className="text-gray-600 mb-6">
-            Your database is empty or no drawings match your search. Try refreshing or adjusting your search.
+            Your database is empty. PDI reports will appear here once created!
           </p>
         </div>
       </div>
@@ -405,19 +421,19 @@ function PartDrawingsPage({ socket: providedSocket }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-        Finished Goods Drawings
+        Production PDI Reports
       </h1>
       <div className="max-w-7xl mx-auto">
         <div className="flex mb-8 gap-6 flex-wrap">
           <div className="relative flex-grow">
-            <label htmlFor="search-drawings" className="sr-only">
-              Search Part Drawings
+            <label htmlFor="search-pdi" className="sr-only">
+              Search PDI Reports
             </label>
             <input
-              id="search-drawings"
+              id="search-pdi"
               ref={searchInputRef}
               type="text"
-              placeholder="Search by Sr. No., Drawing ID, Product Name, Item Name, or Product ID..."
+              placeholder="Search by Report ID, Customer ID, Order ID, Status, or Inspected By..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -429,13 +445,13 @@ function PartDrawingsPage({ socket: providedSocket }) {
             onClick={handleRefresh}
             className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
             disabled={isLoading}
-            aria-label="Refresh part drawings"
+            aria-label="Refresh PDI reports"
           >
-            {isLoading && drawings.length > 0 ? 'Refreshing...' : 'Refresh'}
+            {isLoading && pdiReports.length > 0 ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
 
-        {isLoading && drawings.length > 0 && (
+        {isLoading && pdiReports.length > 0 && (
           <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">
             Refreshing data...
           </div>
@@ -445,20 +461,24 @@ function PartDrawingsPage({ socket: providedSocket }) {
           <table
             className="w-full text-left border-collapse"
             role="grid"
-            aria-label="Part Drawings table"
+            aria-label="PDI Reports table"
             ref={tableRef}
             tabIndex={0}
           >
             <thead>
-              <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50" role="row">
+              <tr
+                className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50"
+                role="row"
+              >
                 {[
-                  { key: 'srNo', label: 'Sr. No.' },
-                  { key: 'drawingId', label: 'Drawing ID' },
-                  { key: 'productName', label: 'Product Name' },
-                  { key: 'itemName', label: 'Item Name' },
-                  { key: 'productId', label: 'Product ID' },
-                  { key: 'drawingLink', label: 'Drawing Link' },
-                  { key: 'updatedAt', label: 'Updated At' },
+                  { key: 'sr_no', label: 'Sr. No.' },
+                  { key: 'customer_id', label: 'Customer ID' },
+                  { key: 'order_id', label: 'Order ID' },
+                  { key: 'report_id', label: 'Report ID' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'inspected_by', label: 'Inspected By' },
+                  { key: 'inspection_date', label: 'Inspection Date' },
+                  { key: 'report_link', label: 'PDI Report Link' },
                   { key: 'actions', label: 'Actions' },
                 ].map(({ key, label }) => (
                   <th
@@ -493,51 +513,64 @@ function PartDrawingsPage({ socket: providedSocket }) {
               </tr>
             </thead>
             <tbody>
-              {drawings.map((drawing) => (
+              {sortedPdiReports.map((report) => (
                 <tr
-                  key={drawing.srNo}
+                  key={report.report_id}
                   className="border-t hover:bg-amber-50 transition-all duration-200"
                   role="row"
                 >
-                  <td className="py-4 px-3 text-gray-600 text-base">{drawing.srNo || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{drawing.drawingId || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{drawing.productName}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{drawing.itemName}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{drawing.productId || 'N/A'}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{report.sr_no}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{report.customer_id || 'N/A'}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{report.order_id || 'N/A'}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{report.report_id}</td>
+                  <td
+                    className={`py-4 px-3 text-base ${
+                      report.status === 'Completed'
+                        ? 'text-green-600'
+                        : report.status === 'In Progress'
+                        ? 'text-yellow-600'
+                        : report.status === 'Failed'
+                        ? 'text-red-600'
+                        : 'text-gray-600'
+                    }`}
+                  >
+                    {report.status}
+                  </td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{report.inspected_by || 'N/A'}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">
-                    {drawing.drawingLink ? (
+                    {report.inspection_date ? formatDate(report.inspection_date) : 'N/A'}
+                  </td>
+                  <td className="py-4 px-3 text-gray-600 text-base">
+                    {report.report_link ? (
                       <a
-                        href={drawing.drawingLink}
+                        href={report.report_link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 underline hover:text-blue-800"
-                        aria-label={`View drawing for ${drawing.productName}`}
+                        className="text-blue-600 underline"
                       >
-                        View Drawing
+                        View Report
                       </a>
                     ) : (
                       'N/A'
                     )}
                   </td>
                   <td className="py-4 px-3 text-gray-600 text-base">
-                    {drawing.updatedAt ? formatDate(drawing.updatedAt) : 'N/A'}
-                  </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    <ActionsDropdown drawing={drawing} onEdit={handleEdit} />
+                    <ActionsDropdown report={report} onEdit={handleEdit} />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600">
-                Showing {drawings.length} of {totalItems} drawings
+                Showing {sortedPdiReports.length} of {totalItems} PDI reports
               </div>
               <div className="flex space-x-2">
                 <button
                   onClick={handlePrevPage}
-                  disabled={page === 0}
+                  disabled={cursorStack.length === 0 && cursor === null}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Previous page"
                 >
@@ -545,8 +578,8 @@ function PartDrawingsPage({ socket: providedSocket }) {
                 </button>
                 <button
                   onClick={handleNextPage}
-                  disabled={page >= Math.ceil(totalItems / limit) - 1 || isLoading}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 text-right"
+                  disabled={pdiReports.length < limit || isLoading}
+                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Next page"
                 >
                   <ChevronRight size={20} />
@@ -555,45 +588,83 @@ function PartDrawingsPage({ socket: providedSocket }) {
             </div>
           )}
 
-          {drawings.length === 0 && (
+          {sortedPdiReports.length === 0 && (
             <div
               className="text-center py-12 text-gray-500 flex flex-col items-center"
               role="alert"
             >
-              <Search className="mb-4 text-gray-400" size={40} />
-              <p className="text-lg">No drawings found matching your search.</p>
+              <Search className="mb-4 text-gray-400" size={48} />
+              <p className="text-lg">No PDI reports found matching your search.</p>
             </div>
           )}
         </div>
       </div>
 
-      {showModal && selectedDrawing && (
+      {showModal && selectedReport && (
         <div
-          className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50"
           role="dialog"
-          aria-labelledby="edit-drawing-title"
+          aria-labelledby="edit-pdi-title"
         >
-          <div className="bg-white p-8 rounded-2xl shadow-2xl w-[600px] relative">
+          <div className="bg-white p-8 rounded-2xl shadow-2xl w-[500px] relative">
             <button
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
+              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
               aria-label="Close edit modal"
             >
               <XCircle size={24} />
             </button>
-            <h2 id="edit-drawing-title" className="text-2xl font-bold text-gray-800 mb-6">
-              Edit Drawing #{selectedDrawing.srNo}
+            <h2
+              id="edit-pdi-title"
+              className="text-2xl font-bold text-gray-800 mb-6"
+            >
+              Edit PDI Report #{selectedReport.report_id}
             </h2>
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
-                <label className="block text-gray-700 font-medium mb-1">Drawing Link</label>
+                <label className="block text-gray-700 font-medium mb-2">
+                  PDI Report Link
+                </label>
                 <input
                   type="url"
-                  placeholder="Enter drawing link"
-                  value={formData.drawingLink}
-                  onChange={(e) => setFormData({ ...formData, drawingLink: e.target.value })}
-                  className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  placeholder="Enter PDI report link"
+                  value={formData.report_link}
+                  onChange={(e) =>
+                    setFormData({ ...formData, report_link: e.target.value })
+                  }
+                  className="w-full p-3 border rounded-lg shadow-sm"
                 />
+              </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  Inspection Date
+                </label>
+                <input
+                  type="date"
+                  value={formData.inspection_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, inspection_date: e.target.value })
+                  }
+                  className="w-full p-3 border rounded-lg shadow-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  Status
+                </label>
+                <select
+                  value={formData.status}
+                  onChange={(e) =>
+                    setFormData({ ...formData, status: e.target.value })
+                  }
+                  className="w-full p-3 border rounded-lg shadow-sm"
+                >
+                  {['Pending', 'In Progress', 'Completed', 'Failed'].map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
               </div>
               <button
                 type="submit"
@@ -619,4 +690,4 @@ function PartDrawingsPage({ socket: providedSocket }) {
   );
 }
 
-export default PartDrawingsPage;
+export default ProductionPDIPage;
