@@ -40,6 +40,7 @@ import ProductionPartDrawingsRawPage from './components/ProductionPartDrawingsRa
 import ProductionPartDrawingsPage from './components/ProductionPartDrawingsPage';
 import ProductionPDIPage from './components/ProductionPDIPage';
 import ProductionBOMPage from './components/ProductionBOMPage';
+import ProblemsPage from './components/ProblemsPage'; // Added import
 import './styles.css';
 
 const ROLES = {
@@ -58,7 +59,7 @@ const allowedPathsByRole = {
     '/admin-dashboard', '/orders', '/queries', '/customer-list', '/inventory', '/stock',
     '/price-list', '/pdi', '/customer-invoices', '/part-drawings', '/part-drawings/finished',
     '/part-drawings/raw', '/enquiries', '/dispatch-tracking', '/purchase-invoices', '/bom',
-    '/edit-profile',
+    '/edit-profile', '/problems', // Added /problems
   ],
   [ROLES.CUSTOMER]: ['/customer-dashboard', '/customer-orders', '/customer-queries', '/edit-profile'],
   [ROLES.SALES]: [
@@ -71,9 +72,8 @@ const allowedPathsByRole = {
   ],
   [ROLES.PRODUCTION]: [
     '/production-dashboard', '/production-orders', '/orders', '/production-queries',
-    '/production-stock', // Added to allow access
-    '/inventory', '/production-part-drawings', '/production-part-drawings-raw', '/production-pdi',
-    '/production-bom-unpriced', '/bom', '/edit-profile',
+    '/production-stock', '/inventory', '/production-part-drawings', '/production-part-drawings-raw',
+    '/production-pdi', '/production-bom-unpriced', '/bom', '/edit-profile',
   ],
   [ROLES.STORE]: ['/store-dashboard', '/inventory', '/stock', '/bom', '/edit-profile'],
   [ROLES.DISPATCH]: ['/dispatch-dashboard', '/queries', '/stock', '/pdi', '/dispatch-tracking', '/edit-profile'],
@@ -123,13 +123,12 @@ function App() {
 
     setSocket(newSocket);
 
-    // Timeout to allow rendering if connection fails
     const timeout = setTimeout(() => {
       if (!newSocket.connected) {
         console.warn('Socket.IO connection timeout; proceeding without real-time updates');
         setSocketReady(true);
       }
-    }, 10000); // 10 seconds
+    }, 10000);
 
     return () => {
       clearTimeout(timeout);
@@ -161,12 +160,11 @@ function App() {
     if (!targetPath) {
       console.warn(`Unknown userRole: ${userRole}, redirecting to /`);
       navigate('/', { replace: true });
-    } else if (normalizedPath === '' || normalizedPath === '/') {
-      console.log(`Redirecting: userRole=${userRole}, from=${normalizedPath}, to=${targetPath}`);
-      navigate(targetPath, { replace: true });
-    } else if (!allowedPaths.includes(normalizedPath)) {
-      console.log(`Redirecting: userRole=${userRole}, from=${normalizedPath}, to=${targetPath}, allowedPaths=${allowedPaths.join(', ')}`);
-      navigate(targetPath, { replace: true });
+    } else if (normalizedPath === '' || normalizedPath === '/' || !allowedPaths.includes(normalizedPath)) {
+      if (normalizedPath !== targetPath) {
+        console.log(`Redirecting: userRole=${userRole}, from=${normalizedPath}, to=${targetPath}`);
+        navigate(targetPath, { replace: true });
+      }
     }
   }, [userRole, location.pathname, navigate]);
 
@@ -277,6 +275,18 @@ function App() {
         <Route path="/production-part-drawings" element={userRole === 'production' ? <ErrorBoundary><ProductionPartDrawingsPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-pdi" element={userRole === 'production' ? <ErrorBoundary><ProductionPDIPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-bom-unpriced" element={userRole === 'production' ? <ErrorBoundary><ProductionBOMPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
+        <Route
+          path="/problems"
+          element={
+            userRole === 'admin' ? (
+              <ErrorBoundary>
+                <ProblemsPage socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
         <Route
           path="/"
           element={
