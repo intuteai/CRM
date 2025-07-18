@@ -10,10 +10,6 @@ on:
 jobs:
   deploy-frontend:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: crm
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
