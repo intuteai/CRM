@@ -27,11 +27,13 @@ function StoreDashboard({ socket }) {
       <h1 className="text-3xl font-bold text-gray-800 mb-10 text-center tracking-tight">Stores Dashboard</h1>
       <div className="max-w-7xl mx-auto space-y-12">
         <Section title="Inventory Management">
-          <DashboardCard to="/inventory" icon={<Package />} title="Inventory" desc="Manage and view stock items" />
-          <DashboardCard to="/stock" icon={<Package />} title="Raw Materials" desc="Monitor raw material levels" />
+          {/* {StoreInventoryPage- reference from InventoryPage} */}
+          {/* {StoreStockPage- reference from StockPage} */}
+          <DashboardCard to="/store-inventory" icon={<Package />} title="Inventory" desc="Manage and view stock items" /> 
+          <DashboardCard to="/store-stock" icon={<Package />} title="Raw Materials" desc="Monitor raw material levels" />
         </Section>
         <Section title="Bill of Materials">
-          <DashboardCard to="/bom" icon={<Layers />} title="BOM (Unpriced)" desc="View unpriced Bill of Materials" />
+          <DashboardCard to="/store-bom-unpriced" icon={<Layers />} title="BOM (Unpriced)" desc="View unpriced Bill of Materials" />
         </Section>
       </div>
     </div>
