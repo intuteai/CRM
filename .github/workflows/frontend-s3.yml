@@ -10,6 +10,7 @@ on:
 jobs:
   deploy-frontend:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -19,11 +20,26 @@ jobs:
         with:
           node-version: 18
 
+      - name: Cache node modules
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('CRM/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Move into CRM folder
+        working-directory: ./
+        run: |
+          ls -la CRM
+
       - name: Install dependencies
         run: npm install
+        working-directory: CRM
 
       - name: Build frontend
         run: npm run build
+        working-directory: CRM
 
       - name: Deploy to S3
         uses: jakejarvis/s3-sync-action@master
@@ -34,4 +50,14 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: 'ap-south-1'
-          SOURCE_DIR: 'dist'
+          SOURCE_DIR: 'CRM/dist'
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id E2JXDLEFAXYK5P \
+            --paths "/*"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'ap-south-1'
