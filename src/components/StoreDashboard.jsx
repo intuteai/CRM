@@ -1,36 +1,25 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, Layers, Box } from 'lucide-react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { Package, Layers } from 'lucide-react';
 
 function StoreDashboard({ socket }) {
   useEffect(() => {
-    if (!socket) return;
-
-    socket.on('connect_error', (error) => {
-      console.error('Socket.IO connection error:', error);
-      toast.error('Failed to connect to real-time updates', { autoClose: 3000 });
-    });
-    socket.on('inventoryUpdate', (data) => {
-      console.log('Inventory update:', data);
-      toast.info('Inventory updated', { autoClose: 3000 });
-    });
-    socket.on('stockUpdate', (data) => {
-      console.log('Stock update:', data);
-      toast.info('Stock levels updated', { autoClose: 3000 });
-    });
-    socket.on('bomUpdate', (data) => {
-      console.log('BOM update:', data);
-      toast.info('BOM updated', { autoClose: 3000 });
-    });
-
-    return () => {
-      socket.off('connect_error');
-      socket.off('inventoryUpdate');
-      socket.off('stockUpdate');
-      socket.off('bomUpdate');
-    };
+    if (socket) {
+      socket.on('inventoryUpdate', (data) => {
+        console.log('Inventory update:', data);
+      });
+      socket.on('stockUpdate', (data) => {
+        console.log('Stock update:', data);
+      });
+      socket.on('bomUpdate', (data) => {
+        console.log('BOM update:', data);
+      });
+      return () => {
+        socket.off('inventoryUpdate');
+        socket.off('stockUpdate');
+        socket.off('bomUpdate');
+      };
+    }
   }, [socket]);
 
   return (
@@ -38,14 +27,13 @@ function StoreDashboard({ socket }) {
       <h1 className="text-3xl font-bold text-gray-800 mb-10 text-center tracking-tight">Stores Dashboard</h1>
       <div className="max-w-7xl mx-auto space-y-12">
         <Section title="Inventory Management">
-          <DashboardCard to="/store-inventory" icon={<Package />} title="Inventory" desc="Manage and view stock items" />
-          <DashboardCard to="/store-stock" icon={<Box />} title="Raw Materials" desc="Monitor raw material levels" />
+          <DashboardCard to="/inventory" icon={<Package />} title="Inventory" desc="Manage and view stock items" />
+          <DashboardCard to="/stock" icon={<Package />} title="Raw Materials" desc="Monitor raw material levels" />
         </Section>
         <Section title="Bill of Materials">
-          <DashboardCard to="/store-bom-unpriced" icon={<Layers />} title="BOM (Unpriced)" desc="View unpriced Bill of Materials" />
+          <DashboardCard to="/bom" icon={<Layers />} title="BOM (Unpriced)" desc="View unpriced Bill of Materials" />
         </Section>
       </div>
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </div>
   );
 }
@@ -54,9 +42,8 @@ function DashboardCard({ to, icon, title, desc }) {
   return (
     <Link
       to={to}
-      className="bg-white p-5 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:ring-offset-2"
+      className="bg-white p-5 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
       aria-label={`Navigate to ${title}`}
-      tabIndex={0}
     >
       <div className="flex items-center justify-center mb-3">
         {React.cloneElement(icon, { className: 'w-9 h-9 text-gray-700' })}
