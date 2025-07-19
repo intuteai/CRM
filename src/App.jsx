@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate, Routes, Route, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import io from 'socket.io-client';
+import { useAuth } from './AuthContext';
 import Navbar from './components/Navbar';
 import AdminDashboard from './components/AdminDashboard';
 import OrdersPage from './components/OrdersPage';
@@ -88,9 +89,7 @@ const allowedPathsByRole = {
 };
 
 function App() {
-  const [userRole, setUserRole] = useState(localStorage.getItem('role') || null);
-  const [userName, setUserName] = useState(localStorage.getItem('name') || 'User');
-  const [token, setToken] = useState(localStorage.getItem('token') || null);
+  const { userRole, setUserRole, userName, setUserName, token, setToken } = useAuth();
   const [showLogin, setShowLogin] = useState(!localStorage.getItem('token'));
   const [socket, setSocket] = useState(null);
   const [socketReady, setSocketReady] = useState(false);
@@ -159,7 +158,16 @@ function App() {
 
     const allowedPaths = allowedPathsByRole[userRole] || [];
     const targetPath = dashboardMap[userRole];
-    const normalizedPath = location.pathname.replace(/\/+$/, '');
+    const normalizedPath = location.pathname.split('?')[0].replace(/\/+$/, '').toLowerCase();
+
+    console.log('Navigation check:', {
+      userRole,
+      originalPath: location.pathname,
+      normalizedPath,
+      allowedPaths,
+      isPathAllowed: allowedPaths.includes(normalizedPath),
+      targetPath,
+    });
 
     if (!targetPath) {
       console.warn(`Unknown userRole: ${userRole}, redirecting to /`);
@@ -191,7 +199,7 @@ function App() {
     } else {
       setShowLogin(true);
     }
-  }, []);
+  }, [setUserRole, setUserName, setToken]);
 
   const handleLoginSubmit = (role, name, submittedToken) => {
     if (!Object.values(ROLES).includes(role)) {
@@ -201,9 +209,6 @@ function App() {
     setUserRole(role);
     setUserName(name);
     setToken(submittedToken);
-    localStorage.setItem('role', role);
-    localStorage.setItem('name', name);
-    localStorage.setItem('token', submittedToken);
     setShowLogin(false);
   };
 
@@ -279,9 +284,9 @@ function App() {
         <Route path="/production-part-drawings" element={userRole === 'production' ? <ErrorBoundary><ProductionPartDrawingsPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-pdi" element={userRole === 'production' ? <ErrorBoundary><ProductionPDIPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-bom-unpriced" element={userRole === 'production' ? <ErrorBoundary><ProductionBOMPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
-        <Route path="/store-inventory" element={userRole === 'store' ? <ErrorBoundary><StoreInventoryPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
-        <Route path="/store-stock" element={userRole === 'store' ? <ErrorBoundary><StoreStockPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
-        <Route path="/store-bom-unpriced" element={userRole === 'store' ? <ErrorBoundary><StoreBOMPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
+        <Route path="/store-inventory" element={['store', 'admin'].includes(userRole) ? <ErrorBoundary><StoreInventoryPage socket={socket} userRole={userRole} /></ErrorBoundary> : <Navigate to="/" replace />} />
+        <Route path="/store-stock" element={['store', 'admin'].includes(userRole) ? <ErrorBoundary><StoreStockPage socket={socket} userRole={userRole} /></ErrorBoundary> : <Navigate to="/" replace />} />
+        <Route path="/store-bom-unpriced" element={['store', 'admin'].includes(userRole) ? <ErrorBoundary><StoreBOMPage socket={socket} userRole={userRole} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route 
           path="/problems"
           element={
@@ -316,7 +321,7 @@ function App() {
                       <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-900">Business</span>
                       <span className="px-3 text-gray-700">Planner</span>
                     </p>
-                    <div className="orges/absolute -inset-1 blur-sm bg-gradient-to-r from-amber-200 via-transparent to-amber-200 opacity-20 z-0"></div>
+                    <div className="absolute -inset-1 blur-sm bg-gradient-to-r from-amber-200 via-transparent to-amber-200 opacity-20 z-0"></div>
                   </div>
                   <button
                     onClick={() => setShowLogin(true)}
@@ -358,9 +363,11 @@ function App() {
 export default function AppWrapper() {
   return (
     <Router>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
+      <AuthProvider>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </AuthProvider>
     </Router>
   );
 }
