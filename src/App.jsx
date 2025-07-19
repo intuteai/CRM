@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -88,6 +89,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [showLogin, setShowLogin] = useState(!localStorage.getItem('token'));
   const [socket, setSocket] = useState(null);
+  const [socketReady, setSocketReady] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -109,12 +111,14 @@ function App() {
 
     newSocket.on('connect', () => {
       console.log('Connected to Socket.IO in App');
+      setSocketReady(true);
     });
     newSocket.on('connect_error', (err) => {
       console.error('Socket.IO connection error in App:', err.message);
     });
     newSocket.on('disconnect', (reason) => {
       console.log('Socket.IO disconnected in App:', reason);
+      setSocketReady(false);
     });
 
     setSocket(newSocket);
@@ -122,6 +126,7 @@ function App() {
     const timeout = setTimeout(() => {
       if (!newSocket.connected) {
         console.warn('Socket.IO connection timeout; proceeding without real-time updates');
+        setSocketReady(true);
       }
     }, 10000);
 
@@ -129,6 +134,7 @@ function App() {
       clearTimeout(timeout);
       newSocket.disconnect();
       console.log('Socket.IO disconnected from App');
+      setSocketReady(false);
     };
   }, [userRole, token, socket]);
 
@@ -207,6 +213,7 @@ function App() {
     setShowLogin(true);
     if (socket) socket.disconnect();
     setSocket(null);
+    setSocketReady(false);
   };
 
   const showNavbar = userRole && location.pathname !== '/';
