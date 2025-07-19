@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -40,7 +39,7 @@ import ProductionPartDrawingsRawPage from './components/ProductionPartDrawingsRa
 import ProductionPartDrawingsPage from './components/ProductionPartDrawingsPage';
 import ProductionPDIPage from './components/ProductionPDIPage';
 import ProductionBOMPage from './components/ProductionBOMPage';
-import ProblemsPage from './components/ProblemsPage'; // Added import
+import ProblemsPage from './components/ProblemsPage';
 import './styles.css';
 import StoreInventoryPage from './components/StoreInventoryPage';
 import StoreStockPage from './components/StoreStockPage';
@@ -62,7 +61,7 @@ const allowedPathsByRole = {
     '/admin-dashboard', '/orders', '/queries', '/customer-list', '/inventory', '/stock',
     '/price-list', '/pdi', '/customer-invoices', '/part-drawings', '/part-drawings/finished',
     '/part-drawings/raw', '/enquiries', '/dispatch-tracking', '/purchase-invoices', '/bom',
-    '/edit-profile', '/problems', // Added /problems
+    '/edit-profile', '/problems',
   ],
   [ROLES.CUSTOMER]: ['/customer-dashboard', '/customer-orders', '/customer-queries', '/edit-profile'],
   [ROLES.SALES]: [
@@ -78,7 +77,9 @@ const allowedPathsByRole = {
     '/production-stock', '/inventory', '/production-part-drawings', '/production-part-drawings-raw',
     '/production-pdi', '/production-bom-unpriced', '/bom', '/edit-profile',
   ],
-  [ROLES.STORE]: ['/store-dashboard', '/inventory', '/stock', '/bom', '/edit-profile'],
+  [ROLES.STORE]: [
+    '/store-dashboard', '/store-inventory', '/store-stock', '/store-bom-unpriced', '/edit-profile',
+  ],
   [ROLES.DISPATCH]: ['/dispatch-dashboard', '/queries', '/stock', '/pdi', '/dispatch-tracking', '/edit-profile'],
   [ROLES.ACCOUNTS]: [
     '/accounts-dashboard', '/orders', '/customer-invoices', '/dispatch-tracking',
@@ -315,7 +316,7 @@ function App() {
                       <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-900">Business</span>
                       <span className="px-3 text-gray-700">Planner</span>
                     </p>
-                    <div className="absolute -inset-1 blur-sm bg-gradient-to-r from-amber-200 via-transparent to-amber-200 opacity-20 z-0"></div>
+                    <div className="orges/absolute -inset-1 blur-sm bg-gradient-to-r from-amber-200 via-transparent to-amber-200 opacity-20 z-0"></div>
                   </div>
                   <button
                     onClick={() => setShowLogin(true)}
