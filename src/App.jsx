@@ -1,5 +1,6 @@
-import { useNavigate, Routes, Route, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 import Navbar from './components/Navbar';
 import AdminDashboard from './components/AdminDashboard';
@@ -39,11 +40,8 @@ import ProductionPartDrawingsRawPage from './components/ProductionPartDrawingsRa
 import ProductionPartDrawingsPage from './components/ProductionPartDrawingsPage';
 import ProductionPDIPage from './components/ProductionPDIPage';
 import ProductionBOMPage from './components/ProductionBOMPage';
-import ProblemsPage from './components/ProblemsPage';
+import ProblemsPage from './components/ProblemsPage'; // Added import
 import './styles.css';
-import StoreInventoryPage from './components/StoreInventoryPage';
-import StoreStockPage from './components/StoreStockPage';
-import StoreBOMPage from './components/StoreBOMPage';
 
 const ROLES = {
   ADMIN: 'admin',
@@ -61,7 +59,7 @@ const allowedPathsByRole = {
     '/admin-dashboard', '/orders', '/queries', '/customer-list', '/inventory', '/stock',
     '/price-list', '/pdi', '/customer-invoices', '/part-drawings', '/part-drawings/finished',
     '/part-drawings/raw', '/enquiries', '/dispatch-tracking', '/purchase-invoices', '/bom',
-    '/edit-profile', '/problems',
+    '/edit-profile', '/problems', // Added /problems
   ],
   [ROLES.CUSTOMER]: ['/customer-dashboard', '/customer-orders', '/customer-queries', '/edit-profile'],
   [ROLES.SALES]: [
@@ -77,9 +75,7 @@ const allowedPathsByRole = {
     '/production-stock', '/inventory', '/production-part-drawings', '/production-part-drawings-raw',
     '/production-pdi', '/production-bom-unpriced', '/bom', '/edit-profile',
   ],
-  [ROLES.STORE]: [
-    '/store-dashboard', '/store-inventory', '/store-stock', '/store-bom-unpriced', '/edit-profile',
-  ],
+  [ROLES.STORE]: ['/store-dashboard', '/inventory', '/stock', '/bom', '/edit-profile'],
   [ROLES.DISPATCH]: ['/dispatch-dashboard', '/queries', '/stock', '/pdi', '/dispatch-tracking', '/edit-profile'],
   [ROLES.ACCOUNTS]: [
     '/accounts-dashboard', '/orders', '/customer-invoices', '/dispatch-tracking',
@@ -159,16 +155,7 @@ function App() {
 
     const allowedPaths = allowedPathsByRole[userRole] || [];
     const targetPath = dashboardMap[userRole];
-    const normalizedPath = location.pathname.split('?')[0].replace(/\/+$/, '').toLowerCase();
-
-    console.log('Navigation check:', {
-      userRole,
-      originalPath: location.pathname,
-      normalizedPath,
-      allowedPaths,
-      isPathAllowed: allowedPaths.includes(normalizedPath),
-      targetPath,
-    });
+    const normalizedPath = location.pathname.replace(/\/+$/, '');
 
     if (!targetPath) {
       console.warn(`Unknown userRole: ${userRole}, redirecting to /`);
@@ -261,7 +248,7 @@ function App() {
         <Route path="/customer-orders" element={userRole === 'customer' ? <ErrorBoundary><CustomerOrdersPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/customer-queries" element={userRole === 'customer' ? <ErrorBoundary><CustomerQueriesPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/edit-profile" element={userRole ? <ErrorBoundary><EditProfile socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
-        <Route path="/inventory" element={['admin', 'production'].includes(userRole) ? <ErrorBoundary><InventoryPage userRole={userRole} socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
+        <Route path="/inventory" element={['admin', 'store', 'production'].includes(userRole) ? <ErrorBoundary><InventoryPage userRole={userRole} socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/stock" element={['admin', 'sales', 'dispatch'].includes(userRole) ? <ErrorBoundary><StockPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/price-list" element={['admin', 'sales'].includes(userRole) ? <ErrorBoundary><PriceListPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/pdi" element={['admin', 'design', 'dispatch'].includes(userRole) ? <ErrorBoundary><PdiPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
@@ -279,7 +266,7 @@ function App() {
         <Route path="/part-drawings/raw" element={['admin', 'design'].includes(userRole) ? <ErrorBoundary><PartDrawingsRawPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/enquiries" element={['admin', 'sales'].includes(userRole) ? <ErrorBoundary><EnquiryPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/purchase-invoices" element={['admin', 'accounts'].includes(userRole) ? <ErrorBoundary><PurchaseInvoicesPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
-        <Route path="/bom" element={['admin', 'design'].includes(userRole) ? <ErrorBoundary><BOMPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
+        <Route path="/bom" element={['admin', 'design', 'store', 'production'].includes(userRole) ? <ErrorBoundary><BOMPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/sales-queries" element={userRole === 'sales' ? <ErrorBoundary><SalesQueriesPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-queries" element={userRole === 'production' ? <ErrorBoundary><ProductionQueriesPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-orders" element={userRole === 'production' ? <ErrorBoundary><ProductionOrdersPage socket={socket} userRole={userRole} /></ErrorBoundary> : <Navigate to="/" replace />} />
@@ -288,10 +275,7 @@ function App() {
         <Route path="/production-part-drawings" element={userRole === 'production' ? <ErrorBoundary><ProductionPartDrawingsPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-pdi" element={userRole === 'production' ? <ErrorBoundary><ProductionPDIPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-bom-unpriced" element={userRole === 'production' ? <ErrorBoundary><ProductionBOMPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
-        <Route path="/store-inventory" element={userRole === 'store' ? <ErrorBoundary><StoreInventoryPage socket={socket} userRole={userRole} /></ErrorBoundary> : <Navigate to="/" replace />} />
-        <Route path="/store-stock" element={userRole === 'store' ? <ErrorBoundary><StoreStockPage socket={socket} userRole={userRole} /></ErrorBoundary> : <Navigate to="/" replace />} />
-        <Route path="/store-bom-unpriced" element={userRole === 'store' ? <ErrorBoundary><StoreBOMPage socket={socket} userRole={userRole} /></ErrorBoundary> : <Navigate to="/" replace />} />
-        <Route 
+        <Route
           path="/problems"
           element={
             userRole === 'admin' ? (
