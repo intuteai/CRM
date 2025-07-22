@@ -27,7 +27,7 @@ const useFetchStock = ({ limit, offset }) => {
       setIsLoading(true);
       const token = localStorage.getItem('token');
       if (!token) throw new Error("Authentication token missing. Please log in again.");
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       const url = `${backendUrl}/api/stock?limit=${limit}&offset=${offset}&force_refresh=true`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -41,6 +41,7 @@ const useFetchStock = ({ limit, offset }) => {
       if (isMounted) {
         const normalizedData = data.map(item => ({
           ...item,
+          price: item.price !== null ? Number(item.price) : 0,
           stockQuantity: item.stockQuantity || 0,
           description: item.description || '',
           productCode: item.productCode,
@@ -80,7 +81,7 @@ function StoreStockPage() {
     description: '',
     productCode: '',
     stockQuantity: '',
-    qtyRequired: '' 
+    qtyRequired: ''
   });
   const [formErrors, setFormErrors] = useState({});
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
@@ -98,7 +99,7 @@ function StoreStockPage() {
   const debouncedSearch = debounce((value) => setSearchTerm(value.toLowerCase()), 300);
 
   useEffect(() => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
     const socket = io(backendUrl, { withCredentials: false, transports: ['websocket'] });
     socket.on('connect', () => {
       toast.success('Connected to real-time updates!', { autoClose: 2000 });
@@ -149,6 +150,10 @@ function StoreStockPage() {
     if (isNaN(stockQuantity) || stockQuantity < 0 || !Number.isInteger(Number(row['Stock Quantity']))) {
       errors.push(`Row ${index + 1}: Stock Quantity must be a non-negative integer`);
     }
+    const qtyRequired = parseInt(row['Qty Required']);
+    if (qtyRequired !== undefined && (isNaN(qtyRequired) || qtyRequired < 0)) {
+      errors.push(`Row ${index + 1}: Quantity Required must be a non-negative integer`);
+    }
     return errors;
   }, []);
 
@@ -195,17 +200,36 @@ function StoreStockPage() {
         for (const row of validRows) {
           try {
             const { productId, ...body } = row;
-            const url = productId ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/stock/${productId}` : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/stock`;
+            const url = productId ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock/${productId}` : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock`;
             const method = productId ? 'PUT' : 'POST';
+            let payload = { ...body, price: 0.01 }; // Default price for POST
+            if (productId) {
+              const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock?limit=1&offset=0&productId=${productId}`, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                credentials: 'include',
+              });
+              if (response.ok) {
+                const { data } = await response.json();
+                if (data.length > 0) {
+                  payload.price = data[0].price || 0; // Use existing price for PUT
+                }
+              }
+            }
             const response = await fetch(url, {
               method,
               headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify(body),
+              body: JSON.stringify(payload),
               credentials: 'include',
             });
             if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(errorData.error || `Failed to ${productId ? 'update' : 'create'} product`);
+              let errorMessage = `Failed to ${productId ? 'update' : 'create'} product`;
+              try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorMessage;
+              } catch (jsonError) {
+                console.error('Failed to parse error response:', jsonError);
+              }
+              throw new Error(errorMessage);
             }
             if (productId) updatedCount++;
             else createdCount++;
@@ -331,11 +355,15 @@ function StoreStockPage() {
 
   const validateForm = useCallback(() => {
     const errors = {};
-    if (!formData.productName.trim()) errors.productName = 'Product name is required';
-    if (!formData.productCode.trim() || formData.productCode.length !== 10) errors.productCode = 'Product code must be exactly 10 characters';
-    const stockQuantity = parseFloat(formData.stockQuantity);
+    if (!formData.productName || !formData.productName.trim()) errors.productName = 'Product name is required';
+    if (!formData.productCode || !formData.productCode.trim() || formData.productCode.length !== 10) errors.productCode = 'Product code must be exactly 10 characters';
+    const stockQuantity = parseInt(formData.stockQuantity);
     if ((modalMode === 'create' || modalMode === 'edit') && (isNaN(stockQuantity) || stockQuantity < 0)) {
-      errors.stockQuantity = 'Stock quantity must be a non-negative number';
+      errors.stockQuantity = 'Stock quantity must be a non-negative integer';
+    }
+    const qtyRequired = parseInt(formData.qtyRequired);
+    if (qtyRequired !== undefined && (isNaN(qtyRequired) || qtyRequired < 0)) {
+      errors.qtyRequired = 'Quantity required must be a non-negative integer';
     }
     return errors;
   }, [formData, modalMode]);
@@ -351,18 +379,24 @@ function StoreStockPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const url = modalMode === 'create' ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/stock` : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/stock/${selectedItem.productId}`;
+      const url = modalMode === 'create' 
+        ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock` 
+        : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock/${selectedItem.productId}`;
       const method = modalMode === 'create' ? 'POST' : 'PUT';
-      const stockQuantity = parseFloat(formData.stockQuantity);
+      const stockQuantity = parseInt(formData.stockQuantity) || 0;
       const qtyRequired = parseInt(formData.qtyRequired) || 0;
       const body = {
         productName: formData.productName,
         description: formData.description,
         productCode: formData.productCode,
         stockQuantity: modalMode === 'edit' ? stockQuantity : undefined,
-        qtyRequired
+        qtyRequired,
+        price: modalMode === 'create' ? 0.01 : selectedItem.price || 0 // Use 0.01 for POST, existing price for PUT
       };
       if (modalMode === 'create') body.stockQuantity = stockQuantity >= 0 ? stockQuantity : 0;
+
+      console.log('Sending request to:', url);
+      console.log('Request payload:', body);
 
       const response = await fetch(url, {
         method,
@@ -370,10 +404,18 @@ function StoreStockPage() {
         body: JSON.stringify(body),
         credentials: 'include',
       });
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `${modalMode === 'create' ? 'Create' : 'Update'} failed`);
+        let errorMessage = `${modalMode === 'create' ? 'Create' : 'Update'} failed`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (jsonError) {
+          console.error('Failed to parse error response:', jsonError);
+        }
+        throw new Error(errorMessage);
       }
+
       await refetchData();
       toast.success(`Product ${modalMode === 'create' ? 'created' : 'updated'}`, { autoClose: 2000 });
       setShowModal(false);
@@ -381,6 +423,7 @@ function StoreStockPage() {
       setPage(0);
       setSearchInput('');
     } catch (err) {
+      console.error('Error in handleSubmit:', err.message, { status: err.status, response: err.response });
       toast.error(err.message || 'Operation failed', { autoClose: 3000 });
     }
   }, [formData, modalMode, selectedItem, refetchData, validateForm]);
@@ -524,7 +567,7 @@ function StoreStockPage() {
         )}
 
         <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
-          <table className="w-full text-left min-w-[1200px]" role="grid" ref={tableRef} tabIndex={0}>
+          <table className="w-full text-left min-w-[1100px]" role="grid" ref={tableRef} tabIndex={0}>
             <thead className="bg-amber-100">
               <tr role="row">
                 {[
@@ -702,7 +745,7 @@ function StoreStockPage() {
                   <input
                     id="stockQuantity"
                     type="number"
-                    step="0.01"
+                    step="1"
                     min="0"
                     value={formData.stockQuantity}
                     onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
@@ -718,11 +761,15 @@ function StoreStockPage() {
                   <input
                     id="qtyRequired"
                     type="number"
+                    step="1"
                     min="0"
                     value={formData.qtyRequired}
                     onChange={(e) => setFormData({ ...formData, qtyRequired: e.target.value })}
                     className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    aria-invalid={!!formErrors.qtyRequired}
+                    aria-describedby={formErrors.qtyRequired ? 'qtyRequired-error' : undefined}
                   />
+                  {formErrors.qtyRequired && <p id="qtyRequired-error" className="text-red-500 text-sm mt-1">{formErrors.qtyRequired}</p>}
                 </div>
                 <div className="flex justify-end gap-4 mt-6">
                   <button

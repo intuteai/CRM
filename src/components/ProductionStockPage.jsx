@@ -10,7 +10,6 @@ import 'react-toastify/dist/ReactToastify.css';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
 
-const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 const formatDate = (dateString) => {
   const date = new Date(dateString);
   return `${date.toLocaleDateString('en-IN')} ${date.toLocaleTimeString('en-IN')}`;
@@ -28,7 +27,7 @@ const useFetchStock = ({ limit, offset }) => {
       setIsLoading(true);
       const token = localStorage.getItem('token');
       if (!token) throw new Error("Authentication token missing. Please log in again.");
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       const url = `${backendUrl}/api/stock?limit=${limit}&offset=${offset}&force_refresh=true`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -68,15 +67,23 @@ const useFetchStock = ({ limit, offset }) => {
   return { stockItems, totalItems, isLoading, error, refetchData: fetchData };
 };
 
-function ProductionStockPage() {
+function StoreStockPage() {
   const [page, setPage] = useState(0);
   const [itemsPerPage] = useState(10);
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'productId', direction: 'desc' });
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [showEditForm, setShowEditForm] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalMode, setModalMode] = useState('create'); // 'create', 'edit'
   const [selectedItem, setSelectedItem] = useState(null);
+  const [formData, setFormData] = useState({
+    productName: '',
+    description: '',
+    productCode: '',
+    stockQuantity: '',
+    qtyRequired: ''
+  });
+  const [formErrors, setFormErrors] = useState({});
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [selectedDescription, setSelectedDescription] = useState('');
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
@@ -85,13 +92,14 @@ function ProductionStockPage() {
   const [selectedProductDescription, setSelectedProductDescription] = useState('');
   const tableRef = useRef(null);
   const fileInputRef = useRef(null);
+  const modalRef = useRef(null);
 
   const { stockItems, totalItems, isLoading, error, refetchData } = useFetchStock({ limit: itemsPerPage, offset: page * itemsPerPage });
 
   const debouncedSearch = debounce((value) => setSearchTerm(value.toLowerCase()), 300);
 
   useEffect(() => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
     const socket = io(backendUrl, { withCredentials: false, transports: ['websocket'] });
     socket.on('connect', () => {
       toast.success('Connected to real-time updates!', { autoClose: 2000 });
@@ -101,17 +109,8 @@ function ProductionStockPage() {
       toast.error('Failed to connect to real-time updates.', { autoClose: false });
     });
     socket.on('stockUpdate', ({ product_id, stock_quantity }) => {
-      setStockItems(prev => {
-        const itemIndex = prev.findIndex(item => item.productId === product_id);
-        if (itemIndex === -1) {
-          refetchData();
-          return prev;
-        }
-        const updatedItems = [...prev];
-        updatedItems[itemIndex] = { ...updatedItems[itemIndex], stockQuantity: stock_quantity };
-        toast.info(`Stock for ${updatedItems[itemIndex].productName} updated to ${stock_quantity}`, { autoClose: 2000 });
-        return updatedItems;
-      });
+      refetchData();
+      toast.info(`Stock for product #${product_id} updated to ${stock_quantity}`, { autoClose: 2000 });
       if (tableRef.current) tableRef.current.focus();
     });
     return () => socket.disconnect();
@@ -151,8 +150,10 @@ function ProductionStockPage() {
     if (isNaN(stockQuantity) || stockQuantity < 0 || !Number.isInteger(Number(row['Stock Quantity']))) {
       errors.push(`Row ${index + 1}: Stock Quantity must be a non-negative integer`);
     }
-    const price = parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, ''));
-    if (isNaN(price) || price < 0) errors.push(`Row ${index + 1}: Price must be a non-negative number`);
+    const qtyRequired = parseInt(row['Qty Required']);
+    if (qtyRequired !== undefined && (isNaN(qtyRequired) || qtyRequired < 0)) {
+      errors.push(`Row ${index + 1}: Quantity Required must be a non-negative integer`);
+    }
     return errors;
   }, []);
 
@@ -181,7 +182,6 @@ function ProductionStockPage() {
               productName: String(row['Product Name'] || '').trim(),
               productCode: String(row['Product Code'] || '').trim(),
               stockQuantity: parseInt(row['Stock Quantity'] || 0),
-              price: parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, '')),
               description: String(row['Description'] || '').trim() || undefined,
               qtyRequired: parseInt(row['Qty Required'] || 0),
               productId: row['Product ID'] ? parseInt(row['Product ID']) : undefined,
@@ -200,12 +200,25 @@ function ProductionStockPage() {
         for (const row of validRows) {
           try {
             const { productId, ...body } = row;
-            const url = productId ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/stock/${productId}` : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/stock`;
+            const url = productId ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock/${productId}` : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock`;
             const method = productId ? 'PUT' : 'POST';
+            let payload = { ...body, price: 0 };
+            if (productId) {
+              const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock?limit=1&offset=0&productId=${productId}`, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                credentials: 'include',
+              });
+              if (response.ok) {
+                const { data } = await response.json();
+                if (data.length > 0) {
+                  payload.price = data[0].price || 0;
+                }
+              }
+            }
             const response = await fetch(url, {
               method,
               headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify(body),
+              body: JSON.stringify(payload),
               credentials: 'include',
             });
             if (!response.ok) {
@@ -242,18 +255,17 @@ function ProductionStockPage() {
       'Description': item.description || 'N/A',
       'Stock Quantity': Number(item.stockQuantity) || 0,
       'Qty Required': Number(item.qtyRequired) || 0,
-      'Price (₹)': formatCurrency(Number(item.price)),
       'Created At (IST)': item.createdAt ? formatDate(item.createdAt) : 'N/A',
     }));
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Raw Materials');
-    const colWidths = data.reduce((acc, row) => {
+    const colWidths = data.reduce((accumulator, row) => {
       Object.keys(row).forEach((key, idx) => {
         const value = String(row[key]).replace(/<[^>]*>/g, '');
-        acc[idx] = Math.max(acc[idx] || 10, value.length + 2);
+        accumulator[idx] = Math.max(accumulator[idx] || 10, value.length + 2);
       });
-      return acc;
+      return accumulator;
     }, []);
     worksheet['!cols'] = colWidths.map(width => ({ wch: width }));
     XLSX.writeFile(workbook, 'Raw_Material_Inventory.xlsx');
@@ -270,7 +282,7 @@ function ProductionStockPage() {
 
   const sortedStock = filteredStock.sort((a, b) => {
     let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
-    if (sortConfig.key === 'price' || sortConfig.key === 'stockQuantity' || sortConfig.key === 'qtyRequired' || sortConfig.key === 'productId') {
+    if (sortConfig.key === 'stockQuantity' || sortConfig.key === 'qtyRequired' || sortConfig.key === 'productId') {
       aValue = Number(aValue);
       bValue = Number(bValue);
     } else if (sortConfig.key === 'createdAt') {
@@ -335,13 +347,133 @@ function ProductionStockPage() {
     );
   };
 
+  const validateForm = useCallback(() => {
+    const errors = {};
+    if (!formData.productName || !formData.productName.trim()) errors.productName = 'Product name is required';
+    if (!formData.productCode || !formData.productCode.trim() || formData.productCode.length !== 10) errors.productCode = 'Product code must be exactly 10 characters';
+    const stockQuantity = parseInt(formData.stockQuantity);
+    if ((modalMode === 'create' || modalMode === 'edit') && (isNaN(stockQuantity) || stockQuantity < 0)) {
+      errors.stockQuantity = 'Stock quantity must be a non-negative integer';
+    }
+    const qtyRequired = parseInt(formData.qtyRequired);
+    if (qtyRequired !== undefined && (isNaN(qtyRequired) || qtyRequired < 0)) {
+      errors.qtyRequired = 'Quantity required must be a non-negative integer';
+    }
+    return errors;
+  }, [formData, modalMode]);
+
+  const handleSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    const formErrors = validateForm();
+    if (Object.keys(formErrors).length > 0) {
+      setFormErrors(formErrors);
+      Object.values(formErrors).forEach(error => toast.error(error, { autoClose: 3000 }));
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const url = modalMode === 'create' ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock` : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock/${selectedItem.productId}`;
+      const method = modalMode === 'create' ? 'POST' : 'PUT';
+      const stockQuantity = parseInt(formData.stockQuantity) || 0;
+      const qtyRequired = parseInt(formData.qtyRequired) || 0;
+      const body = {
+        productName: formData.productName,
+        description: formData.description,
+        productCode: formData.productCode,
+        stockQuantity: modalMode === 'edit' ? stockQuantity : undefined,
+        qtyRequired,
+        price: modalMode === 'create' ? 0 : selectedItem.price || 0 // Use existing price for edits, 0 for creates
+      };
+      if (modalMode === 'create') body.stockQuantity = stockQuantity >= 0 ? stockQuantity : 0;
+
+      console.log('Sending request to:', url);
+      console.log('Request payload:', body);
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `${modalMode === 'create' ? 'Create' : 'Update'} failed`);
+      }
+      await refetchData();
+      toast.success(`Product ${modalMode === 'create' ? 'created' : 'updated'}`, { autoClose: 2000 });
+      setShowModal(false);
+      setFormErrors({});
+      setPage(0);
+      setSearchInput('');
+    } catch (err) {
+      console.error('Error in handleSubmit:', err);
+      toast.error(err.message || 'Operation failed', { autoClose: 3000 });
+    }
+  }, [formData, modalMode, selectedItem, refetchData, validateForm]);
+
+  const handleCreate = useCallback(() => {
+    setModalMode('create');
+    setSelectedItem(null);
+    setFormData({
+      productName: '',
+      description: '',
+      productCode: '',
+      stockQuantity: '',
+      qtyRequired: ''
+    });
+    setFormErrors({});
+    setShowModal(true);
+  }, []);
+
+  const handleEdit = useCallback((item) => {
+    setModalMode('edit');
+    setSelectedItem(item);
+    setFormData({
+      productName: item.productName || '',
+      description: item.description || '',
+      productCode: item.productCode || '',
+      stockQuantity: item.stockQuantity || '',
+      qtyRequired: item.qtyRequired || ''
+    });
+    setFormErrors({});
+    setShowModal(true);
+  }, []);
+
+  useEffect(() => {
+    if (showModal) {
+      const firstInput = modalRef.current?.querySelector('input');
+      if (firstInput) firstInput.focus();
+
+      const handleTabKey = (e) => {
+        if (e.key === 'Tab') {
+          const focusableElements = modalRef.current?.querySelectorAll('button, input, a, select, textarea');
+          if (!focusableElements) return;
+          const firstElement = focusableElements[0];
+          const lastElement = focusableElements[focusableElements.length - 1];
+
+          if (e.shiftKey && document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          } else if (!e.shiftKey && document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
+      };
+
+      document.addEventListener('keydown', handleTabKey);
+      return () => document.removeEventListener('keydown', handleTabKey);
+    }
+  }, [showModal]);
+
   if (isLoading && !stockItems.length) return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 flex items-center justify-center" aria-live="polite">
       <div className="text-gray-600 text-xl animate-pulse">Loading raw materials...</div>
     </div>
   );
 
-  if (error && !showCreateForm && !showEditForm) return (
+  if (error && !showModal && !showDescriptionModal && !showBarcodeModal) return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 flex items-center justify-center" role="alert">
       <div className="text-red-700 text-lg">{error}</div>
       <button
@@ -355,7 +487,7 @@ function ProductionStockPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Production Raw Material Inventory</h1>
+      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Store Raw Material Inventory</h1>
       <div className="max-w-7xl mx-auto">
         <div className="flex mb-8 gap-6 flex-wrap">
           <div className="relative flex-grow">
@@ -379,7 +511,7 @@ function ProductionStockPage() {
             Refresh
           </button>
           <button
-            onClick={() => setShowCreateForm(true)}
+            onClick={handleCreate}
             className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md"
             disabled={isLoading}
             aria-label="Create new raw material"
@@ -419,7 +551,7 @@ function ProductionStockPage() {
         )}
 
         <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
-          <table className="w-full text-left min-w-[1200px]" role="grid" ref={tableRef} tabIndex={0}>
+          <table className="w-full text-left min-w-[1100px]" role="grid" ref={tableRef} tabIndex={0}>
             <thead className="bg-amber-100">
               <tr role="row">
                 {[
@@ -429,7 +561,6 @@ function ProductionStockPage() {
                   { key: 'description', label: 'Description' },
                   { key: 'stockQuantity', label: 'Stock Quantity' },
                   { key: 'qtyRequired', label: 'Qty Required' },
-                  { key: 'price', label: 'Price' },
                   { key: 'createdAt', label: 'Created At (IST)' },
                   { key: 'qrcode', label: 'QR Code' },
                   { key: 'actions', label: 'Actions' },
@@ -474,7 +605,6 @@ function ProductionStockPage() {
                     </span>
                   </td>
                   <td className="py-4 px-3 text-base text-gray-700">{item.qtyRequired}</td>
-                  <td className="py-4 px-3 text-base text-gray-700">{formatCurrency(item.price)}</td>
                   <td className="py-4 px-3 text-base text-gray-700">
                     <div className="flex flex-col">
                       <span>{new Date(item.createdAt).toLocaleDateString('en-IN')}</span>
@@ -491,7 +621,7 @@ function ProductionStockPage() {
                     </button>
                   </td>
                   <td className="py-4 px-3 text-base sticky right-0 bg-white">
-                    <ActionsDropdown item={item} onEdit={(item) => { setSelectedItem(item); setShowEditForm(true); }} />
+                    <ActionsDropdown item={item} onEdit={handleEdit} />
                   </td>
                 </tr>
               ))}
@@ -530,7 +660,7 @@ function ProductionStockPage() {
                 <p className="mt-2">Try adjusting your search.</p>
               ) : (
                 <button
-                  onClick={() => setShowCreateForm(true)}
+                  onClick={handleCreate}
                   className="mt-4 p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
                 >
                   <PlusCircle className="mr-2" /> Add Your First Item
@@ -540,75 +670,107 @@ function ProductionStockPage() {
           )}
         </div>
 
-        {showCreateForm && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="create-form-title">
+        {showModal && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50" role="dialog" aria-labelledby="stock-modal-title">
+            <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" ref={modalRef}>
               <button
-                onClick={() => setShowCreateForm(false)}
+                onClick={() => setShowModal(false)}
                 className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                aria-label="Close create form"
+                aria-label="Close modal"
               >
                 <XCircle size={24} />
               </button>
-              <h2 id="create-form-title" className="text-2xl font-bold text-gray-800 mb-6">Add New Raw Material</h2>
-              <CreateItemForm
-                onSubmit={async (data) => {
-                  const token = localStorage.getItem('token');
-                  const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/stock`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify(data),
-                    credentials: 'include',
-                  });
-                  if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to create item');
-                  }
-                  setPage(0);
-                  setSearchInput('');
-                  setShowCreateForm(false);
-                  refetchData();
-                  toast.success('Item created successfully');
-                }}
-                onClose={() => setShowCreateForm(false)}
-              />
-            </div>
-          </div>
-        )}
-
-        {showEditForm && selectedItem && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="edit-form-title">
-              <button
-                onClick={() => setShowEditForm(false)}
-                className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                aria-label="Close edit form"
-              >
-                <XCircle size={24} />
-              </button>
-              <h2 id="edit-form-title" className="text-2xl font-bold text-gray-800 mb-6">Edit Raw Material #{selectedItem.productId}</h2>
-              <EditItemForm
-                item={selectedItem}
-                onSubmit={async (itemId, data) => {
-                  if (!window.confirm("Are you sure you want to update this item?")) throw new Error("Update cancelled.");
-                  const token = localStorage.getItem('token');
-                  const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/stock/${itemId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify(data),
-                    credentials: 'include',
-                  });
-                  if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to update item');
-                  }
-                  refetchData();
-                  setShowEditForm(false);
-                  setSelectedItem(null);
-                  toast.success('Item updated successfully');
-                }}
-                onClose={() => setShowEditForm(false)}
-              />
+              <h2 id="stock-modal-title" className="text-2xl font-bold text-gray-800 mb-6">
+                {modalMode === 'create' ? 'Add New Raw Material' : `Edit Raw Material #${selectedItem?.productId}`}
+              </h2>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="productName" className="block text-gray-700 font-medium mb-2">Product Name</label>
+                  <input
+                    id="productName"
+                    type="text"
+                    value={formData.productName}
+                    onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
+                    className={`w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300 ${formErrors.productName ? 'border-red-500' : ''}`}
+                    required
+                    aria-invalid={!!formErrors.productName}
+                    aria-describedby={formErrors.productName ? 'productName-error' : undefined}
+                  />
+                  {formErrors.productName && <p id="productName-error" className="text-red-500 text-sm mt-1">{formErrors.productName}</p>}
+                </div>
+                <div>
+                  <label htmlFor="productCode" className="block text-gray-700 font-medium mb-2">Product Code (10 chars)</label>
+                  <input
+                    id="productCode"
+                    type="text"
+                    value={formData.productCode}
+                    onChange={(e) => setFormData({ ...formData, productCode: e.target.value })}
+                    maxLength={10}
+                    className={`w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300 ${formErrors.productCode ? 'border-red-500' : ''}`}
+                    required
+                    aria-invalid={!!formErrors.productCode}
+                    aria-describedby={formErrors.productCode ? 'productCode-error' : undefined}
+                  />
+                  {formErrors.productCode && <p id="productCode-error" className="text-red-500 text-sm mt-1">{formErrors.productCode}</p>}
+                </div>
+                <div>
+                  <label htmlFor="description" className="block text-gray-700 font-medium mb-2">Description</label>
+                  <textarea
+                    id="description"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="stockQuantity" className="block text-gray-700 font-medium mb-2">
+                    {modalMode === 'create' ? 'Initial Stock Quantity' : 'Stock Quantity'}
+                  </label>
+                  <input
+                    id="stockQuantity"
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={formData.stockQuantity}
+                    onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
+                    className={`w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300 ${formErrors.stockQuantity ? 'border-red-500' : ''}`}
+                    required={modalMode === 'create'}
+                    aria-invalid={!!formErrors.stockQuantity}
+                    aria-describedby={formErrors.stockQuantity ? 'stockQuantity-error' : undefined}
+                  />
+                  {formErrors.stockQuantity && <p id="stockQuantity-error" className="text-red-500 text-sm mt-1">{formErrors.stockQuantity}</p>}
+                </div>
+                <div>
+                  <label htmlFor="qtyRequired" className="block text-gray-700 font-medium mb-2">Quantity Required</label>
+                  <input
+                    id="qtyRequired"
+                    type="number"
+                    step="1"
+                    min="0"
+                    value={formData.qtyRequired}
+                    onChange={(e) => setFormData({ ...formData, qtyRequired: e.target.value })}
+                    className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    aria-invalid={!!formErrors.qtyRequired}
+                    aria-describedby={formErrors.qtyRequired ? 'qtyRequired-error' : undefined}
+                  />
+                  {formErrors.qtyRequired && <p id="qtyRequired-error" className="text-red-500 text-sm mt-1">{formErrors.qtyRequired}</p>}
+                </div>
+                <div className="flex justify-end gap-4 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-all duration-300 font-semibold"
+                  >
+                    {modalMode === 'create' ? 'Create' : 'Update'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
@@ -668,333 +830,4 @@ function ProductionStockPage() {
   );
 }
 
-const CreateItemForm = ({ onSubmit, onClose }) => {
-  const [formData, setFormData] = useState({
-    productName: '',
-    stockQuantity: 0,
-    price: 0,
-    description: '',
-    productCode: '',
-    qtyRequired: 0,
-  });
-  const [errors, setErrors] = useState({
-    productName: '',
-    stockQuantity: '',
-    price: '',
-    description: '',
-    productCode: '',
-    qtyRequired: '',
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const validateField = (name, value) => {
-    if (name === 'productName' && !value.trim()) return 'Product name is required';
-    if ((name === 'stockQuantity' || name === 'price' || name === 'qtyRequired') && value < 0) {
-      return `${name === 'stockQuantity' ? 'Quantity' : name === 'price' ? 'Price' : 'Qty Required'} cannot be negative`;
-    }
-    if (name === 'productCode' && value.length !== 10) return 'Product code must be exactly 10 characters';
-    return '';
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    const processedValue = name === 'stockQuantity' || name === 'qtyRequired' ? parseInt(value) || 0 : name === 'price' ? parseFloat(value) || 0 : value;
-    setFormData(prev => ({ ...prev, [name]: processedValue }));
-    setErrors(prev => ({ ...prev, [name]: validateField(name, processedValue) }));
-  };
-
-  const handleSave = async () => {
-    const fieldErrors = {
-      productName: validateField('productName', formData.productName),
-      stockQuantity: validateField('stockQuantity', formData.stockQuantity),
-      price: validateField('price', formData.price),
-      productCode: validateField('productCode', formData.productCode),
-      qtyRequired: validateField('qtyRequired', formData.qtyRequired),
-      description: '',
-    };
-    setErrors(fieldErrors);
-    if (Object.values(fieldErrors).some(err => err)) return;
-    try {
-      setIsSubmitting(true);
-      await onSubmit(formData);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-      <div>
-        <label htmlFor="create-product-name" className="text-gray-700 font-medium">Product Name</label>
-        <input
-          id="create-product-name"
-          type="text"
-          name="productName"
-          value={formData.productName}
-          onChange={handleChange}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.productName}
-          disabled={isSubmitting}
-        />
-        {errors.productName && <p className="text-red-600 text-sm mt-1">{errors.productName}</p>}
-      </div>
-      <div>
-        <label htmlFor="create-product-code" className="text-gray-700 font-medium">Product Code (10 chars)</label>
-        <input
-          id="create-product-code"
-          type="text"
-          name="productCode"
-          value={formData.productCode}
-          onChange={handleChange}
-          maxLength={10}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.productCode}
-          disabled={isSubmitting}
-        />
-        {errors.productCode && <p className="text-red-600 text-sm mt-1">{errors.productCode}</p>}
-      </div>
-      <div>
-        <label htmlFor="create-description" className="text-gray-700 font-medium">Description</label>
-        <textarea
-          id="create-description"
-          name="description"
-          value={formData.description}
-          onChange={handleChange}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          disabled={isSubmitting}
-        />
-      </div>
-      <div>
-        <label htmlFor="create-stock-quantity" className="text-gray-700 font-medium">Stock Quantity</label>
-        <input
-          id="create-stock-quantity"
-          type="number"
-          name="stockQuantity"
-          value={formData.stockQuantity}
-          onChange={handleChange}
-          min="0"
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.stockQuantity}
-          disabled={isSubmitting}
-        />
-        {errors.stockQuantity && <p className="text-red-600 text-sm mt-1">{errors.stockQuantity}</p>}
-      </div>
-      <div>
-        <label htmlFor="create-qty-required" className="text-gray-700 font-medium">Quantity Required</label>
-        <input
-          id="create-qty-required"
-          type="number"
-          name="qtyRequired"
-          value={formData.qtyRequired}
-          onChange={handleChange}
-          min="0"
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.qtyRequired}
-          disabled={isSubmitting}
-        />
-        {errors.qtyRequired && <p className="text-red-600 text-sm mt-1">{errors.qtyRequired}</p>}
-      </div>
-      <div>
-        <label htmlFor="create-price" className="text-gray-700 font-medium">Price (₹)</label>
-        <input
-          id="create-price"
-          type="number"
-          name="price"
-          value={formData.price}
-          onChange={handleChange}
-          min="0"
-          step="0.01"
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.price}
-          disabled={isSubmitting}
-        />
-        {errors.price && <p className="text-red-600 text-sm mt-1">{errors.price}</p>}
-      </div>
-      <div className="flex justify-end space-x-4">
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          disabled={isSubmitting}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? 'Creating...' : 'Create'}
-        </button>
-      </div>
-    </form>
-  );
-};
-
-const EditItemForm = ({ item, onSubmit, onClose }) => {
-  const [formData, setFormData] = useState({
-    productName: item.productName,
-    stockQuantity: item.stockQuantity,
-    price: item.price,
-    description: item.description || '',
-    productCode: item.productCode,
-    qtyRequired: item.qtyRequired,
-  });
-  const [errors, setErrors] = useState({
-    productName: '',
-    stockQuantity: '',
-    price: '',
-    description: '',
-    productCode: '',
-    qtyRequired: '',
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const validateField = (name, value) => {
-    if (name === 'productName' && !value.trim()) return 'Product name is required';
-    if ((name === 'stockQuantity' || name === 'price' || name === 'qtyRequired') && value < 0) {
-      return `${name === 'stockQuantity' ? 'Quantity' : name === 'price' ? 'Price' : 'Qty Required'} cannot be negative`;
-    }
-    if (name === 'productCode' && value.length !== 10) return 'Product code must be exactly 10 characters';
-    return '';
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    const processedValue = name === 'stockQuantity' || name === 'qtyRequired' ? parseInt(value) || 0 : name === 'price' ? parseFloat(value) || 0 : value;
-    setFormData(prev => ({ ...prev, [name]: processedValue }));
-    setErrors(prev => ({ ...prev, [name]: validateField(name, processedValue) }));
-  };
-
-  const handleSave = async () => {
-    const fieldErrors = {
-      productName: validateField('productName', formData.productName),
-      stockQuantity: validateField('stockQuantity', formData.stockQuantity),
-      price: validateField('price', formData.price),
-      productCode: validateField('productCode', formData.productCode),
-      qtyRequired: validateField('qtyRequired', formData.qtyRequired),
-      description: '',
-    };
-    setErrors(fieldErrors);
-    if (Object.values(fieldErrors).some(err => err)) return;
-    try {
-      setIsSubmitting(true);
-      await onSubmit(item.productId, formData);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-      <div>
-        <label htmlFor="edit-product-name" className="text-gray-700 font-medium">Product Name</label>
-        <input
-          id="edit-product-name"
-          type="text"
-          name="productName"
-          value={formData.productName}
-          onChange={handleChange}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.productName}
-          disabled={isSubmitting}
-        />
-        {errors.productName && <p className="text-red-600 text-sm mt-1">{errors.productName}</p>}
-      </div>
-      <div>
-        <label htmlFor="edit-product-code" className="text-gray-700 font-medium">Product Code (10 chars)</label>
-        <input
-          id="edit-product-code"
-          type="text"
-          name="productCode"
-          value={formData.productCode}
-          onChange={handleChange}
-          maxLength={10}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.productCode}
-          disabled={isSubmitting}
-        />
-        {errors.productCode && <p className="text-red-600 text-sm mt-1">{errors.productCode}</p>}
-      </div>
-      <div>
-        <label htmlFor="edit-description" className="text-gray-700 font-medium">Description</label>
-        <textarea
-          id="edit-description"
-          name="description"
-          value={formData.description}
-          onChange={handleChange}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          disabled={isSubmitting}
-        />
-      </div>
-      <div>
-        <label htmlFor="edit-stock-qty" className="text-gray-700 font-medium">Stock Quantity</label>
-        <input
-          id="edit-stock-qty"
-          type="number"
-          name="stockQuantity"
-          value={formData.stockQuantity}
-          onChange={handleChange}
-          min="0"
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid Peri={!!errors.stockQuantity}
-          disabled={isSubmitting}
-        />
-        {errors.stockQuantity && <p className="text-red-600 text-sm mt-1">{errors.stockQuantity}</p>}
-      </div>
-      <div>
-        <label htmlFor="edit-qty-required" className="text-gray-700 font-medium">Quantity Required</label>
-        <input
-          id="edit-qty-required"
-          type="number"
-          name="qtyRequired"
-          value={formData.qtyRequired}
-          onChange={handleChange}
-          min="0"
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.qtyRequired}
-          disabled={isSubmitting}
-        />
-        {errors.qtyRequired && <p className="text-red-600 text-sm mt-1">{errors.qtyRequired}</p>}
-      </div>
-      <div>
-        <label htmlFor="edit-price" className="text-gray-700 font-medium">Price (₹)</label>
-        <input
-          id="edit-price"
-          type="number"
-          name="price"
-          value={formData.price}
-          onChange={handleChange}
-          min="0"
-          step="0.01"
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.price}
-          disabled={isSubmitting}
-        />
-        {errors.price && <p className="text-red-600 text-sm">{errors.price}</p>}
-      </div>
-      <div className="flex justify-end space-x-4">
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          disabled={isSubmitting}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? 'Saving...' : 'Save'}
-        </button>
-      </div>
-    </form>
-  
-  );
-};
-
-export default ProductionStockPage;
+export default StoreStockPage;

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { formatDate } from '../utils/helpers'; // Adjust path as needed
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { ArrowDownUp, X, RefreshCw, Search, AlertCircle, Plus, Edit2, XCircle, MoreVertical, Download, Upload, Eye } from 'lucide-react';
+import { ArrowDownUp, Search, ChevronLeft, ChevronRight, X, RefreshCw, AlertCircle, Plus, Edit2, XCircle, MoreVertical, Download, Upload, Eye } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
 
@@ -45,7 +45,9 @@ function useDebounce(value, delay) {
 
 function StockPage({ socket }) {
   const [stockItems, setStockItems] = useState([]);
-  const [totalItems, setTotalItems] = useState(0); 
+  const [totalItems, setTotalItems] = useState(0);
+  const [page, setPage] = useState(0);
+  const [itemsPerPage] = useState(10); // Same as StoreStockPage
   const [searchInput, setSearchInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -74,6 +76,44 @@ function StockPage({ socket }) {
   const fileInputRef = useRef(null);
   const debouncedSearch = useDebounce(searchInput, 300);
 
+  // Fetch Stock Function
+  const fetchStock = useCallback(async (currentPage, itemsPerPage) => {
+    setIsLoading(true);
+    setError(null);
+    const controller = new AbortController();
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${BASE_URL}/api/stock?limit=${itemsPerPage}&offset=${currentPage * itemsPerPage}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch stock data');
+      }
+      const { data, total } = await response.json();
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid data format');
+      }
+      setStockItems(data);
+      setTotalItems(total || 0);
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        setError(err.message);
+        toast.error(err.message || 'Network error', { autoClose: 3000 });
+        setStockItems([]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+
+    return () => controller.abort();
+  }, []);
+
   // Socket Connection Management
   useEffect(() => {
     if (!socket) return;
@@ -84,7 +124,7 @@ function StockPage({ socket }) {
 
     socket.on('connect', () => {
       toast.success('Connected to real-time updates!', { autoClose: 2000 });
-    }); 
+    });
 
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
@@ -97,7 +137,7 @@ function StockPage({ socket }) {
 
     socket.on('reconnect', () => {
       toast.success('Real-time connection restored!', { autoClose: 2000 });
-      fetchStock();
+      fetchStock(page, itemsPerPage);
     });
 
     socket.on('reconnect_attempt', handleReconnect);
@@ -111,7 +151,7 @@ function StockPage({ socket }) {
         }
         const itemIndex = prev.findIndex(item => item.productId === product_id);
         if (itemIndex === -1) {
-          fetchStock();
+          fetchStock(page, itemsPerPage);
           return prev;
         }
         const updatedItems = [...prev];
@@ -129,7 +169,18 @@ function StockPage({ socket }) {
       socket.off('reconnect_attempt');
       socket.off('stockUpdate');
     };
-  }, [socket]);
+  }, [socket, page, itemsPerPage]);
+
+  // Initial Fetch
+  useEffect(() => {
+    let mounted = true;
+    fetchStock(page, itemsPerPage).then(cleanup => {
+      if (!mounted) cleanup();
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [fetchStock, page, itemsPerPage]);
 
   // Modal Focus Trap
   useEffect(() => {
@@ -185,53 +236,6 @@ function StockPage({ socket }) {
       generateQRCode(selectedBarcode, selectedProductName, selectedProductDescription, 'qrcode-canvas');
     }
   }, [showBarcodeModal, selectedBarcode, selectedProductName, selectedProductDescription, generateQRCode]);
-
-  const fetchStock = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    const controller = new AbortController();
-
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${BASE_URL}/api/stock`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch stock data');
-      }
-      const { data, total } = await response.json();
-      if (!Array.isArray(data)) {
-        throw new Error('Invalid data format');
-      }
-      setStockItems(data);
-      setTotalItems(total || 0);
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        setError(err.message);
-        toast.error(err.message || 'Network error', { autoClose: 3000 });
-        setStockItems([]);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    fetchStock().then(cleanup => {
-      if (!mounted) cleanup();
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [fetchStock]);
 
   const filteredStock = useMemo(() => {
     if (!Array.isArray(stockItems)) return [];
@@ -367,7 +371,8 @@ function StockPage({ socket }) {
         }
 
         if (createdCount > 0 || updatedCount > 0) {
-          await fetchStock();
+          await fetchStock(0, itemsPerPage);
+          setPage(0); // Reset to first page after import
           toast.success(
             `Imported successfully: ${createdCount} created, ${updatedCount} updated${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
             { autoClose: 5000 }
@@ -382,7 +387,7 @@ function StockPage({ socket }) {
     } catch (err) {
       toast.error(`Import failed: ${err.message}`, { autoClose: 3000 });
     }
-  }, [fetchStock, validateImportRow]);
+  }, [fetchStock, validateImportRow, itemsPerPage]);
 
   const exportToExcel = useCallback(() => {
     const data = filteredStock.map(item => ({
@@ -562,10 +567,12 @@ function StockPage({ socket }) {
       }
       setShowModal(false);
       setFormErrors({});
+      setPage(0); // Reset to first page after create/update
+      await fetchStock(0, itemsPerPage);
     } catch (err) {
       toast.error(err.message || 'Operation failed', { autoClose: 3000 });
     }
-  }, [formData, modalMode, selectedItem]);
+  }, [formData, modalMode, selectedItem, itemsPerPage]);
 
   const ActionsDropdown = ({ item, onEdit, onDelete }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -632,7 +639,7 @@ function StockPage({ socket }) {
           <button
             onClick={() => {
               setError(null);
-              fetchStock();
+              fetchStock(page, itemsPerPage);
             }}
             className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
           >
@@ -684,7 +691,7 @@ function StockPage({ socket }) {
               <Plus size={20} className="mr-2" /> Create Product
             </button>
             <button
-              onClick={fetchStock}
+              onClick={() => fetchStock(page, itemsPerPage)}
               className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg flex items-center"
               disabled={isLoading}
               aria-label="Refresh stock"
@@ -869,6 +876,24 @@ function StockPage({ socket }) {
                     <div className="flex items-center">
                       <div className="w-3 h-3 rounded-full bg-red-500 mr-1.5"></div>
                       <span>Low Stock</span>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => setPage(p => p > 0 ? p - 1 : 0)}
+                        disabled={page === 0}
+                        className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                        aria-label="Previous page"
+                      >
+                        <ChevronLeft size={20} />
+                      </button>
+                      <button
+                        onClick={() => setPage(p => p + 1)}
+                        disabled={(page + 1) * itemsPerPage >= totalItems}
+                        className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                        aria-label="Next page"
+                      >
+                        <ChevronRight size={20} />
+                      </button>
                     </div>
                   </div>
                 </div>

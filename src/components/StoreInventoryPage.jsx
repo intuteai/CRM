@@ -47,6 +47,7 @@ const useFetchInventory = ({ limit, offset }) => {
           product_name: item.product_name,
           product_id: item.product_id,
           created_at: item.created_at,
+          price: item.price !== null ? Number(item.price) : 0, // Normalize price
         }));
         setInventoryItems(normalizedData);
         setTotalItems(total || 0);
@@ -195,10 +196,24 @@ function StoreInventoryPage({ userRole }) {
             const { product_id, ...body } = row;
             const url = product_id ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory/${product_id}` : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory`;
             const method = product_id ? 'PUT' : 'POST';
+            let payload = { ...body, price: 0.01 }; // Default price for POST
+            if (product_id) {
+              // Fetch existing item to get the current price for PUT
+              const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory?limit=1&offset=0&product_id=${product_id}`, {
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                credentials: 'include',
+              });
+              if (response.ok) {
+                const { data } = await response.json();
+                if (data.length > 0) {
+                  payload.price = data[0].price || 0; // Use existing price for PUT
+                }
+              }
+            }
             const response = await fetch(url, {
               method,
               headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify(body),
+              body: JSON.stringify(payload),
               credentials: 'include',
             });
             if (!response.ok) {
@@ -550,7 +565,7 @@ function StoreInventoryPage({ userRole }) {
                   const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify(data),
+                    body: JSON.stringify({ ...data, price: 0.01 }), // Add default price
                     credentials: 'include',
                   });
                   if (!response.ok) {
@@ -588,7 +603,7 @@ function StoreInventoryPage({ userRole }) {
                   const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory/${itemId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify(data),
+                    body: JSON.stringify({ ...data, price: selectedItem.price || 0 }), // Preserve existing price
                     credentials: 'include',
                   });
                   if (!response.ok) {
