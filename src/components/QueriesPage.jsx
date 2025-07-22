@@ -16,14 +16,14 @@ function QueriesPage() {
   const [respondingQuery, setRespondingQuery] = useState(null);
   const [responseText, setResponseText] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [pendingCloseId, setPendingCloseId] = useState(null);
+  const [pendingCloseId, setPendingCloseId] = useState(null); 
   const [isLoading, setIsLoading] = useState(false);
   const [expandedResponses, setExpandedResponses] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
   const tableRef = useRef(null);
 
-  useEffect(() => {
-    const socket = io(BASE_URL, {
+  useEffect(() => { 
+    const socket = io(BASE_URL, { 
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,

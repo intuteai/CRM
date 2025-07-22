@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
-import logo from '/intute-ai_logo.jpeg';
+import React, { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import logo from "/intute-ai_logo.jpeg";
 
 function LoginModal({ setShowLogin, onSubmit }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -13,30 +13,34 @@ function LoginModal({ setShowLogin, onSubmit }) {
     setError(null);
 
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      console.log('VITE_BACKEND_URL in LoginModal:', import.meta.env.VITE_BACKEND_URL);
+      const backendUrl =
+        import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+      console.log(
+        "VITE_BACKEND_URL in LoginModal:",
+        import.meta.env.VITE_BACKEND_URL
+      );
       const res = await fetch(`${backendUrl}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
 
       if (res.ok) {
-        localStorage.setItem('token', data.token);
-        onSubmit(data.role, data.name || email.split('@')[0], data.token);
+        localStorage.setItem("token", data.token);
+        onSubmit(data.role, data.name || email.split("@")[0], data.token);
         setShowLogin(false);
       } else {
         if (res.status === 429) {
-          setError('Too many login attempts. Please wait and try again.');
+          setError("Too many login attempts. Please wait and try again.");
         } else {
-          setError(data.error || 'Login failed');
+          setError(data.error || "Login failed");
         }
       }
     } catch (err) {
-      setError('Network error - please check if the server is running');
-      console.error('Login error:', err);
+      setError("Network error - please check if the server is running");
+      console.error("Login error:", err);
     }
   };
 
@@ -46,7 +50,9 @@ function LoginModal({ setShowLogin, onSubmit }) {
         <div className="flex justify-center mb-6">
           <img src={logo} alt="Intute.ai Logo" className="h-20 w-auto" />
         </div>
-        {error && <p className="text-red-500 text-lg mb-6 text-center">{error}</p>}
+        {error && (
+          <p className="text-red-500 text-lg mb-6 text-center">{error}</p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-6">
           <input
             type="email"
@@ -58,7 +64,7 @@ function LoginModal({ setShowLogin, onSubmit }) {
           />
           <div className="relative">
             <input
-              type={showPassword ? 'text' : 'password'}
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
@@ -69,7 +75,7 @@ function LoginModal({ setShowLogin, onSubmit }) {
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-full p-1"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
@@ -92,4 +98,4 @@ function LoginModal({ setShowLogin, onSubmit }) {
   );
 }
 
-export default LoginModal;
+export default LoginModal; 

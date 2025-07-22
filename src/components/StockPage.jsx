@@ -45,7 +45,7 @@ function useDebounce(value, delay) {
 
 function StockPage({ socket }) {
   const [stockItems, setStockItems] = useState([]);
-  const [totalItems, setTotalItems] = useState(0);
+  const [totalItems, setTotalItems] = useState(0); 
   const [searchInput, setSearchInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -84,7 +84,7 @@ function StockPage({ socket }) {
 
     socket.on('connect', () => {
       toast.success('Connected to real-time updates!', { autoClose: 2000 });
-    });
+    }); 
 
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);

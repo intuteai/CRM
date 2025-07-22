@@ -10,7 +10,6 @@ import 'react-toastify/dist/ReactToastify.css';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
 
-const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 const formatDate = (dateString) => {
   const date = new Date(dateString);
   return `${date.toLocaleDateString('en-IN')} ${date.toLocaleTimeString('en-IN')}`;
@@ -42,7 +41,6 @@ const useFetchInventory = ({ limit, offset }) => {
       if (isMounted) {
         const normalizedData = data.map(item => ({
           ...item,
-          price: item.price !== null ? Number(item.price) : 0,
           stock_quantity: item.stock_quantity || 0,
           description: item.description || '',
           product_code: item.product_code,
@@ -150,8 +148,6 @@ function StoreInventoryPage({ userRole }) {
     if (isNaN(stock_quantity) || stock_quantity < 0 || !Number.isInteger(Number(row['Stock Quantity']))) {
       errors.push(`Row ${index + 1}: Stock Quantity must be a non-negative integer`);
     }
-    const price = parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, ''));
-    if (isNaN(price) || price < 0) errors.push(`Row ${index + 1}: Price must be a non-negative number`);
     return errors;
   }, []);
 
@@ -180,7 +176,6 @@ function StoreInventoryPage({ userRole }) {
               product_name: String(row['Product Name'] || '').trim(),
               product_code: String(row['Product Code'] || '').trim(),
               stock_quantity: parseInt(row['Stock Quantity'] || 0),
-              price: parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, '')),
               description: String(row['Description'] || '').trim() || undefined,
               product_id: row['Product ID'] ? parseInt(row['Product ID']) : undefined,
             });
@@ -239,7 +234,6 @@ function StoreInventoryPage({ userRole }) {
       'Product Name': item.product_name || 'N/A',
       'Description': item.description || 'N/A',
       'Stock Quantity': Number(item.stock_quantity) || 0,
-      'Price (₹)': formatCurrency(Number(item.price)),
       'Created At (IST)': item.created_at ? formatDate(item.created_at) : 'N/A',
     }));
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -267,7 +261,7 @@ function StoreInventoryPage({ userRole }) {
 
   const sortedInventory = filteredInventory.sort((a, b) => {
     let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
-    if (sortConfig.key === 'price' || sortConfig.key === 'stock_quantity' || sortConfig.key === 'product_id') {
+    if (sortConfig.key === 'stock_quantity' || sortConfig.key === 'product_id') {
       aValue = Number(aValue);
       bValue = Number(bValue);
     } else if (sortConfig.key === 'created_at') {
@@ -431,7 +425,6 @@ function StoreInventoryPage({ userRole }) {
                   { key: 'product_name', label: 'Product Name' },
                   { key: 'description', label: 'Description' },
                   { key: 'stock_quantity', label: 'Stock Quantity' },
-                  { key: 'price', label: 'Price' },
                   { key: 'created_at', label: 'Created At (IST)' },
                   { key: 'qrcode', label: 'QR Code' },
                   { key: 'actions', label: 'Actions' },
@@ -475,7 +468,6 @@ function StoreInventoryPage({ userRole }) {
                       {item.stock_quantity}
                     </span>
                   </td>
-                  <td className="py-4 px-3 text-base text-gray-700">{formatCurrency(item.price)}</td>
                   <td className="py-4 px-3 text-base text-gray-700">
                     <div className="flex flex-col">
                       <span>{new Date(item.created_at).toLocaleDateString('en-IN')}</span>
@@ -673,14 +665,12 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: '',
     stock_quantity: 0,
-    price: 0,
     description: '',
     product_code: '',
   });
   const [errors, setErrors] = useState({
     product_name: '',
     stock_quantity: '',
-    price: '',
     description: '',
     product_code: '',
   });
@@ -688,8 +678,8 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
 
   const validateField = (name, value) => {
     if (name === 'product_name' && !value.trim()) return 'Product name is required';
-    if ((name === 'stock_quantity' || name === 'price') && value < 0) {
-      return `${name === 'stock_quantity' ? 'Quantity' : 'Price'} cannot be negative`;
+    if (name === 'stock_quantity' && value < 0) {
+      return 'Quantity cannot be negative';
     }
     if (name === 'product_code' && value.length !== 10) return 'Product code must be exactly 10 characters';
     return '';
@@ -697,7 +687,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    const processedValue = name === 'stock_quantity' ? parseInt(value) || 0 : name === 'price' ? parseFloat(value) || 0 : value;
+    const processedValue = name === 'stock_quantity' ? parseInt(value) || 0 : value;
     setFormData(prev => ({ ...prev, [name]: processedValue }));
     setErrors(prev => ({ ...prev, [name]: validateField(name, processedValue) }));
   };
@@ -706,7 +696,6 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     const fieldErrors = {
       product_name: validateField('product_name', formData.product_name),
       stock_quantity: validateField('stock_quantity', formData.stock_quantity),
-      price: validateField('price', formData.price),
       product_code: validateField('product_code', formData.product_code),
       description: '',
     };
@@ -777,22 +766,6 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
         />
         {errors.stock_quantity && <p className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
       </div>
-      <div>
-        <label htmlFor="create-price" className="text-gray-700 font-medium">Price (₹)</label>
-        <input
-          id="create-price"
-          type="number"
-          name="price"
-          value={formData.price}
-          onChange={handleChange}
-          min="0"
-          step="0.01"
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.price}
-          disabled={isSubmitting}
-        />
-        {errors.price && <p className="text-red-600 text-sm mt-1">{errors.price}</p>}
-      </div>
       <div className="flex justify-end space-x-4">
         <button
           type="button"
@@ -819,14 +792,12 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: item.product_name,
     stock_quantity: item.stock_quantity,
-    price: item.price,
     description: item.description || '',
     product_code: item.product_code,
   });
   const [errors, setErrors] = useState({
     product_name: '',
     stock_quantity: '',
-    price: '',
     description: '',
     product_code: '',
   });
@@ -834,8 +805,8 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
 
   const validateField = (name, value) => {
     if (name === 'product_name' && !value.trim()) return 'Product name is required';
-    if ((name === 'stock_quantity' || name === 'price') && value < 0) {
-      return `${name === 'stock_quantity' ? 'Quantity' : 'Price'} cannot be negative`;
+    if (name === 'stock_quantity' && value < 0) {
+      return 'Quantity cannot be negative';
     }
     if (name === 'product_code' && value.length !== 10) return 'Product code must be exactly 10 characters';
     return '';
@@ -843,7 +814,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    const processedValue = name === 'stock_quantity' ? parseInt(value) || 0 : name === 'price' ? parseFloat(value) || 0 : value;
+    const processedValue = name === 'stock_quantity' ? parseInt(value) || 0 : value;
     setFormData(prev => ({ ...prev, [name]: processedValue }));
     setErrors(prev => ({ ...prev, [name]: validateField(name, processedValue) }));
   };
@@ -852,7 +823,6 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     const fieldErrors = {
       product_name: validateField('product_name', formData.product_name),
       stock_quantity: validateField('stock_quantity', formData.stock_quantity),
-      price: validateField('price', formData.price),
       product_code: validateField('product_code', formData.product_code),
       description: '',
     };
@@ -922,22 +892,6 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           disabled={isSubmitting}
         />
         {errors.stock_quantity && <p className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
-      </div>
-      <div>
-        <label htmlFor="edit-price" className="text-gray-700 font-medium">Price (₹)</label>
-        <input
-          id="edit-price"
-          type="number"
-          name="price"
-          value={formData.price}
-          onChange={handleChange}
-          min="0"
-          step="0.01"
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.price}
-          disabled={isSubmitting}
-        />
-        {errors.price && <p className="text-red-600 text-sm mt-1">{errors.price}</p>}
       </div>
       <div className="flex justify-end space-x-4">
         <button

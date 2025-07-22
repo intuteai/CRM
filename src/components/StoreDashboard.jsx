@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Package, Layers } from 'lucide-react';
 
 function StoreDashboard({ socket }) {
-  useEffect(() => {
+  useEffect(() => { 
     if (socket) {
       socket.on('inventoryUpdate', (data) => {
         console.log('Inventory update:', data);
@@ -13,30 +13,30 @@ function StoreDashboard({ socket }) {
       });
       socket.on('bomUpdate', (data) => {
         console.log('BOM update:', data);
-      });
+      });  
       return () => {
         socket.off('inventoryUpdate');
         socket.off('stockUpdate');
-        socket.off('bomUpdate');
+        socket.off('bomUpdate');                    
       };
     }
-  }, [socket]);
+  }, [socket]); 
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
       <h1 className="text-3xl font-bold text-gray-800 mb-10 text-center tracking-tight">Stores Dashboard</h1>
       <div className="max-w-7xl mx-auto space-y-12">
-        <Section title="Inventory Management">
+        <Section title="Inventory Management"> 
           <DashboardCard to="/inventory" icon={<Package />} title="Inventory" desc="Manage and view stock items" />
           <DashboardCard to="/stock" icon={<Package />} title="Raw Materials" desc="Monitor raw material levels" />
-        </Section>
+        </Section> 
         <Section title="Bill of Materials">
           <DashboardCard to="/bom" icon={<Layers />} title="BOM (Unpriced)" desc="View unpriced Bill of Materials" />
-        </Section>
-      </div>
-    </div>
+        </Section> 
+      </div> 
+    </div> 
   );
-}
+}    
 
 function DashboardCard({ to, icon, title, desc }) {
   return (

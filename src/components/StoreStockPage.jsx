@@ -10,7 +10,6 @@ import 'react-toastify/dist/ReactToastify.css';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
 
-const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 const formatDate = (dateString) => {
   const date = new Date(dateString);
   return `${date.toLocaleDateString('en-IN')} ${date.toLocaleTimeString('en-IN')}`;
@@ -42,7 +41,6 @@ const useFetchStock = ({ limit, offset }) => {
       if (isMounted) {
         const normalizedData = data.map(item => ({
           ...item,
-          price: item.price !== null ? Number(item.price) : 0,
           stockQuantity: item.stockQuantity || 0,
           description: item.description || '',
           productCode: item.productCode,
@@ -81,9 +79,8 @@ function StoreStockPage() {
     productName: '',
     description: '',
     productCode: '',
-    price: '',
     stockQuantity: '',
-    qtyRequired: ''
+    qtyRequired: '' 
   });
   const [formErrors, setFormErrors] = useState({});
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
@@ -152,8 +149,6 @@ function StoreStockPage() {
     if (isNaN(stockQuantity) || stockQuantity < 0 || !Number.isInteger(Number(row['Stock Quantity']))) {
       errors.push(`Row ${index + 1}: Stock Quantity must be a non-negative integer`);
     }
-    const price = parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, ''));
-    if (isNaN(price) || price < 0) errors.push(`Row ${index + 1}: Price must be a non-negative number`);
     return errors;
   }, []);
 
@@ -182,7 +177,6 @@ function StoreStockPage() {
               productName: String(row['Product Name'] || '').trim(),
               productCode: String(row['Product Code'] || '').trim(),
               stockQuantity: parseInt(row['Stock Quantity'] || 0),
-              price: parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, '')),
               description: String(row['Description'] || '').trim() || undefined,
               qtyRequired: parseInt(row['Qty Required'] || 0),
               productId: row['Product ID'] ? parseInt(row['Product ID']) : undefined,
@@ -243,18 +237,17 @@ function StoreStockPage() {
       'Description': item.description || 'N/A',
       'Stock Quantity': Number(item.stockQuantity) || 0,
       'Qty Required': Number(item.qtyRequired) || 0,
-      'Price (₹)': formatCurrency(Number(item.price)),
       'Created At (IST)': item.createdAt ? formatDate(item.createdAt) : 'N/A',
     }));
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Raw Materials');
-    const colWidths = data.reduce((acc, row) => {
+    const colWidths = data.reduce((accumulator, row) => {
       Object.keys(row).forEach((key, idx) => {
         const value = String(row[key]).replace(/<[^>]*>/g, '');
-        acc[idx] = Math.max(acc[idx] || 10, value.length + 2);
+        accumulator[idx] = Math.max(accumulator[idx] || 10, value.length + 2);
       });
-      return acc;
+      return accumulator;
     }, []);
     worksheet['!cols'] = colWidths.map(width => ({ wch: width }));
     XLSX.writeFile(workbook, 'Raw_Material_Inventory.xlsx');
@@ -271,7 +264,7 @@ function StoreStockPage() {
 
   const sortedStock = filteredStock.sort((a, b) => {
     let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
-    if (sortConfig.key === 'price' || sortConfig.key === 'stockQuantity' || sortConfig.key === 'qtyRequired' || sortConfig.key === 'productId') {
+    if (sortConfig.key === 'stockQuantity' || sortConfig.key === 'qtyRequired' || sortConfig.key === 'productId') {
       aValue = Number(aValue);
       bValue = Number(bValue);
     } else if (sortConfig.key === 'createdAt') {
@@ -340,8 +333,6 @@ function StoreStockPage() {
     const errors = {};
     if (!formData.productName.trim()) errors.productName = 'Product name is required';
     if (!formData.productCode.trim() || formData.productCode.length !== 10) errors.productCode = 'Product code must be exactly 10 characters';
-    const price = parseFloat(formData.price);
-    if (isNaN(price) || price < 0) errors.price = 'Price must be a positive number';
     const stockQuantity = parseFloat(formData.stockQuantity);
     if ((modalMode === 'create' || modalMode === 'edit') && (isNaN(stockQuantity) || stockQuantity < 0)) {
       errors.stockQuantity = 'Stock quantity must be a non-negative number';
@@ -362,14 +353,12 @@ function StoreStockPage() {
       const token = localStorage.getItem('token');
       const url = modalMode === 'create' ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/stock` : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/stock/${selectedItem.productId}`;
       const method = modalMode === 'create' ? 'POST' : 'PUT';
-      const price = parseFloat(formData.price);
       const stockQuantity = parseFloat(formData.stockQuantity);
       const qtyRequired = parseInt(formData.qtyRequired) || 0;
       const body = {
         productName: formData.productName,
         description: formData.description,
         productCode: formData.productCode,
-        price,
         stockQuantity: modalMode === 'edit' ? stockQuantity : undefined,
         qtyRequired
       };
@@ -385,7 +374,7 @@ function StoreStockPage() {
         const errorData = await response.json();
         throw new Error(errorData.error || `${modalMode === 'create' ? 'Create' : 'Update'} failed`);
       }
-      await refetchData(); // Sync local state with server
+      await refetchData();
       toast.success(`Product ${modalMode === 'create' ? 'created' : 'updated'}`, { autoClose: 2000 });
       setShowModal(false);
       setFormErrors({});
@@ -403,7 +392,6 @@ function StoreStockPage() {
       productName: '',
       description: '',
       productCode: '',
-      price: '',
       stockQuantity: '',
       qtyRequired: ''
     });
@@ -418,7 +406,6 @@ function StoreStockPage() {
       productName: item.productName || '',
       description: item.description || '',
       productCode: item.productCode || '',
-      price: item.price || '',
       stockQuantity: item.stockQuantity || '',
       qtyRequired: item.qtyRequired || ''
     });
@@ -547,7 +534,6 @@ function StoreStockPage() {
                   { key: 'description', label: 'Description' },
                   { key: 'stockQuantity', label: 'Stock Quantity' },
                   { key: 'qtyRequired', label: 'Qty Required' },
-                  { key: 'price', label: 'Price' },
                   { key: 'createdAt', label: 'Created At (IST)' },
                   { key: 'qrcode', label: 'QR Code' },
                   { key: 'actions', label: 'Actions' },
@@ -592,7 +578,6 @@ function StoreStockPage() {
                     </span>
                   </td>
                   <td className="py-4 px-3 text-base text-gray-700">{item.qtyRequired}</td>
-                  <td className="py-4 px-3 text-base text-gray-700">{formatCurrency(item.price)}</td>
                   <td className="py-4 px-3 text-base text-gray-700">
                     <div className="flex flex-col">
                       <span>{new Date(item.createdAt).toLocaleDateString('en-IN')}</span>
@@ -738,22 +723,6 @@ function StoreStockPage() {
                     onChange={(e) => setFormData({ ...formData, qtyRequired: e.target.value })}
                     className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
                   />
-                </div>
-                <div>
-                  <label htmlFor="price" className="block text-gray-700 font-medium mb-2">Price (₹)</label>
-                  <input
-                    id="price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    className={`w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300 ${formErrors.price ? 'border-red-500' : ''}`}
-                    required
-                    aria-invalid={!!formErrors.price}
-                    aria-describedby={formErrors.price ? 'price-error' : undefined}
-                  />
-                  {formErrors.price && <p id="price-error" className="text-red-500 text-sm mt-1">{formErrors.price}</p>}
                 </div>
                 <div className="flex justify-end gap-4 mt-6">
                   <button
