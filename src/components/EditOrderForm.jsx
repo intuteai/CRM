@@ -160,7 +160,7 @@ function EditOrderForm({ order, availableProducts, onClose, onSubmit, validateOr
                 />
                 <input
                   type="number"
-                  placeholder="Price"
+                  placeholder="Price per Item"
                   value={item.price}
                   onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
                   className="w-1/4 p-3 border rounded-lg"
