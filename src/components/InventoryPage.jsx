@@ -738,7 +738,7 @@ function InventoryPage({ userRole }) {
         </div>
       )}
 
-      {showBarcodeModal && (
+      {/* {showBarcodeModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="qrcode-modal-title">
             <button
@@ -769,7 +769,57 @@ function InventoryPage({ userRole }) {
             </button>
           </div>
         </div>
-      )}
+      )} */}
+      {showBarcodeModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 overflow-auto">
+          <div
+      className="bg-white p-6 rounded-2xl shadow-xl w-[90%] max-w-[500px] max-h-[90vh] relative flex flex-col"
+      role="dialog"
+      aria-labelledby="qrcode-modal-title"
+          >
+      <button
+        onClick={() => setShowBarcodeModal(false)}
+        className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+        aria-label="Close QR code modal"
+      >
+        <XCircle size={24} aria-hidden="true" />
+      </button>
+
+      <h2 id="qrcode-modal-title" className="text-2xl font-bold mb-4">QR Code for {selectedProductName}</h2>
+
+      {/* Scrollable content area */}
+      <div className="flex flex-col max-h-[70vh] overflow-y-auto pr-2">
+        <div className="mb-4">
+          <p className="text-gray-700"><strong>Product Code:</strong> {selectedBarcode}</p>
+          <p className="text-gray-700 whitespace-pre-wrap"><strong>Description:</strong> {selectedProductDescription}</p>
+        </div>
+        <canvas
+          id="qrcode-canvas"
+          className="w-full max-w-[200px] mx-auto mb-4"
+          aria-label={`QR code for ${selectedProductName}`}
+        ></canvas>
+      </div>
+
+      {/* Fixed Download Button */}
+      <div className="mt-4">
+        <button
+          onClick={() => {
+            const canvas = document.getElementById('qrcode-canvas');
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL('image/png');
+            link.download = `qrcode_${selectedBarcode}.png`;
+            link.click();
+            toast.success('QR code downloaded successfully', { autoClose: 2000 });
+          }}
+          className="w-full p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center justify-center"
+        >
+          <Download className="mr-2" aria-hidden="true" /> Download QR Code
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </div>
