@@ -2,12 +2,27 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { formatDate } from '../utils/helpers';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { ArrowDownUp, X, RefreshCw, Search, AlertCircle, Edit, Save, XCircle } from 'lucide-react';
+import { ArrowDownUp, X, RefreshCw, Search, AlertCircle, Edit, Save, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
+
+// Debounce Hook
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 function PriceListPage({ socket }) {
   const [priceItems, setPriceItems] = useState([]);
@@ -18,20 +33,24 @@ function PriceListPage({ socket }) {
   const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
   const [editingItem, setEditingItem] = useState(null);
   const [editPrice, setEditPrice] = useState('');
+  const [page, setPage] = useState(0);
+  const [limit] = useState(10); // Match PartDrawingsPage
   const tableRef = useRef(null);
   const searchInputRef = useRef(null);
+  const debouncedSearch = useDebounce(searchTerm, 300);
 
   const fetchPriceList = useCallback(
-    async (forceRefresh = false) => {
+    async (currentPage, search = '', forceRefresh = false) => {
       setIsLoading(true);
       setError(null);
       try {
         const token = localStorage.getItem('token');
         if (!token) throw new Error('Authentication token missing.');
         const url = new URL(`${BASE_URL}/api/price-list`);
-        if (forceRefresh) {
-          url.searchParams.append('force_refresh', 'true');
-        }
+        url.searchParams.append('limit', limit);
+        url.searchParams.append('offset', currentPage * limit);
+        if (search) url.searchParams.append('search', encodeURIComponent(search));
+        if (forceRefresh) url.searchParams.append('force_refresh', 'true');
 
         const response = await fetch(url, {
           headers: {
@@ -42,15 +61,15 @@ function PriceListPage({ socket }) {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch price list data');
+          throw new Error(errorData.error || `Server responded with status: ${response.status}`);
         }
 
         const responseData = await response.json();
-        if (!Array.isArray(responseData)) {
-          throw new Error('Invalid data format: response must be an array');
+        if (!Array.isArray(responseData.priceItems) || typeof responseData.total !== 'number') {
+          throw new Error('Invalid data format: Expected { priceItems: array, total: number }');
         }
 
-        const normalizedData = responseData.map((item) => ({
+        const normalizedData = responseData.priceItems.map((item) => ({
           ...item,
           price: item.price !== null ? Number(item.price) : 0,
           productName: item.productName || 'N/A',
@@ -58,19 +77,27 @@ function PriceListPage({ socket }) {
         }));
 
         setPriceItems(normalizedData);
-        setTotalItems(normalizedData.length || 0);
+        setTotalItems(responseData.total);
         setEditingItem(null);
       } catch (err) {
         console.error('Error fetching price list:', err);
-        setError(err.message);
+        setError(err.message || 'Network error');
         toast.error(err.message || 'Network error', { autoClose: 3000 });
         setPriceItems([]);
       } finally {
         setIsLoading(false);
       }
     },
-    []
+    [limit]
   );
+
+  useEffect(() => {
+    fetchPriceList(page, debouncedSearch);
+  }, [fetchPriceList, page, debouncedSearch]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     if (!socket) return;
@@ -87,19 +114,17 @@ function PriceListPage({ socket }) {
 
     socket.on('priceListUpdate', () => {
       console.log('Price list update received');
-      fetchPriceList();
+      fetchPriceList(page, debouncedSearch);
       toast.info('Price list updated', { autoClose: 2000 });
       if (tableRef.current) tableRef.current.focus();
     });
-
-    fetchPriceList();
 
     return () => {
       socket.off('connect');
       socket.off('connect_error');
       socket.off('priceListUpdate');
     };
-  }, [socket, fetchPriceList]);
+  }, [socket, fetchPriceList, page, debouncedSearch]);
 
   const handleEditClick = useCallback((item) => {
     setEditingItem(item.priceId);
@@ -155,9 +180,22 @@ function PriceListPage({ socket }) {
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
       setSearchTerm('');
+      setPage(0);
       searchInputRef.current?.focus();
     }
   }, []);
+
+  const handlePrevPage = useCallback(() => {
+    if (page > 0) {
+      setPage((prev) => prev - 1);
+    }
+  }, [page]);
+
+  const handleNextPage = useCallback(() => {
+    if ((page + 1) * limit < totalItems && !isLoading) {
+      setPage((prev) => prev + 1);
+    }
+  }, [totalItems, limit, isLoading]);
 
   const sortedPriceItems = useMemo(() => {
     const sortableItems = [...priceItems];
@@ -191,10 +229,10 @@ function PriceListPage({ socket }) {
     return sortedPriceItems.filter((item) => {
       const priceId = String(item.priceId || '');
       const productName = (item.productName || '').toLowerCase();
-      const searchTermLower = searchTerm.toLowerCase();
+      const searchTermLower = debouncedSearch.toLowerCase();
       return priceId.includes(searchTermLower) || productName.includes(searchTermLower);
     });
-  }, [sortedPriceItems, searchTerm]);
+  }, [sortedPriceItems, debouncedSearch]);
 
   if (isLoading && !priceItems.length) {
     return (
@@ -217,7 +255,7 @@ function PriceListPage({ socket }) {
           <AlertCircle size={24} />
           {error}
           <button
-            onClick={() => fetchPriceList(true)}
+            onClick={() => fetchPriceList(0, '', true)}
             className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
           >
             Retry
@@ -262,7 +300,7 @@ function PriceListPage({ socket }) {
             )}
           </div>
           <button
-            onClick={() => fetchPriceList(true)}
+            onClick={() => fetchPriceList(0, '', true)}
             className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg flex items-center disabled:opacity-50"
             disabled={isLoading}
             aria-label="Refresh price list"
@@ -430,14 +468,31 @@ function PriceListPage({ socket }) {
                 })}
               </tbody>
             </table>
-          </div>
-        )}
-
-        {totalItems > 0 && (
-          <div className="flex justify-between items-center p-4 bg-gray-50">
-            <div className="text-gray-600">
-              Showing {filteredPriceItems.length} of {totalItems} price items
-            </div>
+            {totalItems > 0 && (
+              <div className="flex justify-between items-center p-4 bg-gray-50">
+                <div className="text-gray-600">
+                  Showing {(page * limit) + 1}–{Math.min((page + 1) * limit, totalItems)} of {totalItems} price items
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handlePrevPage}
+                    disabled={page === 0}
+                    className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button
+                    onClick={handleNextPage}
+                    disabled={(page + 1) * limit >= totalItems || isLoading}
+                    className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    aria-label="Next page"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
