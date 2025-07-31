@@ -2,20 +2,18 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { formatDate as importedFormatDate } from '../utils/helpers';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle } from 'lucide-react';
+import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle, X } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
-// Fallback formatDate function in case the imported one is not available
+// Fallback formatDate function
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
-  
   if (typeof importedFormatDate === 'function') {
     return importedFormatDate(dateString);
   }
-  
   try {
     const date = new Date(dateString);
     return date.toLocaleDateString();
@@ -35,11 +33,43 @@ const formatINR = (value) => {
   }).format(value);
 };
 
+// Debounce Hook
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
+
+// Throttle function to limit fetch frequency
+function throttle(func, limit) {
+  let lastFunc;
+  let lastRan;
+  return function (...args) {
+    if (!lastRan) {
+      func(...args);
+      lastRan = Date.now();
+    } else {
+      clearTimeout(lastFunc);
+      lastFunc = setTimeout(() => {
+        if (Date.now() - lastRan >= limit) {
+          func(...args);
+          lastRan = Date.now();
+        }
+      }, limit - (Date.now() - lastRan));
+    }
+  };
+}
+
 function CustomerInvoicesPage({ socket: providedSocket }) {
   const [invoices, setInvoices] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -55,8 +85,9 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
   const [limit] = useState(10);
   const tableRef = useRef(null);
   const searchInputRef = useRef(null);
-  const hasFetched = useRef(false);
   const isFetching = useRef(false);
+
+  const debouncedSearch = useDebounce(searchTerm, 300);
 
   const socket = useMemo(
     () =>
@@ -70,78 +101,77 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
     [providedSocket]
   );
 
-  const fetchInvoices = useCallback(async () => {
-    if (isFetching.current) return;
-    
-    isFetching.current = true;
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const token = localStorage.getItem('token');
-      const url = cursor
-        ? `${BASE_URL}/api/customer-invoices?limit=${limit}&cursor=${encodeURIComponent(cursor)}&force_refresh=true`
-        : `${BASE_URL}/api/customer-invoices?limit=${limit}&force_refresh=true`;
-      
-      console.log('Fetching invoices from:', url);
-      
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Server responded with status: ${response.status}`);
+  const fetchInvoices = useCallback(
+    async (currentCursor, search = '') => {
+      if (isFetching.current) {
+        console.log('Skipping fetch: already fetching', { currentCursor, search });
+        return;
       }
+      isFetching.current = true;
+      setIsLoading(true);
+      setError(null);
 
-      const responseData = await response.json();
-      console.log('Fetched response:', responseData);
-      
-      if (!responseData.data || !Array.isArray(responseData.data)) {
-        throw new Error('Invalid data format');
-      }
-      
-      if (responseData.data.length > 0 || cursor === null) {
+      try {
+        const token = localStorage.getItem('token');
+        const url = currentCursor
+          ? `${BASE_URL}/api/customer-invoices?limit=${limit}&cursor=${encodeURIComponent(currentCursor)}&force_refresh=true&search=${encodeURIComponent(search)}`
+          : `${BASE_URL}/api/customer-invoices?limit=${limit}&force_refresh=true&search=${encodeURIComponent(search)}`;
+
+        console.log('Fetching invoices from:', url);
+
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          let errorMessage = errorText || `Server responded with status: ${response.status}`;
+          try {
+            const errorData = JSON.parse(errorText);
+            if (errorData.code === 'RATE_LIMIT_EXCEEDED') {
+              errorMessage = 'Too many requests. Please wait a moment and try again.';
+            }
+          } catch (e) {
+            // Not JSON, use raw errorText
+          }
+          throw new Error(errorMessage);
+        }
+
+        const responseData = await response.json();
+        console.log('Fetched response:', responseData);
+
+        if (!responseData.data || !Array.isArray(responseData.data)) {
+          throw new Error('Invalid data format');
+        }
+
         setInvoices(responseData.data);
         setTotalItems(responseData.total || 0);
-        
-        if (responseData.cursor && responseData.cursor !== cursor) {
-          if (cursor !== null) {
-            setCursorStack(prev => [...prev, cursor]);
-          }
-          setCursor(responseData.cursor);
-        } else if (!responseData.cursor && responseData.data.length === 0) {
-          if (cursorStack.length > 0) {
-          } else {
-            setCursor(null);
-          }
-        }
-      } else if (responseData.data.length === 0 && cursor !== null) {
-        if (cursorStack.length > 0) {
-          const previousCursor = cursorStack[cursorStack.length - 1];
-          setCursorStack(prev => prev.slice(0, -1));
-          setCursor(previousCursor);
-        } else {
-          setCursor(null);
-        }
+        setCursor(responseData.data.length > 0 && responseData.cursor ? responseData.cursor : null);
+      } catch (err) {
+        console.error('Error fetching invoices:', err);
+        const errorMessage = err.message || 'Network error. Please try again later.';
+        setError(errorMessage);
+        toast.error(errorMessage, { autoClose: 5000 });
+      } finally {
+        setIsLoading(false);
+        isFetching.current = false;
       }
-    } catch (err) {
-      console.error('Error fetching invoices:', err);
-      const errorMessage = err.message || 'Network error. Please try again later.';
-      setError(errorMessage);
-      toast.error(errorMessage, { autoClose: 3000 });
-    } finally {
-      setIsLoading(false);
-      isFetching.current = false;
-    }
-  }, [cursor, limit, cursorStack]);
+    },
+    [limit]
+  );
+
+  const throttledFetchInvoices = useMemo(
+    () => throttle(fetchInvoices, 1000),
+    [fetchInvoices]
+  );
+
+  // Initial fetch and search
+  useEffect(() => {
+    console.log('Running fetch effect', { searchTerm, debouncedSearch });
+    throttledFetchInvoices(null, debouncedSearch);
+  }, [throttledFetchInvoices, debouncedSearch]);
 
   useEffect(() => {
-    if (!hasFetched.current) {
-      fetchInvoices();
-      hasFetched.current = true;
-    }
-
     const handleConnect = () => {
       console.log('Connected to Socket.IO in CustomerInvoicesPage');
       toast.success('Connected to real-time updates!', { autoClose: 2000 });
@@ -150,6 +180,11 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
     const handleConnectError = (err) => {
       console.error('Socket connection error:', err);
       toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+    };
+
+    const handleDisconnect = () => {
+      console.log('Socket.IO disconnected from App');
+      toast.warn('Disconnected from real-time updates. Attempting to reconnect...', { autoClose: 3000 });
     };
 
     const handleInvoiceUpdate = ({ invoice_id, invoice_number, total_value, issue_date, status }) => {
@@ -188,15 +223,17 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
 
     socket.on('connect', handleConnect);
     socket.on('connect_error', handleConnectError);
+    socket.on('disconnect', handleDisconnect);
     socket.on('invoiceUpdate', handleInvoiceUpdate);
 
     return () => {
       socket.off('connect', handleConnect);
       socket.off('connect_error', handleConnectError);
+      socket.off('disconnect', handleDisconnect);
       socket.off('invoiceUpdate', handleInvoiceUpdate);
       if (!providedSocket) socket.disconnect();
     };
-  }, [fetchInvoices, socket, providedSocket]);
+  }, [socket, providedSocket]);
 
   const handleSort = useCallback((key) => {
     setSortConfig((prev) => ({
@@ -208,6 +245,8 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
       setSearchTerm('');
+      setCursor(null);
+      setCursorStack([]);
       searchInputRef.current?.focus();
     }
   }, []);
@@ -228,16 +267,15 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
       ];
 
       return searchFields.some((field) =>
-        field.toLowerCase().includes(searchTerm.toLowerCase())
+        field.toLowerCase().includes((debouncedSearch || '').toLowerCase())
       );
     });
-  }, [invoices, searchTerm]);
+  }, [invoices, debouncedSearch]);
 
   const sortedInvoices = useMemo(() => {
     if (!filteredInvoices.length) return [];
 
     const sortableInvoices = [...filteredInvoices];
-
     return sortableInvoices.sort((a, b) => {
       const valueA = a[sortConfig.key] ?? '';
       const valueB = b[sortConfig.key] ?? '';
@@ -290,7 +328,16 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(errorText || `Update failed with status: ${response.status}`);
+          let errorMessage = errorText || `Update failed with status: ${response.status}`;
+          try {
+            const errorData = JSON.parse(errorText);
+            if (errorData.code === 'RATE_LIMIT_EXCEEDED') {
+              errorMessage = 'Too many requests. Please wait a moment and try again.';
+            }
+          } catch (e) {
+            // Not JSON, use raw errorText
+          }
+          throw new Error(errorMessage);
         }
 
         const updatedInvoice = await response.json();
@@ -354,33 +401,36 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
   );
 
   const handlePrevPage = useCallback(() => {
+    console.log('Previous page clicked', { cursor, cursorStack });
     if (cursorStack.length > 0) {
-      const previousCursor = cursorStack.pop();
-      setCursorStack([...cursorStack]);
+      const previousCursor = cursorStack[cursorStack.length - 1];
+      setCursorStack((prev) => prev.slice(0, -1));
       setCursor(previousCursor);
-    } else {
+      throttledFetchInvoices(previousCursor, debouncedSearch);
+    } else if (cursor !== null) {
       setCursor(null);
+      setCursorStack([]);
+      throttledFetchInvoices(null, debouncedSearch);
     }
-  }, [cursorStack]);
+  }, [cursorStack, cursor, throttledFetchInvoices, debouncedSearch]);
 
   const handleNextPage = useCallback(() => {
-    if (invoices.length > 0 && !isLoading) {
-      const lastInvoice = invoices[invoices.length - 1];
-      if (lastInvoice && lastInvoice.issue_date) {
-        if (cursor !== null) {
-          setCursorStack(prev => [...prev, cursor]);
-        }
-        setCursor(lastInvoice.issue_date);
-      }
+    console.log('Next page clicked', { cursor, cursorStack });
+    if (invoices.length > 0 && !isLoading && cursor !== null) {
+      const nextCursor = invoices[invoices.length - 1].issue_date;
+      setCursorStack((prev) => [...prev, cursor]);
+      setCursor(nextCursor);
+      throttledFetchInvoices(nextCursor, debouncedSearch);
     }
-  }, [invoices, cursor, isLoading]);
+  }, [invoices, cursor, isLoading, throttledFetchInvoices, debouncedSearch]);
 
   const handleRefresh = useCallback(() => {
+    console.log('Refresh clicked');
+    setSearchTerm('');
     setCursor(null);
     setCursorStack([]);
-    hasFetched.current = false;
-    fetchInvoices();
-  }, [fetchInvoices]);
+    throttledFetchInvoices(null, '');
+  }, [throttledFetchInvoices]);
 
   if (isLoading && !invoices.length) {
     return (
@@ -402,13 +452,7 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
         <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg flex flex-col items-center">
           <p className="mb-4">{error}</p>
           <button
-            onClick={() => {
-              setError(null);
-              hasFetched.current = false;
-              setCursor(null);
-              setCursorStack([]);
-              fetchInvoices();
-            }}
+            onClick={handleRefresh}
             className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
           >
             Retry
@@ -457,13 +501,23 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
               className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
             />
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                aria-label="Clear search"
+              >
+                <X size={20} />
+              </button>
+            )}
           </div>
           <button
             onClick={handleRefresh}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
+            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg flex items-center"
             disabled={isLoading}
             aria-label="Refresh invoices"
           >
+            <RefreshCw size={20} className="mr-2" />
             {isLoading && invoices.length > 0 ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
@@ -580,7 +634,7 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600">
-                Showing {sortedInvoices.length} of {totalItems} invoices
+                Showing {invoices.length} of {totalItems} invoices
               </div>
               <div className="flex space-x-2">
                 <button
@@ -593,7 +647,7 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
                 </button>
                 <button
                   onClick={handleNextPage}
-                  disabled={invoices.length < limit || isLoading}
+                  disabled={invoices.length < limit || isLoading || cursor === null}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Next page"
                 >
@@ -700,7 +754,7 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
 
       <ToastContainer
         position="top-right"
-        autoClose={3000}
+        autoClose={5000}
         hideProgressBar={false}
         closeOnClick
         pauseOnHover
