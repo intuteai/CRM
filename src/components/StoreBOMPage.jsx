@@ -45,6 +45,18 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
   const hasFetched = useRef(false);
   const isFetching = useRef(false);
 
+  // Autocomplete state
+  const [productQuery, setProductQuery] = useState('');
+  const [filteredProducts, setFilteredProducts] = useState([]);
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+
+  // Material autocomplete state
+  const [materialQueries, setMaterialQueries] = useState({});
+  const [filteredMaterials, setFilteredMaterials] = useState({});
+  const [isMaterialDropdownOpen, setIsMaterialDropdownOpen] = useState({});
+  const [selectedMaterialIndices, setSelectedMaterialIndices] = useState({});
+
   const socket = useMemo(
     () =>
       providedSocket ||
@@ -99,7 +111,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
     try {
       const token = localStorage.getItem('token');
 
-      const productResponse = await fetch(`${BASE_URL}/api/inventory`, {
+      const productResponse = await fetch(`${BASE_URL}/api/inventory?limit=1000`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       if (!productResponse.ok) {
@@ -107,15 +119,17 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         throw new Error(`Failed to fetch products: ${errorText || productResponse.status}`);
       }
       const productData = await productResponse.json();
+      console.log('Raw product data from /api/inventory:', productData); // Debug log
       const normalizedProducts = Array.isArray(productData.data || productData)
         ? (productData.data || productData).map(p => ({
-          productId: p.productId || p.product_id,
-          productName: p.productName || p.product_name || 'Unnamed Product'
-        }))
+            productId: p.productId || p.product_id,
+            productName: p.productName || p.product_name || 'Unnamed Product'
+          }))
         : [];
+      console.log('Normalized products:', normalizedProducts); // Debug log
       setProducts(normalizedProducts);
 
-      const materialResponse = await fetch(`${BASE_URL}/api/stock`, {
+      const materialResponse = await fetch(`${BASE_URL}/api/stock?limit=1000`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       if (!materialResponse.ok) {
@@ -123,12 +137,14 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         throw new Error(`Failed to fetch materials: ${errorText || materialResponse.status}`);
       }
       const materialData = await materialResponse.json();
+      console.log('Raw material data from /api/stock:', materialData); // Debug log
       const normalizedMaterials = Array.isArray(materialData.data || materialData)
         ? (materialData.data || materialData).map(m => ({
-          productId: m.productId || m.product_id,
-          productName: m.productName || m.product_name || 'Unnamed Material'
-        }))
+            productId: m.productId || m.product_id,
+            productName: m.productName || m.product_name || 'Unnamed Material'
+          }))
         : [];
+      console.log('Normalized materials:', normalizedMaterials); // Debug log
       setMaterials(normalizedMaterials);
 
       setIsDataLoaded(true);
@@ -260,6 +276,14 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       productId: '',
       materials: [{ materialId: '', quantityPerUnit: '' }],
     });
+    setProductQuery('');
+    setFilteredProducts([]);
+    setIsProductDropdownOpen(false);
+    setSelectedIndex(-1);
+    setMaterialQueries({});
+    setFilteredMaterials({});
+    setIsMaterialDropdownOpen({});
+    setSelectedMaterialIndices({});
     setShowModal(true);
   }, [isDataLoaded]);
 
@@ -273,14 +297,31 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         quantityPerUnit: m.quantityPerUnit || '',
       })),
     });
+    setProductQuery(products.find(p => p.productId === bom.productId)?.productName || '');
+    setFilteredProducts([]);
+    setIsProductDropdownOpen(false);
+    setSelectedIndex(-1);
+    setMaterialQueries(
+      bom.materials.reduce((acc, m, idx) => ({
+        ...acc,
+        [idx]: materials.find(mat => mat.productId === m.materialId)?.productName || ''
+      }), {})
+    );
+    setFilteredMaterials({});
+    setIsMaterialDropdownOpen({});
+    setSelectedMaterialIndices({});
     setShowModal(true);
-  }, []);
+  }, [products, materials]);
 
   const handleAddMaterial = useCallback(() => {
     setFormData((prev) => ({
       ...prev,
       materials: [...prev.materials, { materialId: '', quantityPerUnit: '' }],
     }));
+    setMaterialQueries(prev => ({ ...prev, [prev.materials.length]: '' }));
+    setFilteredMaterials(prev => ({ ...prev, [prev.materials.length]: [] }));
+    setIsMaterialDropdownOpen(prev => ({ ...prev, [prev.materials.length]: false }));
+    setSelectedMaterialIndices(prev => ({ ...prev, [prev.materials.length]: -1 }));
   }, []);
 
   const handleRemoveMaterial = useCallback((index) => {
@@ -288,6 +329,26 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       ...prev,
       materials: prev.materials.filter((_, i) => i !== index),
     }));
+    setMaterialQueries(prev => {
+      const newQueries = { ...prev };
+      delete newQueries[index];
+      return newQueries;
+    });
+    setFilteredMaterials(prev => {
+      const newMaterials = { ...prev };
+      delete newMaterials[index];
+      return newMaterials;
+    });
+    setIsMaterialDropdownOpen(prev => {
+      const newOpen = { ...prev };
+      delete newOpen[index];
+      return newOpen;
+    });
+    setSelectedMaterialIndices(prev => {
+      const newIndices = { ...prev };
+      delete newIndices[index];
+      return newIndices;
+    });
   }, []);
 
   const handleMaterialChange = useCallback((index, field, value) => {
@@ -408,6 +469,127 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
     hasFetched.current = false;
     fetchBoms();
   }, [fetchBoms]);
+
+  // Autocomplete handlers
+  const handleProductSelect = useCallback((product) => {
+    setFormData(prev => ({ ...prev, productId: product.productId }));
+    setProductQuery(product.productName);
+    setFilteredProducts([]);
+    setIsProductDropdownOpen(false);
+    setSelectedIndex(-1);
+  }, []);
+
+  const handleProductInputChange = useCallback((e) => {
+    const query = e.target.value;
+    setProductQuery(query);
+    setIsProductDropdownOpen(true);
+    setSelectedIndex(-1);
+
+    if (query) {
+      const filtered = products.filter(p =>
+        p.productName.toLowerCase().includes(query.toLowerCase()) ||
+        String(p.productId).includes(query.toLowerCase())
+      );
+      setFilteredProducts(filtered.length > 0 ? filtered : [{ productId: null, productName: 'No matches found' }]);
+    } else {
+      setFilteredProducts([]);
+    }
+  }, [products]);
+
+  const handleProductKeyDown = useCallback((e) => {
+    if (!isProductDropdownOpen || filteredProducts.length === 0) return;
+
+    switch (e.key) {
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedIndex(prev => (prev > 0 ? prev - 1 : filteredProducts.length - 1));
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedIndex(prev => (prev < filteredProducts.length - 1 ? prev + 1 : 0));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedIndex >= 0 && filteredProducts[selectedIndex].productId !== null) {
+          handleProductSelect(filteredProducts[selectedIndex]);
+        }
+        break;
+      case 'Escape':
+        setIsProductDropdownOpen(false);
+        break;
+      default:
+        break;
+    }
+  }, [isProductDropdownOpen, filteredProducts, selectedIndex, handleProductSelect]);
+
+  const handleMaterialSelect = useCallback((index, material) => {
+    if (material.productId !== null) {
+      setFormData(prev => {
+        const newMaterials = [...prev.materials];
+        newMaterials[index] = { ...newMaterials[index], materialId: material.productId };
+        return { ...prev, materials: newMaterials };
+      });
+      setMaterialQueries(prev => ({ ...prev, [index]: material.productName }));
+      setFilteredMaterials(prev => ({ ...prev, [index]: [] }));
+      setIsMaterialDropdownOpen(prev => ({ ...prev, [index]: false }));
+      setSelectedMaterialIndices(prev => ({ ...prev, [index]: -1 }));
+    }
+  }, []);
+
+  const handleMaterialInputChange = useCallback((index, e) => {
+    const query = e.target.value;
+    setMaterialQueries(prev => ({ ...prev, [index]: query }));
+    setIsMaterialDropdownOpen(prev => ({ ...prev, [index]: true }));
+    setSelectedMaterialIndices(prev => ({ ...prev, [index]: -1 }));
+
+    if (query) {
+      const filtered = materials.filter(m =>
+        (m.productName?.toLowerCase() || '').includes(query.toLowerCase()) ||
+        (m.product_name?.toLowerCase() || '').includes(query.toLowerCase()) ||
+        String(m.productId).includes(query.toLowerCase()) ||
+        String(m.product_id).includes(query.toLowerCase())
+      );
+      console.log(`Filtering materials for query "${query}":`, filtered); // Debug log
+      setFilteredMaterials(prev => ({
+        ...prev,
+        [index]: filtered.length > 0 ? filtered : [{ productId: null, productName: 'No matches found' }]
+      }));
+    } else {
+      setFilteredMaterials(prev => ({ ...prev, [index]: [] }));
+    }
+  }, [materials]);
+
+  const handleMaterialKeyDown = useCallback((index, e) => {
+    if (!isMaterialDropdownOpen[index] || !filteredMaterials[index]?.length) return;
+
+    switch (e.key) {
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedMaterialIndices(prev => ({
+          ...prev,
+          [index]: prev[index] > 0 ? prev[index] - 1 : (filteredMaterials[index]?.length || 0) - 1
+        }));
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedMaterialIndices(prev => ({
+          ...prev,
+          [index]: prev[index] < (filteredMaterials[index]?.length || 0) - 1 ? prev[index] + 1 : 0
+        }));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedMaterialIndices[index] >= 0 && filteredMaterials[index] && filteredMaterials[index][selectedMaterialIndices[index]].productId !== null) {
+          handleMaterialSelect(index, filteredMaterials[index][selectedMaterialIndices[index]]);
+        }
+        break;
+      case 'Escape':
+        setIsMaterialDropdownOpen(prev => ({ ...prev, [index]: false }));
+        break;
+      default:
+        break;
+    }
+  }, [isMaterialDropdownOpen, filteredMaterials, selectedMaterialIndices, handleMaterialSelect]);
 
   if (isLoading && !boms.length) {
     return (
@@ -680,43 +862,80 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
               {modalMode === 'create' ? 'Create BOM' : `Edit BOM #${selectedBom?.bomId}`}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-gray-700 font-medium mb-2">Product</label>
-                <select
-                  value={formData.productId}
-                  onChange={(e) => setFormData({ ...formData, productId: e.target.value })}
-                  className="w-full p-3 border rounded-lg shadow-sm"
-                  required
-                >
-                  <option value="">Select Product</option>
-                  {products.map((product) => (
-                    <option
-                      key={product.productId}
-                      value={product.productId}
-                    >
-                      {product.productName}
-                    </option>
-                  ))}
-                </select>
+              <div className="product-autocomplete relative">
+                <label className="block text-gray-700 font-semibold mb-2">Product</label>
+                <input
+                  type="text"
+                  value={productQuery}
+                  onChange={handleProductInputChange}
+                  onKeyDown={handleProductKeyDown}
+                  onFocus={() => setIsProductDropdownOpen(true)}
+                  placeholder="Type to search products..."
+                  className="w-full p-3 border border-gray-200 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all duration-300 placeholder-gray-400 font-medium"
+                />
+                {isProductDropdownOpen && filteredProducts.length > 0 && (
+                  <ul className="absolute z-10 w-full mt-1 bg-gradient-to-b from-white to-amber-50 rounded-lg shadow-xl border border-amber-100 overflow-y-auto max-h-48 transform transition-all duration-300 ease-in-out">
+                    {filteredProducts.map((product, index) => (
+                      <li
+                        key={product.productId || `no-match-${index}`}
+                        onClick={() => product.productId !== null && handleProductSelect(product)}
+                        onMouseEnter={() => setSelectedIndex(index)}
+                        className={`px-5 py-3 cursor-pointer hover:bg-amber-100 transition-colors duration-300 flex items-center justify-between ${
+                          index === selectedIndex ? 'bg-amber-200 text-amber-900 font-semibold' : 'text-gray-800'
+                        } ${product.productId === null ? 'cursor-default bg-amber-50 text-gray-500' : ''}`}
+                      >
+                        <span className="truncate">{product.productName}</span>
+                        {product.productId !== null && <Search size={16} className="text-amber-500 opacity-50" />}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {isProductDropdownOpen && filteredProducts.length === 0 && (
+                  <ul className="absolute z-10 w-full mt-1 bg-gradient-to-b from-white to-amber-50 rounded-lg shadow-xl border border-amber-100">
+                    <li className="px-5 py-3 text-gray-500 bg-amber-50 rounded-lg flex items-center justify-center">
+                      <span>No matches found</span>
+                    </li>
+                  </ul>
+                )}
               </div>
               <div>
-                <label className="block text-gray-700 font-medium mb-2">Materials</label>
+                <label className="block text-gray-700 font-semibold mb-2">Materials</label>
                 {formData.materials.map((material, index) => (
                   <div key={index} className="flex items-center space-x-4 mb-4">
-                    <div className="flex-1">
-                      <select
-                        value={material.materialId}
-                        onChange={(e) => handleMaterialChange(index, 'materialId', e.target.value)}
-                        className="w-full p-3 border rounded-lg shadow-sm"
-                        required
-                      >
-                        <option value="">Select Material</option>
-                        {materials.map((m) => (
-                          <option key={m.productId} value={m.productId}>
-                            {m.productName}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        value={materialQueries[index] || ''}
+                        onChange={(e) => handleMaterialInputChange(index, e)}
+                        onKeyDown={(e) => handleMaterialKeyDown(index, e)}
+                        onFocus={() => setIsMaterialDropdownOpen(prev => ({ ...prev, [index]: true }))}
+                        placeholder="Type to search materials..."
+                        className="w-full p-3 border border-gray-200 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all duration-300 placeholder-gray-400 font-medium"
+                      />
+                      {isMaterialDropdownOpen[index] && filteredMaterials[index]?.length > 0 && (
+                        <ul className="absolute z-10 w-full mt-1 bg-gradient-to-b from-white to-amber-50 rounded-lg shadow-xl border border-amber-100 overflow-y-auto max-h-48 transform transition-all duration-300 ease-in-out">
+                          {filteredMaterials[index].map((material, matIndex) => (
+                            <li
+                              key={material.productId || `no-match-${index}-${matIndex}`}
+                              onClick={() => material.productId !== null && handleMaterialSelect(index, material)}
+                              onMouseEnter={() => setSelectedMaterialIndices(prev => ({ ...prev, [index]: matIndex }))}
+                              className={`px-5 py-3 cursor-pointer hover:bg-amber-100 transition-colors duration-300 flex items-center justify-between ${
+                                matIndex === selectedMaterialIndices[index] ? 'bg-amber-200 text-amber-900 font-semibold' : 'text-gray-800'
+                              } ${material.productId === null ? 'cursor-default bg-amber-50 text-gray-500' : ''}`}
+                            >
+                              <span className="truncate">{material.productName}</span>
+                              {material.productId !== null && <Search size={16} className="text-amber-500 opacity-50" />}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {isMaterialDropdownOpen[index] && (!filteredMaterials[index] || filteredMaterials[index].length === 0) && (
+                        <ul className="absolute z-10 w-full mt-1 bg-gradient-to-b from-white to-amber-50 rounded-lg shadow-xl border border-amber-100">
+                          <li className="px-5 py-3 text-gray-500 bg-amber-50 rounded-lg flex items-center justify-center">
+                            <span>No matches found</span>
+                          </li>
+                        </ul>
+                      )}
                     </div>
                     <div className="flex-1">
                       <input
@@ -724,7 +943,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                         placeholder="Quantity Per Unit"
                         value={material.quantityPerUnit}
                         onChange={(e) => handleMaterialChange(index, 'quantityPerUnit', e.target.value)}
-                        className="w-full p-3 border rounded-lg shadow-sm"
+                        className="w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-amber-300 focus:border-amber-300"
                         required
                         min="0.01"
                         step="0.01"
