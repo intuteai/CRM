@@ -252,7 +252,7 @@ function App() {
         <Route path="/edit-profile" element={userRole ? <ErrorBoundary><EditProfile socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/inventory" element={
           ['admin', 'store', 'production'].includes(userRole) ? (
-            <ErrorBoundary>
+            <ErrorBoundary> 
               {userRole === 'store' ? (
                 <StoreInventoryPage socket={socket} userRole={userRole} />
               ) : (
