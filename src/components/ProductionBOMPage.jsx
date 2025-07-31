@@ -111,7 +111,7 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
     try {
       const token = localStorage.getItem('token');
 
-      const productResponse = await fetch(`${BASE_URL}/api/inventory`, {
+      const productResponse = await fetch(`${BASE_URL}/api/inventory?limit=1000`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       if (!productResponse.ok) {
@@ -127,7 +127,7 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         : [];
       setProducts(normalizedProducts);
 
-      const materialResponse = await fetch(`${BASE_URL}/api/stock`, {
+      const materialResponse = await fetch(`${BASE_URL}/api/stock?limit=1000`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       if (!materialResponse.ok) {
