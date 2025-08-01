@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   ArrowDownUp, Search, ChevronLeft, ChevronRight, Edit2, MoreVertical, Package,
   XCircle, Eye, Download, Upload, PlusCircle
@@ -15,7 +15,7 @@ const formatDate = (dateString) => {
   return `${date.toLocaleDateString('en-IN')} ${date.toLocaleTimeString('en-IN')}`;
 };
 
-const useFetchInventory = ({ limit, offset }) => {
+const useFetchInventory = () => {
   const [inventoryItems, setInventoryItems] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,7 +28,7 @@ const useFetchInventory = ({ limit, offset }) => {
       const token = localStorage.getItem('token');
       if (!token) throw new Error("Authentication token missing. Please log in again.");
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const url = `${backendUrl}/api/inventory?limit=${limit}&offset=${offset}&force_refresh=true`;
+      const url = `${backendUrl}/api/inventory?limit=5000&offset=0&force_refresh=true`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -43,11 +43,11 @@ const useFetchInventory = ({ limit, offset }) => {
           ...item,
           stock_quantity: item.stock_quantity || 0,
           description: item.description || '',
-          product_code: item.product_code,
-          product_name: item.product_name,
+          product_code: item.product_code || '',
+          product_name: item.product_name || '',
           product_id: item.product_id,
           created_at: item.created_at,
-          price: item.price !== null ? Number(item.price) : 0, // Normalize price
+          price: item.price !== null ? Number(item.price) : 0,
         }));
         setInventoryItems(normalizedData);
         setTotalItems(total || 0);
@@ -59,7 +59,7 @@ const useFetchInventory = ({ limit, offset }) => {
       if (isMounted) setIsLoading(false);
     }
     return () => { isMounted = false; };
-  }, [limit, offset]);
+  }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -71,7 +71,7 @@ function StoreInventoryPage({ userRole }) {
   const [itemsPerPage] = useState(10);
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'product_id', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -83,10 +83,20 @@ function StoreInventoryPage({ userRole }) {
   const [selectedProductDescription, setSelectedProductDescription] = useState('');
   const tableRef = useRef(null);
   const fileInputRef = useRef(null);
+  const searchInputRef = useRef(null);
 
-  const { inventoryItems, totalItems, isLoading, error, refetchData } = useFetchInventory({ limit: itemsPerPage, offset: page * itemsPerPage });
+  const { inventoryItems, totalItems, isLoading, error, refetchData } = useFetchInventory();
 
-  const debouncedSearch = debounce((value) => setSearchTerm(value.toLowerCase()), 300);
+  const debouncedSearch = useCallback(debounce((value) => setSearchTerm(value.toLowerCase()), 300), []);
+
+  useEffect(() => {
+    debouncedSearch(searchInput);
+    return () => debouncedSearch.cancel();
+  }, [searchInput, debouncedSearch]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm]);
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -100,13 +110,14 @@ function StoreInventoryPage({ userRole }) {
     });
     socket.on('inventoryUpdate', ({ product_id, stock_quantity }) => {
       setInventoryItems(prev => {
+        if (!Array.isArray(prev)) return prev || [];
         const itemIndex = prev.findIndex(item => item.product_id === product_id);
         if (itemIndex === -1) {
           refetchData();
           return prev;
         }
         const updatedItems = [...prev];
-        updatedItems[itemIndex] = { ...updatedItems[itemIndex], stock_quantity };
+        updatedItems[itemIndex] = { ...updatedItems[itemIndex], stock_quantity: Number(stock_quantity) };
         toast.info(`Stock for ${updatedItems[itemIndex].product_name} updated to ${stock_quantity}`, { autoClose: 2000 });
         return updatedItems;
       });
@@ -138,6 +149,43 @@ function StoreInventoryPage({ userRole }) {
       generateQRCode(selectedBarcode, selectedProductName, selectedProductDescription, 'qrcode-canvas');
     }
   }, [showBarcodeModal, selectedBarcode, selectedProductName, selectedProductDescription, generateQRCode]);
+
+  const sortedInventory = useMemo(() => {
+    if (!Array.isArray(inventoryItems)) return [];
+    const sortableItems = [...inventoryItems];
+    if (sortConfig.key) {
+      sortableItems.sort((a, b) => {
+        let aValue = a[sortConfig.key] ?? '';
+        let bValue = b[sortConfig.key] ?? '';
+        if (sortConfig.key === 'stock_quantity' || sortConfig.key === 'product_id' || sortConfig.key === 'price') {
+          aValue = Number(aValue);
+          bValue = Number(bValue);
+        } else if (sortConfig.key === 'created_at') {
+          aValue = new Date(aValue || 0);
+          bValue = new Date(bValue || 0);
+        }
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [inventoryItems, sortConfig]);
+
+  const filteredInventory = useMemo(() => {
+    return sortedInventory.filter(item => {
+      return (
+        item.product_id.toString().includes(searchTerm) ||
+        item.product_name.toLowerCase().includes(searchTerm) ||
+        item.product_code.toLowerCase().includes(searchTerm)
+      );
+    });
+  }, [sortedInventory, searchTerm]);
+
+  const paginatedInventory = useMemo(() => {
+    const start = page * itemsPerPage;
+    return filteredInventory.slice(start, start + itemsPerPage);
+  }, [filteredInventory, page, itemsPerPage]);
 
   const validateImportRow = useCallback((row, index) => {
     const errors = [];
@@ -196,9 +244,8 @@ function StoreInventoryPage({ userRole }) {
             const { product_id, ...body } = row;
             const url = product_id ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory/${product_id}` : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory`;
             const method = product_id ? 'PUT' : 'POST';
-            let payload = { ...body, price: 0.01 }; // Default price for POST
+            let payload = { ...body, price: 0.01 };
             if (product_id) {
-              // Fetch existing item to get the current price for PUT
               const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory?limit=1&offset=0&product_id=${product_id}`, {
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -206,7 +253,7 @@ function StoreInventoryPage({ userRole }) {
               if (response.ok) {
                 const { data } = await response.json();
                 if (data.length > 0) {
-                  payload.price = data[0].price || 0; // Use existing price for PUT
+                  payload.price = data[0].price || 0;
                 }
               }
             }
@@ -243,7 +290,7 @@ function StoreInventoryPage({ userRole }) {
   }, [validateImportRow, refetchData]);
 
   const exportToExcel = useCallback(() => {
-    const data = inventoryItems.map(item => ({
+    const data = filteredInventory.map(item => ({
       'Product ID': item.product_id || 'N/A',
       'Product Code': item.product_code || 'N/A',
       'Product Name': item.product_name || 'N/A',
@@ -264,33 +311,19 @@ function StoreInventoryPage({ userRole }) {
     worksheet['!cols'] = colWidths.map(width => ({ wch: width }));
     XLSX.writeFile(workbook, 'Finished_Goods_Inventory.xlsx');
     toast.success('Finished Goods exported to Excel!', { autoClose: 2000 });
-  }, [inventoryItems]);
-
-  const filteredInventory = inventoryItems.filter(item => {
-    return (
-      item.product_id.toString().includes(searchTerm) ||
-      item.product_name.toLowerCase().includes(searchTerm) ||
-      item.product_code.toLowerCase().includes(searchTerm)
-    );
-  });
-
-  const sortedInventory = filteredInventory.sort((a, b) => {
-    let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
-    if (sortConfig.key === 'stock_quantity' || sortConfig.key === 'product_id') {
-      aValue = Number(aValue);
-      bValue = Number(bValue);
-    } else if (sortConfig.key === 'created_at') {
-      aValue = new Date(aValue || 0);
-      bValue = new Date(bValue || 0);
-    }
-    return aValue < bValue ? (sortConfig.direction === 'asc' ? -1 : 1) : aValue > bValue ? (sortConfig.direction === 'asc' ? 1 : -1) : 0;
-  });
+  }, [filteredInventory]);
 
   const handleSearchChange = (e) => {
-    const value = e.target.value;
-    setSearchInput(value);
-    debouncedSearch(value);
+    setSearchInput(e.target.value);
   };
+
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Escape') {
+      setSearchInput('');
+      setSearchTerm('');
+      searchInputRef.current?.focus();
+    }
+  }, []);
 
   const handleSort = useCallback((key) => {
     setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
@@ -353,7 +386,7 @@ function StoreInventoryPage({ userRole }) {
     </div>
   );
 
-  if (error && !showCreateForm && !showEditForm) return (
+  if (error && !showCreateForm && !showEditForm && !showDescriptionModal && !showBarcodeModal) return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 flex items-center justify-center" role="alert">
       <div className="text-red-700 text-lg">{error}</div>
       <button
@@ -378,9 +411,23 @@ function StoreInventoryPage({ userRole }) {
               placeholder="Search by ID, Name, or Code..."
               value={searchInput}
               onChange={handleSearchChange}
+              onKeyDown={handleKeyDown}
+              ref={searchInputRef}
               className="w-full p-4 pl-12 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md"
             />
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            {searchInput && (
+              <button
+                onClick={() => {
+                  setSearchInput('');
+                  setSearchTerm('');
+                }}
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                aria-label="Clear search"
+              >
+                <XCircle size={20} />
+              </button>
+            )}
           </div>
           <button
             onClick={() => refetchData()}
@@ -417,7 +464,7 @@ function StoreInventoryPage({ userRole }) {
           <button
             onClick={exportToExcel}
             className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md"
-            disabled={isLoading || !sortedInventory.length}
+            disabled={isLoading || !filteredInventory.length}
             aria-label="Export to Excel"
           >
             <Download className="mr-2" size={20} /> Export to Excel
@@ -446,23 +493,23 @@ function StoreInventoryPage({ userRole }) {
                 ].map(({ key, label }) => (
                   <th
                     key={key}
-                    onClick={() => key !== 'actions' && key !== 'qrcode' && key !== 'description' && handleSort(key)}
-                    onKeyDown={(e) => key !== 'actions' && key !== 'qrcode' && key !== 'description' && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSort(key))}
-                    className={`py-5 px-3 text-base font-medium ${key !== 'actions' && key !== 'qrcode' && key !== 'description' ? 'cursor-pointer hover:bg-amber-200' : ''} ${key === 'actions' ? 'sticky right-0 bg-amber-100' : ''}`}
+                    onClick={() => key !== 'actions' && key !== 'qrcode' && handleSort(key)}
+                    onKeyDown={(e) => key !== 'actions' && key !== 'qrcode' && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSort(key))}
+                    className={`py-5 px-3 text-base font-medium ${key !== 'actions' && key !== 'qrcode' ? 'cursor-pointer hover:bg-amber-200' : ''} ${key === 'actions' ? 'sticky right-0 bg-amber-100' : ''}`}
                     style={key === 'actions' ? { minWidth: '100px' } : {}}
-                    tabIndex={key !== 'actions' && key !== 'qrcode' && key !== 'description' ? 0 : undefined}
+                    tabIndex={key !== 'actions' && key !== 'qrcode' ? 0 : undefined}
                     aria-sort={sortConfig.key === key ? sortConfig.direction : 'none'}
                   >
                     <div className="flex items-center">
                       {label}
-                      {key !== 'actions' && key !== 'qrcode' && key !== 'description' && <ArrowDownUp className="ml-2" size={16} />}
+                      {key !== 'actions' && key !== 'qrcode' && <ArrowDownUp className="ml-2" size={16} />}
                     </div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {sortedInventory.map(item => (
+              {paginatedInventory.map(item => (
                 <tr key={item.product_id} className="border-t hover:bg-amber-50" role="row">
                   <td className="py-4 px-3 text-base text-gray-700">{item.product_id}</td>
                   <td className="py-4 px-3 text-base text-gray-700">{item.product_code}</td>
@@ -508,7 +555,7 @@ function StoreInventoryPage({ userRole }) {
 
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600 text-base">Showing {sortedInventory.length} of {totalItems} finished goods</div>
+              <div className="text-gray-600 text-base">Showing {paginatedInventory.length} of {filteredInventory.length} filtered items (Total: {totalItems})</div>
               <div className="flex space-x-2">
                 <button
                   onClick={() => setPage(p => p > 0 ? p - 1 : 0)}
@@ -520,7 +567,7 @@ function StoreInventoryPage({ userRole }) {
                 </button>
                 <button
                   onClick={() => setPage(p => p + 1)}
-                  disabled={(page + 1) * itemsPerPage >= totalItems}
+                  disabled={(page + 1) * itemsPerPage >= filteredInventory.length}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Next page"
                 >
@@ -530,7 +577,7 @@ function StoreInventoryPage({ userRole }) {
             </div>
           )}
 
-          {sortedInventory.length === 0 && (
+          {filteredInventory.length === 0 && (
             <div className="text-center py-16 flex flex-col items-center justify-center text-gray-500" role="alert">
               <Package size={48} className="mb-4 text-gray-400" />
               <p className="text-lg">No finished goods found.</p>
@@ -565,7 +612,7 @@ function StoreInventoryPage({ userRole }) {
                   const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ ...data, price: 0.01 }), // Add default price
+                    body: JSON.stringify({ ...data, price: 0.01 }),
                     credentials: 'include',
                   });
                   if (!response.ok) {
@@ -574,6 +621,7 @@ function StoreInventoryPage({ userRole }) {
                   }
                   setPage(0);
                   setSearchInput('');
+                  setSearchTerm('');
                   setShowCreateForm(false);
                   refetchData();
                   toast.success('Item created successfully');
@@ -603,16 +651,17 @@ function StoreInventoryPage({ userRole }) {
                   const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory/${itemId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ ...data, price: selectedItem.price || 0 }), // Preserve existing price
+                    body: JSON.stringify({ ...data, price: selectedItem.price || 0 }),
                     credentials: 'include',
                   });
                   if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(errorData.error || 'Failed to update item');
                   }
-                  refetchData();
+                  setPage(0);
                   setShowEditForm(false);
                   setSelectedItem(null);
+                  refetchData();
                   toast.success('Item updated successfully');
                 }}
                 onClose={() => setShowEditForm(false)}

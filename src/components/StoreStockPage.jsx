@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   ArrowDownUp, Search, ChevronLeft, ChevronRight, Edit2, MoreVertical, Package,
   XCircle, Eye, Download, Upload, PlusCircle
@@ -15,7 +15,7 @@ const formatDate = (dateString) => {
   return `${date.toLocaleDateString('en-IN')} ${date.toLocaleTimeString('en-IN')}`;
 };
 
-const useFetchStock = ({ limit, offset }) => {
+const useFetchStock = () => {
   const [stockItems, setStockItems] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,7 +28,7 @@ const useFetchStock = ({ limit, offset }) => {
       const token = localStorage.getItem('token');
       if (!token) throw new Error("Authentication token missing. Please log in again.");
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const url = `${backendUrl}/api/stock?limit=${limit}&offset=${offset}&force_refresh=true`;
+      const url = `${backendUrl}/api/stock?limit=5000&offset=0&force_refresh=true`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -44,8 +44,8 @@ const useFetchStock = ({ limit, offset }) => {
           price: item.price !== null ? Number(item.price) : 0,
           stockQuantity: item.stockQuantity || 0,
           description: item.description || '',
-          productCode: item.productCode,
-          productName: item.productName,
+          productCode: item.productCode || '',
+          productName: item.productName || '',
           qtyRequired: item.qtyRequired || 0,
           productId: item.productId,
           createdAt: item.createdAt,
@@ -60,7 +60,7 @@ const useFetchStock = ({ limit, offset }) => {
       if (isMounted) setIsLoading(false);
     }
     return () => { isMounted = false; };
-  }, [limit, offset]);
+  }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -72,7 +72,7 @@ function StoreStockPage() {
   const [itemsPerPage] = useState(10);
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'productId', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState('create'); // 'create', 'edit'
   const [selectedItem, setSelectedItem] = useState(null);
@@ -93,24 +93,44 @@ function StoreStockPage() {
   const tableRef = useRef(null);
   const fileInputRef = useRef(null);
   const modalRef = useRef(null);
+  const searchInputRef = useRef(null);
 
-  const { stockItems, totalItems, isLoading, error, refetchData } = useFetchStock({ limit: itemsPerPage, offset: page * itemsPerPage });
+  const { stockItems, totalItems, isLoading, error, refetchData } = useFetchStock();
 
-  const debouncedSearch = debounce((value) => setSearchTerm(value.toLowerCase()), 300);
+  const debouncedSearch = useCallback(debounce((value) => setSearchTerm(value.toLowerCase()), 300), []);
+
+  useEffect(() => {
+    debouncedSearch(searchInput);
+    return () => debouncedSearch.cancel();
+  }, [searchInput, debouncedSearch]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm]);
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-    const socket = io(backendUrl, { withCredentials: false, transports: ['websocket'] });
+    const socket = io(backendUrl, { withCredentials: true, transports: ['websocket'] });
     socket.on('connect', () => {
       toast.success('Connected to real-time updates!', { autoClose: 2000 });
     });
     socket.on('connect_error', (err) => {
       console.error('Socket error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: false });
+      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
     socket.on('stockUpdate', ({ product_id, stock_quantity }) => {
-      refetchData();
-      toast.info(`Stock for product #${product_id} updated to ${stock_quantity}`, { autoClose: 2000 });
+      setStockItems(prev => {
+        if (!Array.isArray(prev)) return prev || [];
+        const itemIndex = prev.findIndex(item => item.productId === product_id);
+        if (itemIndex === -1) {
+          refetchData();
+          return prev;
+        }
+        const updatedItems = [...prev];
+        updatedItems[itemIndex] = { ...updatedItems[itemIndex], stockQuantity: Number(stock_quantity) };
+        toast.info(`Stock for ${updatedItems[itemIndex].productName} updated to ${stock_quantity}`, { autoClose: 2000 });
+        return updatedItems;
+      });
       if (tableRef.current) tableRef.current.focus();
     });
     return () => socket.disconnect();
@@ -139,6 +159,43 @@ function StoreStockPage() {
       generateQRCode(selectedBarcode, selectedProductName, selectedProductDescription, 'qrcode-canvas');
     }
   }, [showBarcodeModal, selectedBarcode, selectedProductName, selectedProductDescription, generateQRCode]);
+
+  const sortedStock = useMemo(() => {
+    if (!Array.isArray(stockItems)) return [];
+    const sortableItems = [...stockItems];
+    if (sortConfig.key) {
+      sortableItems.sort((a, b) => {
+        let aValue = a[sortConfig.key] ?? '';
+        let bValue = b[sortConfig.key] ?? '';
+        if (sortConfig.key === 'stockQuantity' || sortConfig.key === 'qtyRequired' || sortConfig.key === 'productId' || sortConfig.key === 'price') {
+          aValue = Number(aValue);
+          bValue = Number(bValue);
+        } else if (sortConfig.key === 'createdAt') {
+          aValue = new Date(aValue || 0);
+          bValue = new Date(bValue || 0);
+        }
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [stockItems, sortConfig]);
+
+  const filteredStock = useMemo(() => {
+    return sortedStock.filter(item => {
+      return (
+        item.productId.toString().includes(searchTerm) ||
+        item.productName.toLowerCase().includes(searchTerm) ||
+        item.productCode.toLowerCase().includes(searchTerm)
+      );
+    });
+  }, [sortedStock, searchTerm]);
+
+  const paginatedStock = useMemo(() => {
+    const start = page * itemsPerPage;
+    return filteredStock.slice(start, start + itemsPerPage);
+  }, [filteredStock, page, itemsPerPage]);
 
   const validateImportRow = useCallback((row, index) => {
     const errors = [];
@@ -202,7 +259,7 @@ function StoreStockPage() {
             const { productId, ...body } = row;
             const url = productId ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock/${productId}` : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock`;
             const method = productId ? 'PUT' : 'POST';
-            let payload = { ...body, price: 0.01 }; // Default price for POST
+            let payload = { ...body, price: 0.01 };
             if (productId) {
               const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock?limit=1&offset=0&productId=${productId}`, {
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -211,7 +268,7 @@ function StoreStockPage() {
               if (response.ok) {
                 const { data } = await response.json();
                 if (data.length > 0) {
-                  payload.price = data[0].price || 0; // Use existing price for PUT
+                  payload.price = data[0].price || 0;
                 }
               }
             }
@@ -222,14 +279,8 @@ function StoreStockPage() {
               credentials: 'include',
             });
             if (!response.ok) {
-              let errorMessage = `Failed to ${productId ? 'update' : 'create'} product`;
-              try {
-                const errorData = await response.json();
-                errorMessage = errorData.error || errorMessage;
-              } catch (jsonError) {
-                console.error('Failed to parse error response:', jsonError);
-              }
-              throw new Error(errorMessage);
+              const errorData = await response.json();
+              throw new Error(errorData.error || `Failed to ${productId ? 'update' : 'create'} product`);
             }
             if (productId) updatedCount++;
             else createdCount++;
@@ -254,7 +305,7 @@ function StoreStockPage() {
   }, [validateImportRow, refetchData]);
 
   const exportToExcel = useCallback(() => {
-    const data = stockItems.map(item => ({
+    const data = filteredStock.map(item => ({
       'Product ID': item.productId || 'N/A',
       'Product Code': item.productCode || 'N/A',
       'Product Name': item.productName || 'N/A',
@@ -266,43 +317,29 @@ function StoreStockPage() {
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Raw Materials');
-    const colWidths = data.reduce((accumulator, row) => {
+    const colWidths = data.reduce((acc, row) => {
       Object.keys(row).forEach((key, idx) => {
         const value = String(row[key]).replace(/<[^>]*>/g, '');
-        accumulator[idx] = Math.max(accumulator[idx] || 10, value.length + 2);
+        acc[idx] = Math.max(acc[idx] || 10, value.length + 2);
       });
-      return accumulator;
+      return acc;
     }, []);
     worksheet['!cols'] = colWidths.map(width => ({ wch: width }));
     XLSX.writeFile(workbook, 'Raw_Material_Inventory.xlsx');
     toast.success('Raw Materials exported to Excel!', { autoClose: 2000 });
-  }, [stockItems]);
-
-  const filteredStock = stockItems.filter(item => {
-    return (
-      item.productId.toString().includes(searchTerm) ||
-      item.productName.toLowerCase().includes(searchTerm) ||
-      item.productCode.toLowerCase().includes(searchTerm)
-    );
-  });
-
-  const sortedStock = filteredStock.sort((a, b) => {
-    let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
-    if (sortConfig.key === 'stockQuantity' || sortConfig.key === 'qtyRequired' || sortConfig.key === 'productId') {
-      aValue = Number(aValue);
-      bValue = Number(bValue);
-    } else if (sortConfig.key === 'createdAt') {
-      aValue = new Date(aValue || 0);
-      bValue = new Date(bValue || 0);
-    }
-    return aValue < bValue ? (sortConfig.direction === 'asc' ? -1 : 1) : aValue > bValue ? (sortConfig.direction === 'asc' ? 1 : -1) : 0;
-  });
+  }, [filteredStock]);
 
   const handleSearchChange = (e) => {
-    const value = e.target.value;
-    setSearchInput(value);
-    debouncedSearch(value);
+    setSearchInput(e.target.value);
   };
+
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Escape') {
+      setSearchInput('');
+      setSearchTerm('');
+      searchInputRef.current?.focus();
+    }
+  }, []);
 
   const handleSort = useCallback((key) => {
     setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
@@ -391,12 +428,9 @@ function StoreStockPage() {
         productCode: formData.productCode,
         stockQuantity: modalMode === 'edit' ? stockQuantity : undefined,
         qtyRequired,
-        price: modalMode === 'create' ? 0.01 : selectedItem.price || 0 // Use 0.01 for POST, existing price for PUT
+        price: modalMode === 'create' ? 0.01 : selectedItem.price || 0
       };
       if (modalMode === 'create') body.stockQuantity = stockQuantity >= 0 ? stockQuantity : 0;
-
-      console.log('Sending request to:', url);
-      console.log('Request payload:', body);
 
       const response = await fetch(url, {
         method,
@@ -406,24 +440,18 @@ function StoreStockPage() {
       });
 
       if (!response.ok) {
-        let errorMessage = `${modalMode === 'create' ? 'Create' : 'Update'} failed`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (jsonError) {
-          console.error('Failed to parse error response:', jsonError);
-        }
-        throw new Error(errorMessage);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `${modalMode === 'create' ? 'Create' : 'Update'} failed`);
       }
 
       await refetchData();
-      toast.success(`Product ${modalMode === 'create' ? 'created' : 'updated'}`, { autoClose: 2000 });
-      setShowModal(false);
-      setFormErrors({});
       setPage(0);
       setSearchInput('');
+      setSearchTerm('');
+      setShowModal(false);
+      setFormErrors({});
+      toast.success(`Product ${modalMode === 'create' ? 'created' : 'updated'}`, { autoClose: 2000 });
     } catch (err) {
-      console.error('Error in handleSubmit:', err.message, { status: err.status, response: err.response });
       toast.error(err.message || 'Operation failed', { autoClose: 3000 });
     }
   }, [formData, modalMode, selectedItem, refetchData, validateForm]);
@@ -514,13 +542,27 @@ function StoreStockPage() {
               placeholder="Search by ID, Name, or Code..."
               value={searchInput}
               onChange={handleSearchChange}
+              onKeyDown={handleKeyDown}
+              ref={searchInputRef}
               className="w-full p-4 pl-12 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md"
             />
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            {searchInput && (
+              <button
+                onClick={() => {
+                  setSearchInput('');
+                  setSearchTerm('');
+                }}
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                aria-label="Clear search"
+              >
+                <XCircle size={20} />
+              </button>
+            )}
           </div>
           <button
             onClick={() => refetchData()}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 shadow-md"
+            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 shadow-md"
             disabled={isLoading}
             aria-label="Refresh raw materials"
           >
@@ -553,7 +595,7 @@ function StoreStockPage() {
           <button
             onClick={exportToExcel}
             className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md"
-            disabled={isLoading || !sortedStock.length}
+            disabled={isLoading || !filteredStock.length}
             aria-label="Export to Excel"
           >
             <Download className="mr-2" size={20} /> Export to Excel
@@ -583,23 +625,23 @@ function StoreStockPage() {
                 ].map(({ key, label }) => (
                   <th
                     key={key}
-                    onClick={() => key !== 'actions' && key !== 'qrcode' && key !== 'description' && handleSort(key)}
-                    onKeyDown={(e) => key !== 'actions' && key !== 'qrcode' && key !== 'description' && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSort(key))}
-                    className={`py-5 px-3 text-base font-medium ${key !== 'actions' && key !== 'qrcode' && key !== 'description' ? 'cursor-pointer hover:bg-amber-200' : ''} ${key === 'actions' ? 'sticky right-0 bg-amber-100' : ''}`}
+                    onClick={() => key !== 'actions' && key !== 'qrcode' && handleSort(key)}
+                    onKeyDown={(e) => key !== 'actions' && key !== 'qrcode' && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSort(key))}
+                    className={`py-5 px-3 text-base font-medium ${key !== 'actions' && key !== 'qrcode' ? 'cursor-pointer hover:bg-amber-200' : ''} ${key === 'actions' ? 'sticky right-0 bg-amber-100' : ''}`}
                     style={key === 'actions' ? { minWidth: '100px' } : {}}
-                    tabIndex={key !== 'actions' && key !== 'qrcode' && key !== 'description' ? 0 : undefined}
+                    tabIndex={key !== 'actions' && key !== 'qrcode' ? 0 : undefined}
                     aria-sort={sortConfig.key === key ? sortConfig.direction : 'none'}
                   >
                     <div className="flex items-center">
                       {label}
-                      {key !== 'actions' && key !== 'qrcode' && key !== 'description' && <ArrowDownUp className="ml-2" size={16} />}
+                      {key !== 'actions' && key !== 'qrcode' && <ArrowDownUp className="ml-2" size={16} />}
                     </div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {sortedStock.map(item => (
+              {paginatedStock.map(item => (
                 <tr key={item.productId} className="border-t hover:bg-amber-50" role="row">
                   <td className="py-4 px-3 text-base text-gray-700">{item.productId}</td>
                   <td className="py-4 px-3 text-base text-gray-700">{item.productCode}</td>
@@ -646,7 +688,7 @@ function StoreStockPage() {
 
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600 text-base">Showing {sortedStock.length} of {totalItems} raw materials</div>
+              <div className="text-gray-600 text-base">Showing {paginatedStock.length} of {filteredStock.length} filtered raw materials (Total: {totalItems})</div>
               <div className="flex space-x-2">
                 <button
                   onClick={() => setPage(p => p > 0 ? p - 1 : 0)}
@@ -658,7 +700,7 @@ function StoreStockPage() {
                 </button>
                 <button
                   onClick={() => setPage(p => p + 1)}
-                  disabled={(page + 1) * itemsPerPage >= totalItems}
+                  disabled={(page + 1) * itemsPerPage >= filteredStock.length}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Next page"
                 >
@@ -668,7 +710,7 @@ function StoreStockPage() {
             </div>
           )}
 
-          {sortedStock.length === 0 && (
+          {filteredStock.length === 0 && (
             <div className="text-center py-16 flex flex-col items-center justify-center text-gray-500" role="alert">
               <Package size={48} className="mb-4 text-gray-400" />
               <p className="text-lg">No raw materials found.</p>
@@ -677,7 +719,7 @@ function StoreStockPage() {
               ) : (
                 <button
                   onClick={handleCreate}
-                  className="mt-4 p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
+                  className="mt-4 p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
                 >
                   <PlusCircle className="mr-2" /> Add Your First Item
                 </button>
