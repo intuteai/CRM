@@ -121,13 +121,13 @@ function BOMPage({ socket: providedSocket }) {
   }, [isProductDropdownOpen, filteredProducts, selectedIndex, handleProductSelect]);
 
   const handleMaterialSelect = useCallback((index, material) => {
-    if (material.productId !== null) {
+    if (material.materialId !== null) {
       setFormData(prev => {
         const newMaterials = [...prev.materials];
-        newMaterials[index] = { ...newMaterials[index], materialId: material.productId };
+        newMaterials[index] = { ...newMaterials[index], materialId: material.materialId };
         return { ...prev, materials: newMaterials };
       });
-      setMaterialQueries(prev => ({ ...prev, [index]: material.productName }));
+      setMaterialQueries(prev => ({ ...prev, [index]: material.materialName }));
       setFilteredMaterials(prev => ({ ...prev, [index]: [] }));
       setIsMaterialDropdownOpen(prev => ({ ...prev, [index]: false }));
       setSelectedMaterialIndices(prev => ({ ...prev, [index]: -1 }));
@@ -142,15 +142,12 @@ function BOMPage({ socket: providedSocket }) {
 
     if (query) {
       const filtered = materials.filter(m =>
-        (m.productName?.toLowerCase() || '').includes(query.toLowerCase()) ||
-        (m.product_name?.toLowerCase() || '').includes(query.toLowerCase()) ||
-        String(m.productId).includes(query.toLowerCase()) ||
-        String(m.product_id).includes(query.toLowerCase())
+        m.productName.toLowerCase().includes(query.toLowerCase())
       );
       console.log(`Filtering materials for query "${query}":`, filtered); // Debug log
       setFilteredMaterials(prev => ({
         ...prev,
-        [index]: filtered.length > 0 ? filtered : [{ productId: null, productName: 'No matches found' }]
+        [index]: filtered.length > 0 ? filtered : [{ materialId: null, materialName: 'No matches found' }]
       }));
     } else {
       setFilteredMaterials(prev => ({ ...prev, [index]: [] }));
@@ -158,31 +155,35 @@ function BOMPage({ socket: providedSocket }) {
   }, [materials]);
 
   const handleMaterialKeyDown = useCallback((index, e) => {
-    if (!isMaterialDropdownOpen[index] || !filteredMaterials[index]?.length) return;
+    if (!isMaterialDropdownOpen[index] || !filteredMaterials[index] || filteredMaterials[index].length === 0) return;
 
     switch (e.key) {
       case 'ArrowUp':
         e.preventDefault();
-        setSelectedMaterialIndices(prev => ({
+        setSelectedMaterialIndices((prev) => ({
           ...prev,
-          [index]: prev[index] > 0 ? prev[index] - 1 : (filteredMaterials[index]?.length || 0) - 1
+          [index]: prev[index] > 0 ? prev[index] - 1 : filteredMaterials[index].length - 1,
         }));
         break;
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedMaterialIndices(prev => ({
+        setSelectedMaterialIndices((prev) => ({
           ...prev,
-          [index]: prev[index] < (filteredMaterials[index]?.length || 0) - 1 ? prev[index] + 1 : 0
+          [index]: prev[index] < filteredMaterials[index].length - 1 ? prev[index] + 1 : 0,
         }));
         break;
       case 'Enter':
         e.preventDefault();
-        if (selectedMaterialIndices[index] >= 0 && filteredMaterials[index] && filteredMaterials[index][selectedMaterialIndices[index]].productId !== null) {
+        if (
+          selectedMaterialIndices[index] >= 0 &&
+          filteredMaterials[index] &&
+          filteredMaterials[index][selectedMaterialIndices[index]]?.materialId !== null
+        ) {
           handleMaterialSelect(index, filteredMaterials[index][selectedMaterialIndices[index]]);
         }
         break;
       case 'Escape':
-        setIsMaterialDropdownOpen(prev => ({ ...prev, [index]: false }));
+        setIsMaterialDropdownOpen((prev) => ({ ...prev, [index]: false }));
         break;
       default:
         break;
@@ -247,7 +248,7 @@ function BOMPage({ socket: providedSocket }) {
         : [];
       setProducts(normalizedProducts);
 
-      const materialResponse = await fetch(`${BASE_URL}/api/stock?limit=1000`, { // Increased limit to 1000
+      const materialResponse = await fetch(`${BASE_URL}/api/stock?limit=1000`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       if (!materialResponse.ok) {
@@ -258,8 +259,8 @@ function BOMPage({ socket: providedSocket }) {
       console.log('Raw material data from /api/stock:', materialData); // Debug log
       const normalizedMaterials = Array.isArray(materialData.data || materialData)
         ? (materialData.data || materialData).map(m => ({
-            productId: m.product_id || m.productId,
-            productName: m.product_name || m.productName || 'Unnamed Material'
+            materialId: m.product_id || m.productId,
+            materialName: m.product_name || m.productName || 'Unnamed Material'
           }))
         : [];
       console.log('Normalized materials:', normalizedMaterials); // Debug log
@@ -359,20 +360,24 @@ function BOMPage({ socket: providedSocket }) {
     setSelectedBom(bom);
     setFormData({
       productId: bom.productId || '',
-      materials: bom.materials.map((m) => ({
-        materialId: m.materialId || '',
-        quantityPerUnit: m.quantityPerUnit || '',
-      })),
+      materials: bom.materials?.length
+        ? bom.materials.map((m) => ({
+            materialId: m.materialId || '',
+            quantityPerUnit: m.quantityPerUnit || '',
+          }))
+        : [{ materialId: '', quantityPerUnit: '' }],
     });
     setProductQuery(products.find(p => p.productId === bom.productId)?.productName || '');
     setFilteredProducts([]);
     setIsProductDropdownOpen(false);
     setSelectedIndex(-1);
     setMaterialQueries(
-      bom.materials.reduce((acc, m, idx) => ({
-        ...acc,
-        [idx]: materials.find(mat => mat.productId === m.materialId)?.productName || ''
-      }), {})
+      bom.materials?.length
+        ? bom.materials.reduce((acc, m, idx) => ({
+            ...acc,
+            [idx]: materials.find(mat => mat.materialId === m.materialId)?.materialName || ''
+          }), {})
+        : {}
     );
     setFilteredMaterials({});
     setIsMaterialDropdownOpen({});
@@ -409,14 +414,29 @@ function BOMPage({ socket: providedSocket }) {
   );
 
   const handleAddMaterial = useCallback(() => {
-    setFormData((prev) => ({
-      ...prev,
-      materials: [...prev.materials, { materialId: '', quantityPerUnit: '' }],
-    }));
-    setMaterialQueries(prev => ({ ...prev, [prev.materials.length]: '' }));
-    setFilteredMaterials(prev => ({ ...prev, [prev.materials.length]: [] }));
-    setIsMaterialDropdownOpen(prev => ({ ...prev, [prev.materials.length]: false }));
-    setSelectedMaterialIndices(prev => ({ ...prev, [prev.materials.length]: -1 }));
+    setFormData((prev) => {
+      const newMaterials = [...prev.materials, { materialId: '', quantityPerUnit: '' }];
+      setMaterialQueries((prevQueries) => ({
+        ...prevQueries,
+        [newMaterials.length - 1]: '',
+      }));
+      setFilteredMaterials((prevFiltered) => ({
+        ...prevFiltered,
+        [newMaterials.length - 1]: [],
+      }));
+      setIsMaterialDropdownOpen((prevOpen) => ({
+        ...prevOpen,
+        [newMaterials.length - 1]: false,
+      }));
+      setSelectedMaterialIndices((prevIndices) => ({
+        ...prevIndices,
+        [newMaterials.length - 1]: -1,
+      }));
+      return {
+        ...prev,
+        materials: newMaterials,
+      };
+    });
   }, []);
 
   const handleRemoveMaterial = useCallback((index) => {
@@ -962,19 +982,19 @@ function BOMPage({ socket: providedSocket }) {
                         placeholder="Type to search materials..."
                         className="w-full p-3 border border-gray-200 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all duration-300 placeholder-gray-400 font-medium"
                       />
-                      {isMaterialDropdownOpen[index] && filteredMaterials[index]?.length > 0 && (
+                      {isMaterialDropdownOpen[index] && (filteredMaterials[index] || [])?.length > 0 && (
                         <ul className="absolute z-10 w-full mt-1 bg-gradient-to-b from-white to-amber-50 rounded-lg shadow-xl border border-amber-100 overflow-y-auto max-h-48 transform transition-all duration-300 ease-in-out">
-                          {filteredMaterials[index].map((material, matIndex) => (
+                          {(filteredMaterials[index] || []).map((material, matIndex) => (
                             <li
-                              key={material.productId || `no-match-${index}-${matIndex}`}
-                              onClick={() => material.productId !== null && handleMaterialSelect(index, material)}
+                              key={material.materialId || `no-match-${index}-${matIndex}`}
+                              onClick={() => material.materialId !== null && handleMaterialSelect(index, material)}
                               onMouseEnter={() => setSelectedMaterialIndices(prev => ({ ...prev, [index]: matIndex }))}
                               className={`px-5 py-3 cursor-pointer hover:bg-amber-100 transition-colors duration-300 flex items-center justify-between ${
                                 matIndex === selectedMaterialIndices[index] ? 'bg-amber-200 text-amber-900 font-semibold' : 'text-gray-800'
-                              } ${material.productId === null ? 'cursor-default bg-amber-50 text-gray-500' : ''}`}
+                              } ${material.materialId === null ? 'cursor-default bg-amber-50 text-gray-500' : ''}`}
                             >
-                              <span className="truncate">{material.productName}</span>
-                              {material.productId !== null && <Search size={16} className="text-amber-500 opacity-50" />}
+                              <span className="truncate">{material.materialName}</span>
+                              {material.materialId !== null && <Search size={16} className="text-amber-500 opacity-50" />}
                             </li>
                           ))}
                         </ul>
