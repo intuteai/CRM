@@ -94,6 +94,9 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         throw new Error('Invalid data format: Expected an array in response.data');
       }
 
+      // Log the response to debug productCode presence
+      console.log('BOMs data received:', bomsData);
+
       setBoms(bomsData);
       setTotalItems(responseData.total || bomsData.length || 0);
     } catch (err) {
@@ -124,7 +127,8 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         ? (productData.data || productData).map(p => ({
             productId: p.productId || p.product_id,
             productName: p.productName || p.product_name || 'No Name',
-            productDescription: p.description || p.productDescription || 'No Description'
+            productDescription: p.description || p.productDescription || 'No Description',
+            productCode: p.productCode || p.product_code || 'N/A'
           }))
         : [];
       console.log('Normalized products:', normalizedProducts); // Debug log
@@ -235,7 +239,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
 
       const searchFields = [
         String(item.bomId || ''),
-        String(item.productId || ''),
+        String(item.productCode || ''),
         item.productName || '',
         item.productDescription || '',
         ...(item.materials || []).map((m) => String(m.materialId || '')),
@@ -324,7 +328,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       }));
       setFilteredMaterials((prevFiltered) => ({
         ...prevFiltered,
-        [newMaterials.length - 1]: [], // Initialize as empty array
+        [newMaterials.length - 1]: [],
       }));
       setIsMaterialDropdownOpen((prevOpen) => ({
         ...prevOpen,
@@ -440,7 +444,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
             setIsOpen(false);
         };
         document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        return () => document.addEventListener('mousedown', handleClickOutside);
       }, []);
 
       return (
@@ -506,7 +510,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       const filtered = products.filter(p =>
         p.productName.toLowerCase().includes(query.toLowerCase())
       );
-      setFilteredProducts(filtered.length > 0 ? filtered : [{ productId: null, productName: 'No matches found', productDescription: '' }]);
+      setFilteredProducts(filtered.length > 0 ? filtered : [{ productId: null, productName: 'No matches found', productDescription: '', productCode: 'N/A' }]);
     } else {
       setFilteredProducts([]);
     }
@@ -682,7 +686,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
               id="search-boms"
               ref={searchInputRef}
               type="text"
-              placeholder="Search by ID, Product Name, Description, or Material..."
+              placeholder="Search by ID, Product Code, Name, Description, or Material..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -730,7 +734,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                 {[
                   { key: '', label: '' },
                   { key: 'bomId', label: 'BOM ID' },
-                  { key: 'productId', label: 'Product ID' },
+                  { key: 'productCode', label: 'Product Code' },
                   { key: 'productName', label: 'Product Name' },
                   { key: 'productDescription', label: 'Product Description' },
                   { key: 'createdAt', label: 'Created At' },
@@ -786,7 +790,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                       </button>
                     </td>
                     <td className="py-4 px-3 text-gray-600 text-base">{bom.bomId}</td>
-                    <td className="py-4 px-3 text-gray-600 text-base">{bom.productId || 'N/A'}</td>
+                    <td className="py-4 px-3 text-gray-600 text-base">{bom.productCode || 'N/A'}</td>
                     <td className="py-4 px-3 text-gray-600 text-base">{bom.productName || 'N/A'}</td>
                     <td className="py-4 px-3 text-gray-600 text-base">{bom.productDescription || 'No Description'}</td>
                     <td className="py-4 px-3 text-gray-600 text-base">{formatDate(bom.createdAt)}</td>
