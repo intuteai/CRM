@@ -13,7 +13,7 @@ import EditProfile from './components/EditProfile';
 import InventoryPage from './components/InventoryPage';
 import StockPage from './components/StockPage';
 import StoreStockPage from './components/StoreStockPage';
-import StoreInventoryPage from './components/StoreInventoryPage'; // Added import
+import StoreInventoryPage from './components/StoreInventoryPage';
 import PriceListPage from './components/PriceListPage';
 import PdiPage from './components/PdiPage';
 import CustomerInvoicesPage from './components/CustomerInvoicesPage';
@@ -43,6 +43,9 @@ import ProductionPartDrawingsPage from './components/ProductionPartDrawingsPage'
 import ProductionPDIPage from './components/ProductionPDIPage';
 import ProductionBOMPage from './components/ProductionBOMPage';
 import ProblemsPage from './components/ProblemsPage';
+import EmployeeDashboard from './components/EmployeeDashboard';
+import AttendanceHistory from './components/AttendanceHistory'; // Added
+import MarkAttendance from './components/MarkAttendance'; // Added
 import './styles.css';
 
 const ROLES = {
@@ -54,6 +57,8 @@ const ROLES = {
   STORE: 'store',
   DISPATCH: 'dispatch',
   ACCOUNTS: 'accounts',
+  EMPLOYEE: 'employee',
+  HR: 'hr',
 };
 
 const allowedPathsByRole = {
@@ -83,6 +88,8 @@ const allowedPathsByRole = {
     '/accounts-dashboard', '/orders', '/customer-invoices', '/dispatch-tracking',
     '/purchase-invoices', '/edit-profile',
   ],
+  [ROLES.EMPLOYEE]: ['/employee-dashboard', '/attendance-history', '/mark-attendance', '/edit-profile'],
+  [ROLES.HR]: ['/edit-profile'],
 };
 
 function App() {
@@ -95,7 +102,6 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Socket.IO connection
   useEffect(() => {
     if (!userRole || !token || socket) return;
 
@@ -140,7 +146,6 @@ function App() {
     };
   }, [userRole, token, socket]);
 
-  // Navigation logic
   useEffect(() => {
     if (!userRole) return;
 
@@ -153,6 +158,8 @@ function App() {
       [ROLES.DISPATCH]: '/dispatch-dashboard',
       [ROLES.ACCOUNTS]: '/accounts-dashboard',
       [ROLES.CUSTOMER]: '/customer-dashboard',
+      [ROLES.EMPLOYEE]: '/employee-dashboard',
+      [ROLES.HR]: '/edit-profile',
     };
 
     const allowedPaths = allowedPathsByRole[userRole] || [];
@@ -170,7 +177,6 @@ function App() {
     }
   }, [userRole, location.pathname, navigate]);
 
-  // Persist state on refresh
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
     if (storedToken) {
@@ -252,7 +258,7 @@ function App() {
         <Route path="/edit-profile" element={userRole ? <ErrorBoundary><EditProfile socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/inventory" element={
           ['admin', 'store', 'production'].includes(userRole) ? (
-            <ErrorBoundary> 
+            <ErrorBoundary>
               {userRole === 'store' ? (
                 <StoreInventoryPage socket={socket} userRole={userRole} />
               ) : (
@@ -317,68 +323,57 @@ function App() {
         <Route path="/production-part-drawings" element={userRole === 'production' ? <ErrorBoundary><ProductionPartDrawingsPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-pdi" element={userRole === 'production' ? <ErrorBoundary><ProductionPDIPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-bom-unpriced" element={userRole === 'production' ? <ErrorBoundary><ProductionBOMPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
-        <Route
-          path="/problems"
-          element={
-            userRole === 'admin' ? (
-              <ErrorBoundary>
-                <ProblemsPage socket={socket} />
-              </ErrorBoundary>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
-          path="/"
-          element={
-            !userRole ? (
-              <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-gray-100 to-amber-100">
-                <div className="relative text-center transform transition-all duration-700 animate-fade-in">
-                  <img
-                    src={logo}
-                    alt="Intute.ai Logo"
-                    className="h-72 w-auto mx-auto mb-12 drop-shadow-2xl animate-float"
-                  />
-                  <div className="relative">
-                    <p
-                      className="text-5xl font-semibold text-gray-800 mb-10 tracking-wider uppercase relative z-10"
-                      style={{
-                        textShadow: '0 2px 4px rgba(0,0,0,0.1), 0 8px 16px rgba(222,170,50,0.2)',
-                        letterSpacing: '0.15em',
-                      }}
-                    >
-                      <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-900">Business</span>
-                      <span className="px-3 text-gray-700">Planner</span>
-                    </p>
-                    <div className="absolute -inset-1 blur-sm bg-gradient-to-r from-amber-200 via-transparent to-amber-200 opacity-20 z-0"></div>
-                  </div>
-                  <button
-                    onClick={() => setShowLogin(true)}
-                    className="relative overflow-hidden bg-gradient-to-r from-amber-300 to-amber-400 text-gray-900 text-2xl font-medium px-16 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-500 transform hover:-translate-y-1 border border-amber-500 group"
+        <Route path="/employee-dashboard" element={userRole === 'employee' ? <ErrorBoundary><EmployeeDashboard socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
+        <Route path="/attendance-history" element={userRole === 'employee' ? <ErrorBoundary><AttendanceHistory socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
+        <Route path="/mark-attendance" element={userRole === 'employee' ? <ErrorBoundary><MarkAttendance socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
+        <Route path="/problems" element={userRole === 'admin' ? <ErrorBoundary><ProblemsPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
+        <Route path="/" element={
+          !userRole ? (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-gray-100 to-amber-100">
+              <div className="relative text-center transform transition-all duration-700 animate-fade-in">
+                <img
+                  src={logo}
+                  alt="Intute.ai Logo"
+                  className="h-72 w-auto mx-auto mb-12 drop-shadow-2xl animate-float"
+                />
+                <div className="relative">
+                  <p
+                    className="text-5xl font-semibold text-gray-800 mb-10 tracking-wider uppercase relative z-10"
+                    style={{
+                      textShadow: '0 2px 4px rgba(0,0,0,0.1), 0 8px 16px rgba(222,170,50,0.2)',
+                      letterSpacing: '0.15em',
+                    }}
                   >
-                    <span className="relative z-10">Login</span>
-                    <span className="absolute inset-0 bg-gradient-to-r from-amber-400 to-amber-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-xl"></span>
-                    <span className="absolute -inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-amber-200 to-transparent transform translate-y-0 group-hover:translate-y-full transition-all duration-1000"></span>
-                  </button>
+                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-900">Business</span>
+                    <span className="px-3 text-gray-700">Planner</span>
+                  </p>
+                  <div className="absolute -inset-1 blur-sm bg-gradient-to-r from-amber-200 via-transparent to-amber-200 opacity-20 z-0"></div>
                 </div>
+                <button
+                  onClick={() => setShowLogin(true)}
+                  className="relative overflow-hidden bg-gradient-to-r from-amber-300 to-amber-400 text-gray-900 text-2xl font-medium px-16 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-500 transform hover:-translate-y-1 border border-amber-500 group"
+                >
+                  <span className="relative z-10">Login</span>
+                  <span className="absolute inset-0 bg-gradient-to-r from-amber-400 to-amber-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-xl"></span>
+                  <span className="absolute -inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-amber-200 to-transparent transform translate-y-0 group-hover:translate-y-full transition-all duration-1000"></span>
+                </button>
               </div>
-            ) : (
-              <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-gray-100 to-amber-100">
-                <div className="text-center">
-                  <h1 className="text-3xl font-bold text-gray-800 mb-4">Invalid Role</h1>
-                  <p className="text-gray-600 mb-6">Your user role ({userRole}) is not recognized. Please log out and try again.</p>
-                  <button
-                    onClick={handleLogout}
-                    className="bg-amber-400 text-gray-900 font-medium px-6 py-3 rounded-xl hover:bg-amber-500 transition-all"
-                  >
-                    Log Out
-                  </button>
-                </div>
+            </div>
+          ) : (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-gray-100 to-amber-100">
+              <div className="text-center">
+                <h1 className="text-3xl font-bold text-gray-800 mb-4">Invalid Role</h1>
+                <p className="text-gray-600 mb-6">Your user role ({userRole}) is not recognized. Please log out and try again.</p>
+                <button
+                  onClick={handleLogout}
+                  className="bg-amber-400 text-gray-900 font-medium px-6 py-3 rounded-xl hover:bg-amber-500 transition-all"
+                >
+                  Log Out
+                </button>
               </div>
-            )
-          }
-        />
+            </div>
+          )
+        } />
       </Routes>
       {showLogin && (
         <LoginModal
