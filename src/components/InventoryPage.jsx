@@ -324,7 +324,7 @@ function InventoryPage({ userRole }) {
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Finished Goods');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Products/Finished Goods');
 
     // Auto-width columns
     const colWidths = data.reduce((acc, row) => {
@@ -336,8 +336,8 @@ function InventoryPage({ userRole }) {
     }, []);
     worksheet['!cols'] = colWidths.map(width => ({ wch: width }));
 
-    XLSX.writeFile(workbook, 'Finished_Goods_Inventory.xlsx');
-    toast.success('Finished Goods exported to Excel!', { autoClose: 2000 });
+    XLSX.writeFile(workbook, 'Products_Finished_Goods_Inventory.xlsx');
+    toast.success('Products/Finished Goods exported to Excel!', { autoClose: 2000 });
   }, [filteredInventory]);
 
   const handleCreateItem = useCallback(async ({ product_name, stock_quantity, price, description, product_code }) => {
@@ -511,7 +511,7 @@ function InventoryPage({ userRole }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Finished Goods Stock</h1>
+      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Products/Finished Goods Stocks</h1>
       <div className="max-w-7xl mx-auto">
         <div className="flex mb-8 gap-6 flex-wrap">
           <div className="relative flex-grow">
