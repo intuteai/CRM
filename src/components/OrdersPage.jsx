@@ -3,6 +3,7 @@ import {
   ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
   Edit2, CheckCircle, MoreVertical, Truck, ShoppingCart, DollarSign, XCircle, Trash2
 } from 'lucide-react';
+import { debounce } from 'lodash';
 import { io } from 'socket.io-client';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -38,7 +39,7 @@ const validateOrderItems = (items, products, getAvailableStock, editingOrderId =
   return { isValid, errors };
 };
 
-const useFetchData = ({ limit, cursor }) => {
+const useFetchData = ({ limit, offset }) => {
   const [orders, setOrders] = useState([]);
   const [totalOrders, setTotalOrders] = useState(0);
   const [products, setProducts] = useState([]);
@@ -48,19 +49,27 @@ const useFetchData = ({ limit, cursor }) => {
   const [isEmpty, setIsEmpty] = useState(false);
 
   const fetchData = useCallback(async () => {
+    let isMounted = true;
     try {
       setIsLoading(true);
       const token = localStorage.getItem('token');
+      if (!token) throw new Error("Authentication token missing. Please log in again.");
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      console.log('Fetching data from:', backendUrl); // Debug log
-      const url = cursor 
-        ? `${backendUrl}/api/orders?limit=${limit}&cursor=${encodeURIComponent(cursor)}&force_refresh=true`
-        : `${backendUrl}/api/orders?limit=${limit}&force_refresh=true`;
-      
+      console.log('Fetching data from:', backendUrl);
+      const url = `${backendUrl}/api/orders?limit=${limit}&offset=${offset}&force_refresh=true`;
       const [ordersRes, productsRes, customersRes] = await Promise.all([
-        fetch(url, { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => ({ ok: false })),
-        fetch(`${backendUrl}/api/inventory/available`, { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => ({ ok: false })),
-        fetch(`${backendUrl}/api/users/customers`, { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => ({ ok: false })),
+        fetch(url, { 
+          headers: { 'Authorization': `Bearer ${token}` },
+          credentials: 'include',
+        }).catch(() => ({ ok: false })),
+        fetch(`${backendUrl}/api/inventory/available`, { 
+          headers: { 'Authorization': `Bearer ${token}` },
+          credentials: 'include',
+        }).catch(() => ({ ok: false })),
+        fetch(`${backendUrl}/api/users/customers`, { 
+          headers: { 'Authorization': `Bearer ${token}` },
+          credentials: 'include',
+        }).catch(() => ({ ok: false })),
       ]);
 
       const [ordersData, productsData, customersData] = await Promise.all([
@@ -69,31 +78,94 @@ const useFetchData = ({ limit, cursor }) => {
         customersRes.ok ? customersRes.json() : [],
       ]);
 
-      const validOrders = (ordersData.orders || []).filter(o => o && typeof o.id !== 'undefined');
-      setOrders(validOrders);
-      setTotalOrders(ordersData.total || 0);
-      setProducts((productsData || []).filter(p => p && typeof p.product_id !== 'undefined'));
-      setCustomers((customersData || []).filter(c => c && typeof c.user_id !== 'undefined'));
-      setIsEmpty(validOrders.length === 0 && productsData.length === 0 && customersData.length === 0);
-      setError(null);
-      console.log('Fetched products:', productsData); // Debug log
+      if (isMounted) {
+        const validOrders = (ordersData.orders || []).filter(o => o && typeof o.id !== 'undefined').map(order => ({
+          ...order,
+          totalAmount: calculateTotalAmount(order.items),
+          createdAt: order.createdAt || new Date().toISOString(),
+          targetDeliveryDate: order.targetDeliveryDate || null,
+          paymentStatus: order.paymentStatus || 'Pending',
+          status: order.status || 'Pending',
+          customerName: order.customerName || 'N/A',
+          items: Array.isArray(order.items) ? order.items.filter(item => item && typeof item.product_id !== 'undefined') : [],
+        }));
+        setOrders(validOrders);
+        setTotalOrders(ordersData.total || 0);
+        setProducts((productsData || []).filter(p => p && typeof p.product_id !== 'undefined'));
+        setCustomers((customersData || []).filter(c => c && typeof c.user_id !== 'undefined'));
+        setIsEmpty(validOrders.length === 0 && productsData.length === 0 && customersData.length === 0);
+        setError(null);
+        console.log('Fetched orders:', validOrders);
+      }
     } catch (err) {
-      setError(err.message || 'Failed to fetch data');
-      setIsEmpty(false);
-      console.error('Fetch error:', err);
+      if (isMounted) {
+        setError(err.message || 'Failed to fetch data');
+        setIsEmpty(false);
+        console.error('Fetch error:', err);
+      }
     } finally {
-      setIsLoading(false);
+      if (isMounted) setIsLoading(false);
     }
-  }, [limit, cursor]);
+    return () => { isMounted = false; };
+  }, [limit, offset]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   return { orders, setOrders, totalOrders, products, customers, isLoading, error, isEmpty, refetchData: fetchData };
 };
 
+const ActionsDropdown = ({ order, onEdit, onStatusChange, onCancel, isCancelling, setSelectedOrder, setShowPaymentDetails }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.addEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const actionItems = [
+    { icon: <Edit2 size={16} className="mr-2" />, label: 'Edit', action: () => { onEdit(order); setIsOpen(false); }, visible: order.status !== 'Cancelled' && order.status !== 'Delivered' },
+    { icon: <ShoppingCart size={16} className="mr-2" />, label: 'Process Order', action: () => { onStatusChange(order.id, 'Processing'); setIsOpen(false); }, visible: order.status === 'Pending' },
+    { icon: <Truck size={16} className="mr-2" />, label: 'Mark as Shipped', action: () => { onStatusChange(order.id, 'Shipped'); setIsOpen(false); }, visible: order.status === 'Processing' },
+    { icon: <CheckCircle size={16} className="mr-2" />, label: 'Mark as Delivered', action: () => { onStatusChange(order.id, 'Delivered'); setIsOpen(false); }, visible: order.status === 'Shipped' },
+    { icon: <DollarSign size={16} className="mr-2" />, label: 'Payment Details', action: () => { setSelectedOrder(order); setShowPaymentDetails(true); setIsOpen(false); }, visible: true },
+    { icon: <Trash2 size={16} className="mr-2 text-red-600" />, label: 'Cancel Order', action: () => { onCancel(order.id); setIsOpen(false); }, visible: order.status !== 'Cancelled' && order.status !== 'Delivered' },
+  ];
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <button 
+        onClick={() => setIsOpen(!isOpen)} 
+        className="p-2 hover:bg-gray-100 rounded-full" 
+        aria-label={`Actions for order ${order.id}`}
+      >
+        <MoreVertical size={20} />
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
+          {actionItems.filter(item => item.visible).map((item, index) => (
+            <button 
+              key={index} 
+              onClick={item.action} 
+              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50" 
+              disabled={item.label === 'Cancel Order' && isCancelling}
+            >
+              {item.icon} {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 function OrdersPage() {
-  const [cursor, setCursor] = useState(null);
+  const [page, setPage] = useState(0);
   const [ordersPerPage] = useState(10);
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -104,14 +176,18 @@ function OrdersPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const tableRef = useRef(null);
 
-  const { orders, setOrders, totalOrders, products, customers, isLoading, error, isEmpty, refetchData } = useFetchData({ limit: ordersPerPage, cursor });
+  // Fetch ALL orders at once for client-side pagination
+  const { orders, setOrders, totalOrders, products, customers, isLoading, error, isEmpty, refetchData } = useFetchData({ 
+    limit: 5000, 
+    offset: 0 
+  });
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    console.log('Socket.IO connecting to:', backendUrl); // Debug log
+    console.log('Socket.IO connecting to:', backendUrl);
     const socket = io(backendUrl, {
       withCredentials: true,
-      transports: ['websocket'], // Prefer WebSocket over polling
+      transports: ['websocket'],
     });
     socket.on('connect', () => console.log('Connected to Socket.IO'));
     socket.on('connect_error', (err) => {
@@ -119,11 +195,29 @@ function OrdersPage() {
       toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
     socket.on('orderUpdate', (updatedOrder) => {
-      setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o));
-      toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 3000 });
+      setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { 
+        ...o, 
+        ...updatedOrder, 
+        totalAmount: calculateTotalAmount(updatedOrder.items),
+        items: Array.isArray(updatedOrder.items) ? updatedOrder.items.filter(item => item && typeof item.product_id !== 'undefined') : [],
+      } : o));
+      toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 2000 });
+      if (tableRef.current) tableRef.current.focus();
     });
     return () => socket.disconnect();
   }, [setOrders]);
+
+  // Debounced search
+  const debouncedSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);
+
+  // Reset page to 0 on search/filter change
+  useEffect(() => { setPage(0); }, [searchTerm, filterStatus]);
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value.toLowerCase();
+    setSearchInput(value);
+    debouncedSearch(value);
+  };
 
   const getAvailableStock = useMemo(() => {
     const cache = {};
@@ -160,14 +254,21 @@ function OrdersPage() {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       const res = await fetch(`${backendUrl}/api/orders`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': `Bearer ${localStorage.getItem('token')}` 
+        },
+        credentials: 'include',
         body: JSON.stringify(newOrder),
       });
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Failed to create order');
       }
-      await refetchData();
+      setPage(0);
+      setSearchInput('');
+      setFilterStatus('All');
+      setTimeout(() => refetchData(), 100);
       setShowCreateForm(false);
       toast.success('Order created successfully', { autoClose: 3000 });
     } catch (error) {
@@ -177,17 +278,28 @@ function OrdersPage() {
   }, [refetchData]);
 
   const handleUpdateOrder = useCallback(async (orderId, items, paymentStatus, targetDeliveryDate, status) => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      body: JSON.stringify({ items, payment_status: paymentStatus, targetDeliveryDate: targetDeliveryDate || null, status: status || 'Processing' }),
-    });
-    if (!res.ok) throw new Error((await res.json()).error || 'Failed to update order');
-    await refetchData();
-    setShowEditForm(false);
-    setSelectedOrder(null);
-    toast.success('Order updated successfully', { autoClose: 3000 });
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': `Bearer ${localStorage.getItem('token')}` 
+        },
+        credentials: 'include',
+        body: JSON.stringify({ items, payment_status: paymentStatus, targetDeliveryDate: targetDeliveryDate || null, status: status || 'Processing' }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to update order');
+      }
+      setTimeout(() => refetchData(), 100);
+      setShowEditForm(false);
+      setSelectedOrder(null);
+      toast.success('Order updated successfully', { autoClose: 3000 });
+    } catch (error) {
+      toast.error(`Failed to update order: ${error.message}`, { autoClose: 5000 });
+    }
   }, [refetchData]);
 
   const handleCancelOrder = useCallback(async (orderId) => {
@@ -198,9 +310,13 @@ function OrdersPage() {
       const res = await fetch(`${backendUrl}/api/orders/${orderId}/cancel`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        credentials: 'include',
       });
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed to cancel order');
-      await refetchData();
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to cancel order');
+      }
+      setTimeout(() => refetchData(), 100);
       toast.success('Order cancelled successfully', { autoClose: 3000 });
     } catch (error) {
       toast.error(error.message, { autoClose: 5000 });
@@ -211,16 +327,32 @@ function OrdersPage() {
 
   const handleStatusChange = useCallback(async (orderId, newStatus) => {
     if (!window.confirm(`Are you sure you want to change the status to ${newStatus}?`)) return;
-    const order = orders.find(o => o.id === orderId);
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-      body: JSON.stringify({ items: order.items, payment_status: order.paymentStatus, targetDeliveryDate: order.targetDeliveryDate, status: newStatus }),
-    });
-    if (!res.ok) throw new Error((await res.json()).error || 'Failed to update status');
-    await refetchData();
-    toast.success(`Order status changed to ${newStatus}`, { autoClose: 3000 });
+    try {
+      const order = orders.find(o => o.id === orderId);
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': `Bearer ${localStorage.getItem('token')}` 
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          items: order.items, 
+          payment_status: order.paymentStatus, 
+          targetDeliveryDate: order.targetDeliveryDate, 
+          status: newStatus 
+        }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to update status');
+      }
+      setTimeout(() => refetchData(), 100);
+      toast.success(`Order status changed to ${newStatus}`, { autoClose: 3000 });
+    } catch (error) {
+      toast.error(error.message, { autoClose: 5000 });
+    }
   }, [orders, refetchData]);
 
   const initiateEdit = useCallback((order) => {
@@ -228,45 +360,7 @@ function OrdersPage() {
     setShowEditForm(true);
   }, []);
 
-  const ActionsDropdown = ({ order, onEdit, onStatusChange, onCancel }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const dropdownRef = useRef(null);
-
-    useEffect(() => {
-      const handleClickOutside = (event) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false);
-      };
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    const actionItems = [
-      { icon: <Edit2 size={16} className="mr-2" />, label: 'Edit', action: () => { onEdit(order); setIsOpen(false); }, visible: order.status !== 'Cancelled' && order.status !== 'Delivered' },
-      { icon: <ShoppingCart size={16} className="mr-2" />, label: 'Process Order', action: () => { onStatusChange(order.id, 'Processing'); setIsOpen(false); }, visible: order.status === 'Pending' },
-      { icon: <Truck size={16} className="mr-2" />, label: 'Mark as Shipped', action: () => { onStatusChange(order.id, 'Shipped'); setIsOpen(false); }, visible: order.status === 'Processing' },
-      { icon: <CheckCircle size={16} className="mr-2" />, label: 'Mark as Delivered', action: () => { onStatusChange(order.id, 'Delivered'); setIsOpen(false); }, visible: order.status === 'Shipped' },
-      { icon: <DollarSign size={16} className="mr-2" />, label: 'Payment Details', action: () => { setSelectedOrder(order); setShowPaymentDetails(true); setIsOpen(false); }, visible: true },
-      { icon: <Trash2 size={16} className="mr-2 text-red-600" />, label: 'Cancel Order', action: () => { onCancel(order.id); setIsOpen(false); }, visible: order.status !== 'Cancelled' && order.status !== 'Delivered' },
-    ];
-
-    return (
-      <div ref={dropdownRef} className="relative">
-        <button onClick={() => setIsOpen(!isOpen)} className="p-2 hover:bg-gray-100 rounded-full" aria-label={`Actions for order ${order.id}`}>
-          <MoreVertical size={20} />
-        </button>
-        {isOpen && (
-          <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
-            {actionItems.filter(item => item.visible).map((item, index) => (
-              <button key={index} onClick={item.action} className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50" disabled={isCancelling && item.label === 'Cancel Order'}>
-                {item.icon} {item.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
+  // Sort orders
   const sortedOrders = useMemo(() => {
     const sortableOrders = [...orders];
     if (sortConfig.key) {
@@ -288,18 +382,28 @@ function OrdersPage() {
     return sortableOrders;
   }, [orders, sortConfig]);
 
+  // Filter sorted orders
   const filteredOrders = useMemo(() => {
     const validOrders = sortedOrders.filter(order => order && typeof order.id !== 'undefined');
     return validOrders.filter(order => {
-      const matchesSearch = order.id.toString().includes(searchTerm.toLowerCase()) ||
-                            order.customerName.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = order.id.toString().includes(searchTerm) ||
+                            (order.customerName || '').toLowerCase().includes(searchTerm);
       const matchesStatus = filterStatus === 'All' || order.status === filterStatus;
       return matchesSearch && matchesStatus;
     });
   }, [sortedOrders, searchTerm, filterStatus]);
 
+  // Paginate filtered orders
+  const paginatedOrders = useMemo(() => {
+    const start = page * ordersPerPage;
+    return filteredOrders.slice(start, start + ordersPerPage);
+  }, [filteredOrders, page, ordersPerPage]);
+
   const handleSort = useCallback((key) => {
-    setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
+    setSortConfig(prev => ({ 
+      key, 
+      direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' 
+    }));
   }, []);
 
   const handleCreateButtonClick = useCallback(() => {
@@ -329,7 +433,7 @@ function OrdersPage() {
     </div>
   );
 
-  if (error && !showCreateForm && !showEditForm) return (
+  if (error && !showCreateForm && !showEditForm && !showPaymentDetails) return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" role="alert">
       <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg flex flex-col items-center">
         <p className="mb-4">{error}</p>
@@ -362,8 +466,8 @@ function OrdersPage() {
               id="search-orders"
               type="text"
               placeholder="Search by Order ID or Customer Name..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchInput}
+              onChange={handleSearchChange}
               className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
             />
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -431,7 +535,7 @@ function OrdersPage() {
                     key={key}
                     className={`py-5 px-3 text-gray-800 text-base font-semibold ${key !== 'items' && key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''} transition-all duration-200`}
                     onClick={() => key !== 'items' && key !== 'actions' && handleSort(key)}
-                    aria-sort={sortConfig.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    aria-sort={sortConfig.key === key ? sortConfig.direction : 'none'}
                     scope="col"
                   >
                     <div className="flex items-center justify-between">
@@ -449,7 +553,7 @@ function OrdersPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredOrders.map(order => (
+              {paginatedOrders.map(order => (
                 <tr key={order.id} className="border-t hover:bg-amber-50 transition-all duration-200" role="row">
                   <td className="py-4 px-3 text-gray-600 text-base">{order.id}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">{order.customerName || 'N/A'}</td>
@@ -483,9 +587,12 @@ function OrdersPage() {
                   <td className="py-4 px-3 text-gray-600 text-base">
                     <ActionsDropdown 
                       order={order} 
-                      onEdit={initiateEdit} 
+                      onEdit={initiateEdit}
                       onStatusChange={handleStatusChange}
                       onCancel={handleCancelOrder}
+                      isCancelling={isCancelling}
+                      setSelectedOrder={setSelectedOrder}
+                      setShowPaymentDetails={setShowPaymentDetails}
                     />
                   </td>
                 </tr>
@@ -496,20 +603,20 @@ function OrdersPage() {
           {totalOrders > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600">
-                Showing {filteredOrders.length} of {totalOrders} orders
+                Showing {paginatedOrders.length} of {filteredOrders.length} filtered orders (Total: {totalOrders})
               </div>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => setCursor(null)}
-                  disabled={!cursor}
+                  onClick={() => setPage(p => (p > 0 ? p - 1 : 0))}
+                  disabled={page === 0}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Previous page"
                 >
                   <ChevronLeft size={20} />
                 </button>
                 <button
-                  onClick={() => setCursor(orders[orders.length - 1]?.createdAt)}
-                  disabled={orders.length < ordersPerPage}
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={(page + 1) * ordersPerPage >= filteredOrders.length}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Next page"
                 >
@@ -523,6 +630,12 @@ function OrdersPage() {
             <div className="text-center py-12 text-gray-500 flex flex-col items-center" role="alert">
               <Filter className="mb-4 text-gray-400" size={48} />
               <p className="text-lg">No orders found matching your search or filter.</p>
+              <button
+                onClick={handleCreateButtonClick}
+                className="mt-4 p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
+              >
+                <PlusCircle className="mr-2" /> Create New Order
+              </button>
             </div>
           )}
         </div>
@@ -555,7 +668,11 @@ function OrdersPage() {
       {showPaymentDetails && selectedOrder && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50" role="dialog" aria-labelledby="payment-details-title">
           <div className="bg-white p-8 rounded-2xl shadow-2xl w-[500px] relative">
-            <button onClick={() => setShowPaymentDetails(false)} className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Close payment details">
+            <button 
+              onClick={() => setShowPaymentDetails(false)} 
+              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300" 
+              aria-label="Close payment details"
+            >
               <XCircle size={24} />
             </button>
             <h2 id="payment-details-title" className="text-2xl font-bold text-gray-800 mb-6">Payment Details for Order #{selectedOrder.id}</h2>
