@@ -18,24 +18,28 @@ const validateOrderItems = (items, products, getAvailableStock, editingOrderId =
   const errors = [];
   const productIds = new Set();
   const isValid = items.every(item => {
-    if (productIds.has(item.product_id)) {
-      errors.push(`Duplicate product ID: ${item.product_id}`);
+    if (!item.product_id || productIds.has(item.product_id)) {
+      errors.push(`Duplicate or invalid product ID: ${item.product_id}`);
       return false;
     }
     productIds.add(item.product_id);
     const product = products.find(p => String(p.product_id) === String(item.product_id));
     const quantity = parseInt(item.quantity) || 0;
-    if (!product || quantity <= 0 || !item.price || parseFloat(item.price) <= 0) {
+    const price = parseFloat(item.price) || 0;
+    if (!product || quantity <= 0 || price <= 0) {
       errors.push(product ? `Invalid quantity or price for ${product.product_name}` : `Product not found: ${item.product_id}`);
       return false;
     }
-    const availableStock = getAvailableStock(item.product_id, editingOrderId);
-    if (availableStock < quantity) {
-      errors.push(`Insufficient stock for ${product.product_name}: ${availableStock} available`);
-      return false;
+    if (!editingOrderId) {
+      const availableStock = getAvailableStock(item.product_id, null);
+      if (availableStock < quantity) {
+        errors.push(`Insufficient stock for ${product.product_name}: ${availableStock} available`);
+        return false;
+      }
     }
     return true;
   });
+  console.log('validateOrderItems result:', { isValid, errors, items, editingOrderId });
   return { isValid, errors };
 };
 
@@ -87,7 +91,13 @@ const useFetchData = ({ limit, offset }) => {
           paymentStatus: order.paymentStatus || 'Pending',
           status: order.status || 'Pending',
           customerName: order.customerName || 'N/A',
-          items: Array.isArray(order.items) ? order.items.filter(item => item && typeof item.product_id !== 'undefined') : [],
+          items: Array.isArray(order.items) ? order.items.filter(item => item && typeof item.product_id !== 'undefined').map(item => ({
+            ...item,
+            product_id: String(item.product_id),
+            quantity: String(item.quantity),
+            price: String(item.price),
+            productName: item.productName || productsData.find(p => String(p.product_id) === String(item.product_id))?.product_name || 'Unknown',
+          })) : [],
         }));
         setOrders(validOrders);
         setTotalOrders(ordersData.total || 0);
@@ -96,6 +106,7 @@ const useFetchData = ({ limit, offset }) => {
         setIsEmpty(validOrders.length === 0 && productsData.length === 0 && customersData.length === 0);
         setError(null);
         console.log('Fetched orders:', validOrders);
+        console.log('Fetched products:', productsData);
       }
     } catch (err) {
       if (isMounted) {
@@ -111,7 +122,7 @@ const useFetchData = ({ limit, offset }) => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  return { orders, setOrders, totalOrders, products, customers, isLoading, error, isEmpty, refetchData: fetchData };
+  return { orders, setOrders, totalOrders, products, setProducts, customers, isLoading, error, isEmpty, refetchData: fetchData };
 };
 
 const ActionsDropdown = ({ order, onEdit, onStatusChange, onCancel, isCancelling, setSelectedOrder, setShowPaymentDetails }) => {
@@ -176,11 +187,15 @@ function OrdersPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const tableRef = useRef(null);
 
-  // Fetch ALL orders at once for client-side pagination
-  const { orders, setOrders, totalOrders, products, customers, isLoading, error, isEmpty, refetchData } = useFetchData({ 
+  const { orders, setOrders, totalOrders, products, setProducts, customers, isLoading, error, isEmpty, refetchData } = useFetchData({ 
     limit: 5000, 
     offset: 0 
   });
+
+  const productsRef = useRef(products);
+  useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -199,18 +214,27 @@ function OrdersPage() {
         ...o, 
         ...updatedOrder, 
         totalAmount: calculateTotalAmount(updatedOrder.items),
-        items: Array.isArray(updatedOrder.items) ? updatedOrder.items.filter(item => item && typeof item.product_id !== 'undefined') : [],
+        items: Array.isArray(updatedOrder.items) ? updatedOrder.items.filter(item => item && typeof item.product_id !== 'undefined').map(item => ({
+          ...item,
+          product_id: String(item.product_id),
+          quantity: String(item.quantity),
+          price: String(item.price),
+          productName: item.productName || productsRef.current.find(p => String(p.product_id) === String(item.product_id))?.product_name || 'Unknown',
+        })) : [],
       } : o));
       toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 2000 });
       if (tableRef.current) tableRef.current.focus();
     });
+    socket.on('stockUpdate', async ({ product_id, stock_quantity }) => {
+      console.log('Received stockUpdate:', { product_id, stock_quantity });
+      await refetchData();
+      toast.info(`Stock updated for product ID ${product_id}`, { autoClose: 2000 });
+    });
     return () => socket.disconnect();
-  }, [setOrders]);
+  }, [setOrders, refetchData]);
 
-  // Debounced search
   const debouncedSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);
 
-  // Reset page to 0 on search/filter change
   useEffect(() => { setPage(0); }, [searchTerm, filterStatus]);
 
   const handleSearchChange = (e) => {
@@ -227,14 +251,20 @@ function OrdersPage() {
 
       const validProducts = Array.isArray(products) ? products.filter(p => p && typeof p.product_id !== 'undefined') : [];
       const product = validProducts.find(p => String(p.product_id) === String(productId));
-      if (!product) return (cache[cacheKey] = 0);
+      if (!product) {
+        console.log('Product not found for ID:', productId);
+        return (cache[cacheKey] = 0);
+      }
 
-      let baseStock = product.stock_quantity;
+      let baseStock = product.stock_quantity || 0;
       if (!editingOrderId) {
         const validOrders = Array.isArray(orders) ? orders.filter(o => o && Array.isArray(o.items)) : [];
-        const reserved = validOrders.flatMap(o => o.items)
+        const reserved = validOrders
+          .filter(o => o.status !== 'Cancelled' && o.status !== 'Delivered')
+          .flatMap(o => o.items)
           .filter(item => item && String(item.product_id) === String(productId))
           .reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0) || 0;
+        console.log('Available stock for', product.product_name, ': base=', baseStock, 'reserved=', reserved);
         return (cache[cacheKey] = Math.max(0, baseStock - reserved));
       }
 
@@ -245,13 +275,16 @@ function OrdersPage() {
       const currentQty = selectedOrder?.items
         ?.filter(item => item && String(item.product_id) === String(productId))
         .reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0) || 0;
-      return (cache[cacheKey] = Math.max(0, baseStock + originalQty - currentQty));
+      const available = Math.max(0, baseStock + originalQty - currentQty);
+      console.log('Editing stock for', product.product_name, ': base=', baseStock, 'original=', originalQty, 'current=', currentQty, 'available=', available);
+      return (cache[cacheKey] = available);
     };
   }, [orders, products, selectedOrder]);
 
   const handleCreateOrder = useCallback(async (newOrder) => {
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      console.log('Creating order with payload:', newOrder);
       const res = await fetch(`${backendUrl}/api/orders`, {
         method: 'POST',
         headers: { 
@@ -268,7 +301,7 @@ function OrdersPage() {
       setPage(0);
       setSearchInput('');
       setFilterStatus('All');
-      setTimeout(() => refetchData(), 100);
+      await refetchData();
       setShowCreateForm(false);
       toast.success('Order created successfully', { autoClose: 3000 });
     } catch (error) {
@@ -280,6 +313,8 @@ function OrdersPage() {
   const handleUpdateOrder = useCallback(async (orderId, items, paymentStatus, targetDeliveryDate, status) => {
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const payload = { items, payment_status: paymentStatus, targetDeliveryDate, status };
+      console.log('Updating order', orderId, 'with payload:', payload);
       const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
         method: 'PUT',
         headers: { 
@@ -287,17 +322,18 @@ function OrdersPage() {
           'Authorization': `Bearer ${localStorage.getItem('token')}` 
         },
         credentials: 'include',
-        body: JSON.stringify({ items, payment_status: paymentStatus, targetDeliveryDate: targetDeliveryDate || null, status: status || 'Processing' }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Failed to update order');
       }
-      setTimeout(() => refetchData(), 100);
+      await refetchData();
       setShowEditForm(false);
       setSelectedOrder(null);
       toast.success('Order updated successfully', { autoClose: 3000 });
     } catch (error) {
+      console.error('Update order error:', error);
       toast.error(`Failed to update order: ${error.message}`, { autoClose: 5000 });
     }
   }, [refetchData]);
@@ -307,6 +343,7 @@ function OrdersPage() {
     setIsCancelling(true);
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      console.log('Cancelling order:', orderId);
       const res = await fetch(`${backendUrl}/api/orders/${orderId}/cancel`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
@@ -316,9 +353,10 @@ function OrdersPage() {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Failed to cancel order');
       }
-      setTimeout(() => refetchData(), 100);
+      await refetchData();
       toast.success('Order cancelled successfully', { autoClose: 3000 });
     } catch (error) {
+      console.error('Cancel order error:', error);
       toast.error(error.message, { autoClose: 5000 });
     } finally {
       setIsCancelling(false);
@@ -330,6 +368,7 @@ function OrdersPage() {
     try {
       const order = orders.find(o => o.id === orderId);
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      console.log('Changing status for order', orderId, 'to', newStatus);
       const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
         method: 'PUT',
         headers: { 
@@ -348,19 +387,20 @@ function OrdersPage() {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Failed to update status');
       }
-      setTimeout(() => refetchData(), 100);
+      await refetchData();
       toast.success(`Order status changed to ${newStatus}`, { autoClose: 3000 });
     } catch (error) {
+      console.error('Status change error:', error);
       toast.error(error.message, { autoClose: 5000 });
     }
   }, [orders, refetchData]);
 
   const initiateEdit = useCallback((order) => {
+    console.log('Initiating edit for order:', order);
     setSelectedOrder(order);
     setShowEditForm(true);
   }, []);
 
-  // Sort orders
   const sortedOrders = useMemo(() => {
     const sortableOrders = [...orders];
     if (sortConfig.key) {
@@ -382,7 +422,6 @@ function OrdersPage() {
     return sortableOrders;
   }, [orders, sortConfig]);
 
-  // Filter sorted orders
   const filteredOrders = useMemo(() => {
     const validOrders = sortedOrders.filter(order => order && typeof order.id !== 'undefined');
     return validOrders.filter(order => {
@@ -393,7 +432,6 @@ function OrdersPage() {
     });
   }, [sortedOrders, searchTerm, filterStatus]);
 
-  // Paginate filtered orders
   const paginatedOrders = useMemo(() => {
     const start = page * ordersPerPage;
     return filteredOrders.slice(start, start + ordersPerPage);
@@ -670,7 +708,7 @@ function OrdersPage() {
           <div className="bg-white p-8 rounded-2xl shadow-2xl w-[500px] relative">
             <button 
               onClick={() => setShowPaymentDetails(false)} 
-              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300" 
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300" 
               aria-label="Close payment details"
             >
               <XCircle size={24} />
