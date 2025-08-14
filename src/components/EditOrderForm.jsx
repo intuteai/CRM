@@ -87,15 +87,6 @@ function EditOrderForm({ order, availableProducts: initialProducts, onClose, onS
     console.log('Submitting EditOrderForm with:', editedOrder);
     const { isValid, errors } = validateOrderItems(editedOrder.items, availableProducts, getAvailableStock, order.id);
 
-    if (editedOrder.targetDeliveryDate) {
-      const selectedDate = new Date(editedOrder.targetDeliveryDate + 'T00:00:00');
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (selectedDate < today) {
-        errors.push('Warning: The selected delivery date is in the past.');
-      }
-    }
-
     if (!isValid || errors.length > 0) {
       console.log('Validation errors:', errors);
       setFormErrors(errors);
