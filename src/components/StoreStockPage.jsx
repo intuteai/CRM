@@ -360,6 +360,7 @@ function StoreStockPage() {
   const ActionsDropdown = ({ item, onEdit }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
+
     useEffect(() => {
       const handleClickOutside = (event) => {
         if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false);
@@ -367,6 +368,7 @@ function StoreStockPage() {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
     return (
       <div ref={dropdownRef} className="relative">
         <button
@@ -413,11 +415,10 @@ function StoreStockPage() {
       Object.values(formErrors).forEach(error => toast.error(error, { autoClose: 3000 }));
       return;
     }
-
     try {
       const token = localStorage.getItem('token');
-      const url = modalMode === 'create' 
-        ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock` 
+      const url = modalMode === 'create'
+        ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock`
         : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock/${selectedItem.productId}`;
       const method = modalMode === 'create' ? 'POST' : 'PUT';
       const stockQuantity = parseInt(formData.stockQuantity) || 0;
@@ -431,19 +432,16 @@ function StoreStockPage() {
         price: modalMode === 'create' ? 0.01 : selectedItem.price || 0
       };
       if (modalMode === 'create') body.stockQuantity = stockQuantity >= 0 ? stockQuantity : 0;
-
       const response = await fetch(url, {
         method,
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         credentials: 'include',
       });
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || `${modalMode === 'create' ? 'Create' : 'Update'} failed`);
       }
-
       await refetchData();
       setPage(0);
       setSearchInput('');
@@ -488,14 +486,12 @@ function StoreStockPage() {
     if (showModal) {
       const firstInput = modalRef.current?.querySelector('input');
       if (firstInput) firstInput.focus();
-
       const handleTabKey = (e) => {
         if (e.key === 'Tab') {
           const focusableElements = modalRef.current?.querySelectorAll('button, input, a, select, textarea');
           if (!focusableElements) return;
           const firstElement = focusableElements[0];
           const lastElement = focusableElements[focusableElements.length - 1];
-
           if (e.shiftKey && document.activeElement === firstElement) {
             e.preventDefault();
             lastElement.focus();
@@ -505,7 +501,6 @@ function StoreStockPage() {
           }
         }
       };
-
       document.addEventListener('keydown', handleTabKey);
       return () => document.removeEventListener('keydown', handleTabKey);
     }
@@ -601,13 +596,11 @@ function StoreStockPage() {
             <Download className="mr-2" size={20} /> Export to Excel
           </button>
         </div>
-
         {isLoading && stockItems.length > 0 && (
           <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">
             Refreshing data...
           </div>
         )}
-
         <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
           <table className="w-full text-left min-w-[1100px]" role="grid" ref={tableRef} tabIndex={0}>
             <thead className="bg-amber-100">
@@ -641,51 +634,53 @@ function StoreStockPage() {
               </tr>
             </thead>
             <tbody>
-              {paginatedStock.map(item => (
-                <tr key={item.productId} className="border-t hover:bg-amber-50" role="row">
-                  <td className="py-4 px-3 text-base text-gray-700">{item.productId}</td>
-                  <td className="py-4 px-3 text-base text-gray-700">{item.productCode}</td>
-                  <td className="py-4 px-3 text-base text-gray-700">{item.productName}</td>
-                  <td className="py-4 px-3 text-base">
-                    {item.description ? (
+              {paginatedStock.map(item => {
+                const stockClass = item.stockQuantity < item.qtyRequired ? 'bg-red-500' : 'bg-green-500';
+                return (
+                  <tr key={item.productId} className="border-t hover:bg-amber-50" role="row">
+                    <td className="py-4 px-3 text-base text-gray-700">{item.productId}</td>
+                    <td className="py-4 px-3 text-base text-gray-700">{item.productCode}</td>
+                    <td className="py-4 px-3 text-base text-gray-700">{item.productName}</td>
+                    <td className="py-4 px-3 text-base">
+                      {item.description ? (
+                        <button
+                          onClick={() => showDescription(item.description)}
+                          className="text-amber-600 hover:text-amber-800 flex items-center"
+                          aria-label={`View description for ${item.productName}`}
+                        >
+                          <Eye size={16} className="mr-1" /> View
+                        </button>
+                      ) : '-'}
+                    </td>
+                    <td className="py-4 px-3 text-base">
+                      <span className={`px-3 py-1 rounded-full text-white text-sm ${stockClass}`}>
+                        {item.stockQuantity}
+                      </span>
+                    </td>
+                    <td className="py-4 px-3 text-base text-gray-700">{item.qtyRequired}</td>
+                    <td className="py-4 px-3 text-base text-gray-700">
+                      <div className="flex flex-col">
+                        <span>{new Date(item.createdAt).toLocaleDateString('en-IN')}</span>
+                        <span className="text-sm text-gray-500">{new Date(item.createdAt).toLocaleTimeString('en-IN')}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-3 text-base">
                       <button
-                        onClick={() => showDescription(item.description)}
+                        onClick={() => showBarcode(item.productCode, item.productName, item.description)}
                         className="text-amber-600 hover:text-amber-800 flex items-center"
-                        aria-label={`View description for ${item.productName}`}
+                        aria-label={`View QR code for ${item.productName}`}
                       >
-                        <Eye size={16} className="mr-1" /> View
+                        <Eye size={16} className="mr-1" /> QR Code
                       </button>
-                    ) : '-'}
-                  </td>
-                  <td className="py-4 px-3 text-base">
-                    <span className={`px-3 py-1 rounded-full text-white text-sm ${item.stockQuantity > 0 ? 'bg-green-600' : 'bg-red-600'}`}>
-                      {item.stockQuantity}
-                    </span>
-                  </td>
-                  <td className="py-4 px-3 text-base text-gray-700">{item.qtyRequired}</td>
-                  <td className="py-4 px-3 text-base text-gray-700">
-                    <div className="flex flex-col">
-                      <span>{new Date(item.createdAt).toLocaleDateString('en-IN')}</span>
-                      <span className="text-sm text-gray-500">{new Date(item.createdAt).toLocaleTimeString('en-IN')}</span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-3 text-base">
-                    <button
-                      onClick={() => showBarcode(item.productCode, item.productName, item.description)}
-                      className="text-amber-600 hover:text-amber-800 flex items-center"
-                      aria-label={`View QR code for ${item.productName}`}
-                    >
-                      <Eye size={16} className="mr-1" /> QR Code
-                    </button>
-                  </td>
-                  <td className="py-4 px-3 text-base sticky right-0 bg-white">
-                    <ActionsDropdown item={item} onEdit={handleEdit} />
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="py-4 px-3 text-base sticky right-0 bg-white">
+                      <ActionsDropdown item={item} onEdit={handleEdit} />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600 text-base">Showing {paginatedStock.length} of {filteredStock.length} filtered raw materials (Total: {totalItems})</div>
@@ -709,7 +704,6 @@ function StoreStockPage() {
               </div>
             </div>
           )}
-
           {filteredStock.length === 0 && (
             <div className="text-center py-16 flex flex-col items-center justify-center text-gray-500" role="alert">
               <Package size={48} className="mb-4 text-gray-400" />
@@ -727,7 +721,6 @@ function StoreStockPage() {
             </div>
           )}
         </div>
-
         {showModal && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50" role="dialog" aria-labelledby="stock-modal-title">
             <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" ref={modalRef}>
@@ -832,7 +825,6 @@ function StoreStockPage() {
             </div>
           </div>
         )}
-
         {showDescriptionModal && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
             <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="description-modal-title">
@@ -848,7 +840,6 @@ function StoreStockPage() {
             </div>
           </div>
         )}
-
         {showBarcodeModal && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
             <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="qrcode-modal-title">
@@ -881,7 +872,6 @@ function StoreStockPage() {
             </div>
           </div>
         )}
-
         <ToastContainer position="top-right" autoClose={3000} />
       </div>
     </div>
