@@ -187,7 +187,7 @@ function EditOrderForm({ order, availableProducts: initialProducts, onClose, onS
                     <option
                       key={product.product_id}
                       value={product.product_id}
-                      disabled={!product.available && item.product_id !== String(product.product_id)}
+                      disabled={getAvailableStock(product.product_id, order.id) <= 0 && item.product_id !== String(product.product_id)}
                     >
                       {product.product_name} (Available: {getAvailableStock(product.product_id, order.id)})
                     </option>
