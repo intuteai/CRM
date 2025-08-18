@@ -25,6 +25,7 @@ import DispatchTrackingPage from './components/DispatchTrackingPage';
 import PurchaseInvoicesPage from './components/PurchaseInvoicesPage';
 import BOMPage from './components/BOMPage';
 import StoreBOMPage from './components/StoreBOMPage';
+import ProcessPage from './components/ProcessPage'; // Added
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginModal from './components/LoginModal';
 import logo from '/intute-ai_logo.jpeg';
@@ -44,8 +45,8 @@ import ProductionPDIPage from './components/ProductionPDIPage';
 import ProductionBOMPage from './components/ProductionBOMPage';
 import ProblemsPage from './components/ProblemsPage';
 import EmployeeDashboard from './components/EmployeeDashboard';
-import AttendanceHistory from './components/AttendanceHistory'; // Added
-import MarkAttendance from './components/MarkAttendance'; // Added
+import AttendanceHistory from './components/AttendanceHistory';
+import MarkAttendance from './components/MarkAttendance';
 import './styles.css';
 
 const ROLES = {
@@ -66,7 +67,7 @@ const allowedPathsByRole = {
     '/admin-dashboard', '/orders', '/queries', '/customer-list', '/inventory', '/stock',
     '/price-list', '/pdi', '/customer-invoices', '/part-drawings', '/part-drawings/finished',
     '/part-drawings/raw', '/enquiries', '/dispatch-tracking', '/purchase-invoices', '/bom',
-    '/edit-profile', '/problems',
+    '/edit-profile', '/problems', '/processes/:orderId', // Added
   ],
   [ROLES.CUSTOMER]: ['/customer-dashboard', '/customer-orders', '/customer-queries', '/edit-profile'],
   [ROLES.SALES]: [
@@ -80,7 +81,7 @@ const allowedPathsByRole = {
   [ROLES.PRODUCTION]: [
     '/production-dashboard', '/production-orders', '/orders', '/production-queries',
     '/production-stock', '/inventory', '/production-part-drawings', '/production-part-drawings-raw',
-    '/production-pdi', '/production-bom-unpriced', '/bom', '/edit-profile',
+    '/production-pdi', '/production-bom-unpriced', '/bom', '/edit-profile', '/processes/:orderId', // Added
   ],
   [ROLES.STORE]: ['/store-dashboard', '/inventory', '/stock', '/bom', '/edit-profile'],
   [ROLES.DISPATCH]: ['/dispatch-dashboard', '/queries', '/stock', '/pdi', '/dispatch-tracking', '/edit-profile'],
@@ -166,10 +167,18 @@ function App() {
     const targetPath = dashboardMap[userRole];
     const normalizedPath = location.pathname.replace(/\/+$/, '');
 
+    const isAllowedPath = allowedPaths.some(path => {
+      if (path.includes(':orderId')) {
+        const regex = new RegExp(`^${path.replace(':orderId', '\\d+')}$`);
+        return regex.test(normalizedPath);
+      }
+      return path === normalizedPath;
+    });
+
     if (!targetPath) {
       console.warn(`Unknown userRole: ${userRole}, redirecting to /`);
       navigate('/', { replace: true });
-    } else if (normalizedPath === '' || normalizedPath === '/' || !allowedPaths.includes(normalizedPath)) {
+    } else if (normalizedPath === '' || normalizedPath === '/' || !isAllowedPath) {
       if (normalizedPath !== targetPath) {
         console.log(`Redirecting: userRole=${userRole}, from=${normalizedPath}, to=${targetPath}`);
         navigate(targetPath, { replace: true });
@@ -315,6 +324,7 @@ function App() {
             <Navigate to="/" replace />
           )
         } />
+        <Route path="/processes/:orderId" element={['admin', 'production'].includes(userRole) ? <ErrorBoundary><ProcessPage userRole={userRole} socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} /> {/* Added */}
         <Route path="/sales-queries" element={userRole === 'sales' ? <ErrorBoundary><SalesQueriesPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-queries" element={userRole === 'production' ? <ErrorBoundary><ProductionQueriesPage socket={socket} /></ErrorBoundary> : <Navigate to="/" replace />} />
         <Route path="/production-orders" element={userRole === 'production' ? <ErrorBoundary><ProductionOrdersPage socket={socket} userRole={userRole} /></ErrorBoundary> : <Navigate to="/" replace />} />

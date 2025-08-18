@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Package, MessageSquare, Truck, Users, FileText, BarChart,
-  PenTool, DollarSign, CheckSquare, Mail, MapPin, AlertTriangle
+  PenTool, DollarSign, CheckSquare, Mail, MapPin, AlertTriangle, Wrench
 } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -32,6 +32,9 @@ function AdminDashboard({ socket }) {
     socket.on('solution:created', (data) => {
       toast.info(`Solution added to problem #${data.problem_id}`, { autoClose: 3000 });
     });
+    socket.on('processUpdate', () => {
+      toast.info('Work orders updated', { autoClose: 3000 });
+    });
 
     return () => {
       socket.off('orderUpdate');
@@ -41,6 +44,7 @@ function AdminDashboard({ socket }) {
       socket.off('customerUpdate');
       socket.off('problem:created');
       socket.off('solution:created');
+      socket.off('processUpdate');
     };
   }, [socket]);
 
@@ -65,6 +69,11 @@ function AdminDashboard({ socket }) {
           <DashboardCard to="/price-list" icon={<DollarSign />} title="Price List" desc="View pricing details" />
           <DashboardCard to="/bom" icon={<BarChart />} title="Bill of Materials" desc="Bill of materials" />
           <DashboardCard to="/part-drawings" icon={<PenTool />} title="Part Drawings" desc="Access part drawings" />
+        </Section>
+
+        {/* Production Management */}
+        <Section title="Production Management">
+          <DashboardCard to="/processes/2" icon={<Wrench />} title="Work Orders" desc="Manage work orders for production" />
         </Section>
 
         {/* Quality & Logistics */}
