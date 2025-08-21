@@ -73,7 +73,7 @@ function AdminDashboard({ socket }) {
 
         {/* Production Management */}
         <Section title="Production Management">
-          <DashboardCard to="/processes/2" icon={<Wrench />} title="Work Orders" desc="Manage work orders for production" />
+          <DashboardCard to="/work-orders" icon={<Wrench />} title="Work Orders" desc="Manage work orders for production" />
         </Section>
 
         {/* Quality & Logistics */}

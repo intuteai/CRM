@@ -1,42 +1,69 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
-  Edit2, MoreVertical, Package, XCircle, Eye, Calendar, User, Hash, Target,
+  Edit2, MoreVertical, Package, XCircle, Eye, Calendar, User, Hash,
   Clock, CheckCircle2, AlertCircle, Activity, LayoutList, LayoutGrid
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import io from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useParams, useNavigate } from 'react-router-dom';
+import 'react-toastify/dist/ReactToastify.css'; 
 
 const formatDate = (date) =>
   date ? new Date(date).toLocaleDateString('en-IN') : 'N/A';
 
+// Custom hook for fetching processes  
 const useFetchProcesses = ({ orderId, limit, offset }) => {
   const [processes, setProcesses] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   const fetchData = useCallback(async () => {
     let isMounted = true;
     try {
       setIsLoading(true);
       const token = localStorage.getItem('token');
-      if (!token) throw new Error("Authentication token missing. Please log in again.");
+      if (!token) {
+        throw new Error('Authentication token missing. Please log in again.');
+      }
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       const url = `${backendUrl}/api/process/${orderId}?limit=${limit}&offset=${offset}&force_refresh=true`;
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
         credentials: 'include',
       });
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Process fetch failed: ${response.statusText}`);
+        let errorData = {};
+        try {
+          const text = await response.text();
+          errorData = text ? JSON.parse(text) : { error: 'No error details provided by server' };
+        } catch (e) {
+          errorData = { error: 'Failed to parse server error response' };
+        }
+        if (errorData.code === 'PERM_DENIED') {
+          throw new Error('You lack permission to view processes. Contact your administrator or try logging out and back in.');
+        }
+        if (errorData.code === 'AUTH_INVALID_TOKEN') {
+          localStorage.removeItem('token');
+          navigate('/');
+          throw new Error('Invalid token. You have been logged out.');
+        }
+        if (response.status === 500) {
+          throw new Error(
+            errorData.error ||
+            errorData.message ||
+            'Server error occurred while fetching processes. Please check backend logs for details or contact support.'
+          );
+        }
+        throw new Error(
+          errorData.error ||
+          `Process fetch failed: ${response.statusText} (${response.status})`
+        );
       }
       const { workOrders, total } = await response.json();
-
       if (isMounted) {
         setProcesses(workOrders || []);
         setTotalItems(total || 0);
@@ -47,15 +74,20 @@ const useFetchProcesses = ({ orderId, limit, offset }) => {
     } finally {
       if (isMounted) setIsLoading(false);
     }
-    return () => { isMounted = false; };
-  }, [orderId, limit, offset]);
+    return () => {
+      isMounted = false;
+    };
+  }, [orderId, limit, offset, navigate]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   return { processes, totalItems, isLoading, error, refetchData: fetchData };
 };
 
-function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
+function MotorProcessPage({ userRole, socket }) {
+  const { orderId } = useParams();
   const [page, setPage] = useState(0);
   const [itemsPerPage] = useState(8);
   const [searchInput, setSearchInput] = useState('');
@@ -68,16 +100,15 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
   const [showProcessesModal, setShowProcessesModal] = useState(false);
   const [selectedProcesses, setSelectedProcesses] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
-  const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban'
+  const [viewMode, setViewMode] = useState('list');
   const tableRef = useRef(null);
 
   const { processes: allProcesses, totalItems, isLoading, error, refetchData } = useFetchProcesses({ orderId, limit: 5000, offset: 0 });
 
   useEffect(() => {
     if (!socket) return;
-    socket.on('connect', () => console.log('Connected to Socket.IO'));
+    socket.on('connect', () => {});
     socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
       toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
     socket.on('processUpdate', () => {
@@ -93,9 +124,7 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
   }, [socket, refetchData]);
 
   const debouncedSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);
-
   useEffect(() => { setPage(0); }, [searchTerm, filterStatus, quickFilter]);
-
   const handleSearchChange = (e) => {
     const value = e.target.value.toLowerCase();
     setSearchInput(value);
@@ -125,9 +154,9 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
   const filteredProcesses = useMemo(() => {
     return sortedProcesses.filter(item => {
       const matchesSearch =
-        item.id.toString().includes(searchTerm) ||
-        item.componentName.toLowerCase().includes(searchTerm) ||
-        item.responsiblePerson.toLowerCase().includes(searchTerm);
+        item.id?.toString().includes(searchTerm) ||
+        item.componentName?.toLowerCase().includes(searchTerm) ||
+        item.responsiblePerson?.toLowerCase().includes(searchTerm);
       const matchesStatus =
         filterStatus === 'All' ||
         (filterStatus === 'Pending' && item.status === 'Pending') ||
@@ -197,20 +226,18 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
       toast.error(err.message);
       throw err;
     }
-  }, [refetchData]);
+  }, [refetchData]); 
 
   const handleDragEnd = useCallback(async (result) => {
     if (!result.destination) return;
     const sourceStatus = result.source.droppableId;
     const destStatus = result.destination.droppableId;
     if (sourceStatus === destStatus) return;
-
     const workOrder = filteredProcesses.find(item => item.id.toString() === result.draggableId);
     if (!workOrder) return;
-
     const completion_date = destStatus === 'Completed' ? new Date().toISOString().split('T')[0] : '';
     await handleUpdateProcessStatus(workOrder.id, {
-      process_name: workOrder.processes[0]?.name || '',
+      process_name: workOrder.processes?.name || '',
       status: destStatus,
       completion_date,
     });
@@ -233,13 +260,12 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
 
   const getProcessProgress = (processes) => {
     const completed = processes.filter(p => p.status === 'Completed').length;
-    return { completed, total: processes.length, percentage: (completed / processes.length) * 100 };
+    return { completed, total: processes.length, percentage: processes.length ? (completed / processes.length) * 100 : 0 };
   };
 
   const ActionsDropdown = ({ workOrder, onEdit }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
-
     useEffect(() => {
       const handleClickOutside = (event) => {
         if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -249,7 +275,6 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
-
     return (
       <div ref={dropdownRef} className="relative">
         <button
@@ -280,31 +305,49 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
   }, []);
 
   const responsiblePersons = useMemo(() => {
-    const persons = [...new Set(allProcesses.map(item => item.responsiblePerson))];
+    const persons = [...new Set(allProcesses.map(item => item.responsiblePerson).filter(Boolean))];
     return persons.sort();
   }, [allProcesses]);
 
+  if (!userRole) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-800 text-2xl" role="alert">
+        Checking permissions...
+      </div>
+    );
+  }
   if (userRole !== 'admin') return (
     <div className="min-h-screen flex items-center justify-center text-gray-800 text-2xl" role="alert">
       Access Denied
     </div>
   );
-
   if (isLoading && !allProcesses.length) return (
     <div className="min-h-screen flex items-center justify-center" aria-live="polite">
       <div className="text-gray-600 text-xl animate-pulse">Loading work orders...</div>
     </div>
   );
-
   if (error && !showEditForm && !showCreateForm) return (
-    <div className="min-h-screen flex items-center justify-center text-red-700" role="alert">
-      {error}
-      <button
-        onClick={() => refetchData()}
-        className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
-      >
-        Retry
-      </button>
+    <div className="min-h-screen flex flex-col items-center justify-center text-red-700" role="alert">
+      <p>{error}</p>
+      <div className="mt-4 flex space-x-4">
+        <button
+          onClick={() => refetchData()}
+          className="px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
+        >
+          Retry
+        </button>
+        {(error.includes('permission') || error.includes('token') || error.includes('Server error')) && (
+          <button
+            onClick={() => {
+              localStorage.removeItem('token');
+              navigate('/');
+            }}
+            className="px-4 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-red-300"
+          >
+            Log Out
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -338,7 +381,6 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
           </div>
         </div>
       </div>
-
       <div className="max-w-7xl mx-auto">
         {/* Controls Bar */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 mb-8">
@@ -418,20 +460,17 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
             </button>
           </div>
         </div>
-
         {isLoading && allProcesses.length > 0 && (
           <div className="text-gray-600 text-lg mb-4 text-center bg-amber-50 py-2 rounded-lg" aria-live="polite">
             Refreshing data...
           </div>
         )}
-
         {/* Work Orders Display */}
         {viewMode === 'list' ? (
           <div className="space-y-4">
             {paginatedProcesses.map(workOrder => {
               const progress = getProcessProgress(workOrder.processes);
               const isOverdue = new Date(workOrder.targetDate) < new Date() && workOrder.status !== 'Completed';
-
               return (
                 <div key={workOrder.id} className="bg-white rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow" role="region" aria-label={`Work order ${workOrder.id}`}>
                   <div className="p-4">
@@ -574,7 +613,6 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
             </div>
           </DragDropContext>
         )}
-
         {/* Pagination for List View */}
         {viewMode === 'list' && totalItems > 0 && (
           <div className="flex justify-between items-center mt-6 bg-white rounded-2xl shadow-lg border border-gray-200 p-4">
@@ -604,7 +642,6 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
             </div>
           </div>
         )}
-
         {/* Empty State */}
         {filteredProcesses.length === 0 && (
           <div className="text-center py-12 bg-white rounded-2xl shadow-lg border border-gray-200" role="alert">
@@ -624,106 +661,101 @@ function ProcessPage({ userRole = 'admin', orderId = 2, socket }) {
             </button>
           </div>
         )}
-      </div>
-
-      {/* Create Work Order Modal */}
-      {showCreateForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="create-form-title">
-            <button
-              onClick={() => setShowCreateForm(false)}
-              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
-              aria-label="Close create form"
-            >
-              <XCircle size={24} />
-            </button>
-            <h2 id="create-form-title" className="text-2xl font-bold mb-6 text-gray-800">Create New Work Order</h2>
-            <CreateWorkOrderForm orderId={orderId} onSubmit={handleCreateWorkOrder} onClose={() => setShowCreateForm(false)} />
+        {/* Create Work Order Modal */}
+        {showCreateForm && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="create-form-title">
+              <button
+                onClick={() => setShowCreateForm(false)}
+                className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                aria-label="Close create form"
+              >
+                <XCircle size={24} />
+              </button>
+              <h2 id="create-form-title" className="text-2xl font-bold mb-6 text-gray-800">Create New Work Order</h2>
+              <CreateWorkOrderForm orderId={orderId} onSubmit={handleCreateWorkOrder} onClose={() => setShowCreateForm(false)} />
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Edit Process Status Modal */}
-      {showEditForm && selectedWorkOrder && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="edit-form-title">
-            <button
-              onClick={() => setShowEditForm(false)}
-              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
-              aria-label="Close edit form"
-            >
-              <XCircle size={24} />
-            </button>
-            <h2 id="edit-form-title" className="text-2xl font-bold mb-6 text-gray-800">Update Process Status</h2>
-            <EditProcessStatusForm workOrder={selectedWorkOrder} onSubmit={confirmUpdate} onClose={() => setShowEditForm(false)} />
+        )}
+        {/* Edit Process Status Modal */}
+        {showEditForm && selectedWorkOrder && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="edit-form-title">
+              <button
+                onClick={() => setShowEditForm(false)}
+                className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                aria-label="Close edit form"
+              >
+                <XCircle size={24} />
+              </button>
+              <h2 id="edit-form-title" className="text-2xl font-bold mb-6 text-gray-800">Update Process Status</h2>
+              <EditProcessStatusForm workOrder={selectedWorkOrder} onSubmit={confirmUpdate} onClose={() => setShowEditForm(false)} />
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Processes Detail Modal */}
-      {showProcessesModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden relative" role="dialog" aria-labelledby="processes-modal-title">
-            <button
-              onClick={() => setShowProcessesModal(false)}
-              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
-              aria-label="Close processes modal"
-            >
-              <XCircle size={24} />
-            </button>
-            <h2 id="processes-modal-title" className="text-2xl font-bold mb-6 text-gray-800 p-4 border-b border-gray-200">Process Timeline</h2>
-            <div className="p-4 overflow-y-auto max-h-96">
-              <div className="space-y-4">
-                {selectedProcesses.map((process, index) => (
-                  <div key={process.name} className="relative">
-                    {index < selectedProcesses.length - 1 && (
-                      <div className="absolute left-5 top-10 w-0.5 h-12 bg-gray-300"></div>
-                    )}
-                    <div className="flex items-start space-x-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                        process.status === 'Completed' ? 'bg-green-500' : 'bg-gray-400'
-                      }`}>
-                        {process.sequence}
-                      </div>
-                      <div className="flex-1 bg-gray-50 rounded-lg p-3">
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="text-base font-medium text-gray-900">{process.name}</h3>
-                          <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            process.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {process.status}
-                          </div>
+        )}
+        {/* Processes Detail Modal */}
+        {showProcessesModal && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden relative" role="dialog" aria-labelledby="processes-modal-title">
+              <button
+                onClick={() => setShowProcessesModal(false)}
+                className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                aria-label="Close processes modal"
+              >
+                <XCircle size={24} />
+              </button>
+              <h2 id="processes-modal-title" className="text-2xl font-bold mb-6 text-gray-800 p-4 border-b border-gray-200">Process Timeline</h2>
+              <div className="p-4 overflow-y-auto max-h-96">
+                <div className="space-y-4">
+                  {selectedProcesses.map((process, index) => (
+                    <div key={process.name} className="relative">
+                      {index < selectedProcesses.length - 1 && (
+                        <div className="absolute left-5 top-10 w-0.5 h-12 bg-gray-300"></div>
+                      )}
+                      <div className="flex items-start space-x-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                          process.status === 'Completed' ? 'bg-green-500' : 'bg-gray-400'
+                        }`}>
+                          {process.sequence}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <p className="text-gray-500">Responsible</p>
-                            <p className="font-medium text-gray-900">{process.responsible}</p>
+                        <div className="flex-1 bg-gray-50 rounded-lg p-3">
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="text-base font-medium text-gray-900">{process.name}</h3>
+                            <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              process.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {process.status}
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-gray-500">Completion Date</p>
-                            <p className="font-medium text-gray-900">{formatDate(process.completion_date)}</p>
-                          </div>
-                          <div className="md:col-span-2">
-                            <p className="text-gray-500">Description</p>
-                            <p className="font-medium text-gray-900">{process.description}</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <p className="text-gray-500">Responsible</p>
+                              <p className="font-medium text-gray-900">{process.responsible}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Completion Date</p>
+                              <p className="font-medium text-gray-900">{formatDate(process.completion_date)}</p>
+                            </div>
+                            <div className="md:col-span-2">
+                              <p className="text-gray-500">Description</p>
+                              <p className="font-medium text-gray-900">{process.description}</p>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
+        )}
+        <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
+      </div>
     </div>
   );
 }
 
-// CreateWorkOrderForm Component
 const CreateWorkOrderForm = ({ orderId, onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     order_id: orderId,
@@ -750,7 +782,8 @@ const CreateWorkOrderForm = ({ orderId, onSubmit, onClose }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    const processedValue = name === 'quantity' ? parseInt(value) || 0 : name === 'component_id' ? parseInt(value) || '' : value;
+    const processedValue = name === 'quantity' ? parseInt(value) || 0
+      : name === 'component_id' ? parseInt(value) || '' : value;
     setFormData(prev => ({ ...prev, [name]: processedValue }));
     setErrors(prev => ({ ...prev, [name]: validateField(name, processedValue) }));
   };
@@ -764,7 +797,6 @@ const CreateWorkOrderForm = ({ orderId, onSubmit, onClose }) => {
     };
     setErrors(fieldErrors);
     if (Object.values(fieldErrors).some(err => err)) return;
-
     try {
       setIsSubmitting(true);
       await onSubmit(formData);
@@ -776,7 +808,9 @@ const CreateWorkOrderForm = ({ orderId, onSubmit, onClose }) => {
   return (
     <form className="space-y-4" onSubmit={e => e.preventDefault()}>
       <div>
-        <label htmlFor="create-order-id" className="text-gray-700 font-medium">Order ID</label>
+        <label htmlFor="create-order-id" className="text-gray-700 font-medium">
+          Order ID
+        </label>
         <input
           id="create-order-id"
           type="number"
@@ -788,7 +822,9 @@ const CreateWorkOrderForm = ({ orderId, onSubmit, onClose }) => {
         />
       </div>
       <div>
-        <label htmlFor="create-component-id" className="text-gray-700 font-medium">Component ID</label>
+        <label htmlFor="create-component-id" className="text-gray-700 font-medium">
+          Component ID
+        </label>
         <input
           id="create-component-id"
           type="number"
@@ -797,13 +833,19 @@ const CreateWorkOrderForm = ({ orderId, onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.component_id}
-          aria-describedby={errors.component_id ? "create-component-id-error" : undefined}
+          aria-describedby={errors.component_id ? 'create-component-id-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.component_id && <p id="create-component-id-error" className="text-red-600 text-sm mt-1">{errors.component_id}</p>}
+        {errors.component_id && (
+          <p id="create-component-id-error" className="text-red-600 text-sm mt-1">
+            {errors.component_id}
+          </p>
+        )}
       </div>
       <div>
-        <label htmlFor="create-quantity" className="text-gray-700 font-medium">Quantity</label>
+        <label htmlFor="create-quantity" className="text-gray-700 font-medium">
+          Quantity
+        </label>
         <input
           id="create-quantity"
           type="number"
@@ -813,13 +855,19 @@ const CreateWorkOrderForm = ({ orderId, onSubmit, onClose }) => {
           min="1"
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.quantity}
-          aria-describedby={errors.quantity ? "create-quantity-error" : undefined}
+          aria-describedby={errors.quantity ? 'create-quantity-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.quantity && <p id="create-quantity-error" className="text-red-600 text-sm mt-1">{errors.quantity}</p>}
+        {errors.quantity && (
+          <p id="create-quantity-error" className="text-red-600 text-sm mt-1">
+            {errors.quantity}
+          </p>
+        )}
       </div>
       <div>
-        <label htmlFor="create-responsible-person" className="text-gray-700 font-medium">Responsible Person</label>
+        <label htmlFor="create-responsible-person" className="text-gray-700 font-medium">
+          Responsible Person
+        </label>
         <input
           id="create-responsible-person"
           type="text"
@@ -828,13 +876,19 @@ const CreateWorkOrderForm = ({ orderId, onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.responsible_person}
-          aria-describedby={errors.responsible_person ? "create-responsible-person-error" : undefined}
+          aria-describedby={errors.responsible_person ? 'create-responsible-person-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.responsible_person && <p id="create-responsible-person-error" className="text-red-600 text-sm mt-1">{errors.responsible_person}</p>}
+        {errors.responsible_person && (
+          <p id="create-responsible-person-error" className="text-red-600 text-sm mt-1">
+            {errors.responsible_person}
+          </p>
+        )}
       </div>
       <div>
-        <label htmlFor="create-target-date" className="text-gray-700 font-medium">Target Date</label>
+        <label htmlFor="create-target-date" className="text-gray-700 font-medium">
+          Target Date
+        </label>
         <input
           id="create-target-date"
           type="date"
@@ -843,10 +897,14 @@ const CreateWorkOrderForm = ({ orderId, onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.target_date}
-          aria-describedby={errors.target_date ? "create-target-date-error" : undefined}
+          aria-describedby={errors.target_date ? 'create-target-date-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.target_date && <p id="create-target-date-error" className="text-red-600 text-sm mt-1">{errors.target_date}</p>}
+        {errors.target_date && (
+          <p id="create-target-date-error" className="text-red-600 text-sm mt-1">
+            {errors.target_date}
+          </p>
+        )}
       </div>
       <div className="flex justify-end space-x-4">
         <button
@@ -872,12 +930,11 @@ const CreateWorkOrderForm = ({ orderId, onSubmit, onClose }) => {
   );
 };
 
-// EditProcessStatusForm Component
 const EditProcessStatusForm = ({ workOrder, onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     process_name: workOrder.processes[0]?.name || '',
-    status: workOrder.processes[0]?.status || 'Pending',
-    completion_date: workOrder.processes[0]?.completion_date || '',
+    status: workOrder.processes?.status || 'Pending',
+    completion_date: workOrder.processes?.completion_date || '',
   });
   const [errors, setErrors] = useState({
     process_name: '',
@@ -907,7 +964,6 @@ const EditProcessStatusForm = ({ workOrder, onSubmit, onClose }) => {
     };
     setErrors(fieldErrors);
     if (Object.values(fieldErrors).some(err => err)) return;
-
     try {
       setIsSubmitting(true);
       await onSubmit(workOrder.id, formData);
@@ -919,7 +975,9 @@ const EditProcessStatusForm = ({ workOrder, onSubmit, onClose }) => {
   return (
     <form className="space-y-4" onSubmit={e => e.preventDefault()}>
       <div>
-        <label htmlFor="edit-process-name" className="text-gray-700 font-medium">Process Name</label>
+        <label htmlFor="edit-process-name" className="text-gray-700 font-medium">
+          Process Name
+        </label>
         <select
           id="edit-process-name"
           name="process_name"
@@ -927,17 +985,25 @@ const EditProcessStatusForm = ({ workOrder, onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.process_name}
-          aria-describedby={errors.process_name ? "edit-process-name-error" : undefined}
+          aria-describedby={errors.process_name ? 'edit-process-name-error' : undefined}
           disabled={isSubmitting}
         >
-          {workOrder.processes.map(process => (
-            <option key={process.name} value={process.name}>{process.name}</option>
+          {workOrder.processes.map((process) => (
+            <option key={process.name} value={process.name}>
+              {process.name}
+            </option>
           ))}
         </select>
-        {errors.process_name && <p id="edit-process-name-error" className="text-red-600 text-sm mt-1">{errors.process_name}</p>}
+        {errors.process_name && (
+          <p id="edit-process-name-error" className="text-red-600 text-sm mt-1">
+            {errors.process_name}
+          </p>
+        )}
       </div>
       <div>
-        <label htmlFor="edit-status" className="text-gray-700 font-medium">Status</label>
+        <label htmlFor="edit-status" className="text-gray-700 font-medium">
+          Status
+        </label>
         <select
           id="edit-status"
           name="status"
@@ -945,16 +1011,22 @@ const EditProcessStatusForm = ({ workOrder, onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.status}
-          aria-describedby={errors.status ? "edit-status-error" : undefined}
+          aria-describedby={errors.status ? 'edit-status-error' : undefined}
           disabled={isSubmitting}
         >
           <option value="Pending">Pending</option>
           <option value="Completed">Completed</option>
         </select>
-        {errors.status && <p id="edit-status-error" className="text-red-600 text-sm mt-1">{errors.status}</p>}
+        {errors.status && (
+          <p id="edit-status-error" className="text-red-600 text-sm mt-1">
+            {errors.status}
+          </p>
+        )}
       </div>
       <div>
-        <label htmlFor="edit-completion-date" className="text-gray-700 font-medium">Completion Date</label>
+        <label htmlFor="edit-completion-date" className="text-gray-700 font-medium">
+          Completion Date
+        </label>
         <input
           id="edit-completion-date"
           type="date"
@@ -963,10 +1035,14 @@ const EditProcessStatusForm = ({ workOrder, onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.completion_date}
-          aria-describedby={errors.completion_date ? "edit-completion-date-error" : undefined}
+          aria-describedby={errors.completion_date ? 'edit-completion-date-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.completion_date && <p id="edit-completion-date-error" className="text-red-600 text-sm mt-1">{errors.completion_date}</p>}
+        {errors.completion_date && (
+          <p id="edit-completion-date-error" className="text-red-600 text-sm mt-1">
+            {errors.completion_date}
+          </p>
+        )}
       </div>
       <div className="flex justify-end space-x-4">
         <button
@@ -992,4 +1068,4 @@ const EditProcessStatusForm = ({ workOrder, onSubmit, onClose }) => {
   );
 };
 
-export default ProcessPage;
+export default MotorProcessPage;
