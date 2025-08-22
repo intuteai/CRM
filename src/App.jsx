@@ -32,7 +32,6 @@ import DispatchTrackingPage from "./components/DispatchTrackingPage";
 import PurchaseInvoicesPage from "./components/PurchaseInvoicesPage";
 import BOMPage from "./components/BOMPage";
 import StoreBOMPage from "./components/StoreBOMPage";
-import ProcessPage from "./components/MotorProcessPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import LoginModal from "./components/LoginModal";
 import logo from "/intute-ai_logo.jpeg";
@@ -56,7 +55,7 @@ import AttendanceHistory from "./components/AttendanceHistory";
 import MarkAttendance from "./components/MarkAttendance";
 import WorkOrderPage from "./components/WordOrderPage";
 import SelectOrderPage from "./components/SelectOrderPage";
-import MotorProcessPage from "./components/MotorProcessPage";
+import CreateMotorProcess from "./components/CreateMotorProcess";
 import "./styles.css";
 
 const ROLES = {
@@ -93,7 +92,7 @@ const allowedPathsByRole = {
     "/edit-profile",
     "/problems",
     "/work-orders",
-    "/select-component/:orderId/:action", // Updated to include parameters
+    "/select-component/:orderId/:action", 
     "/processes/:orderId",
   ],
   [ROLES.CUSTOMER]: [
@@ -706,7 +705,7 @@ function App() {
           element={
             userRole === "admin" ? (
               <ErrorBoundary>
-                <MotorProcessPage userRole={userRole} socket={socket} />
+                <CreateMotorProcess />
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />

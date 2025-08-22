@@ -11,7 +11,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import 'react-toastify/dist/ReactToastify.css'; 
 
 const formatDate = (date) =>
-  date ? new Date(date).toLocaleDateString('en-IN') : 'N/A';
+  date ? new Date(date).toLocaleDateString('en-IN') : 'N/A'; 
 
 // Custom hook for fetching processes  
 const useFetchProcesses = ({ orderId, limit, offset }) => {
@@ -32,7 +32,7 @@ const useFetchProcesses = ({ orderId, limit, offset }) => {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
       const url = `${backendUrl}/api/process/${orderId}?limit=${limit}&offset=${offset}&force_refresh=true`;
       const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` }, 
         credentials: 'include',
       });
       if (!response.ok) {
