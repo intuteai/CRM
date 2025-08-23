@@ -118,6 +118,78 @@ function ProcessRowEditor({ row, onChange, onCancel, onSave }) {
   );
 }
 
+function MaterialEditor({ material, onCancel, onSave }) {
+  const [quantityPerUnit, setQuantityPerUnit] = useState(material.quantityPerUnit || 0);
+  const [requiredQuantity, setRequiredQuantity] = useState(material.requiredQuantity || 0);
+  const [error, setError] = useState("");
+
+  const handleSave = () => {
+    const qtyPerUnit = Number(quantityPerUnit);
+    const reqQty = Number(requiredQuantity);
+    if (!Number.isInteger(qtyPerUnit) || qtyPerUnit < 0) {
+      setError("Quantity per unit must be a non-negative integer");
+      return;
+    }
+    if (!Number.isInteger(reqQty) || reqQty < 0) {
+      setError("Required quantity must be a non-negative integer");
+      return;
+    }
+    if (qtyPerUnit < reqQty) {
+      setError("Required quantity cannot exceed quantity per unit");
+      return;
+    }
+    setError("");
+    onSave(qtyPerUnit, reqQty);
+  };
+
+  return (
+    <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
+      <div>
+        <label className="block text-sm text-gray-700 mb-1">
+          Quantity per Unit (Raw Material ID: {material.rawMaterialId})
+        </label>
+        <input
+          type="number"
+          value={quantityPerUnit}
+          onChange={(e) => setQuantityPerUnit(e.target.value)}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          placeholder="Enter quantity per unit"
+          min="0"
+          step="1"
+        />
+      </div>
+      <div>
+        <label className="block text-sm text-gray-700 mb-1">
+          Required Quantity (Raw Material ID: {material.rawMaterialId})
+        </label>
+        <input
+          type="number"
+          value={requiredQuantity}
+          onChange={(e) => setRequiredQuantity(e.target.value)}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          placeholder="Enter required quantity"
+          min="0"
+          step="1"
+        />
+      </div>
+      {error && (
+        <p className="text-sm text-red-600 mt-1">{error}</p>
+      )}
+      <div className="flex justify-end gap-3">
+        <button onClick={onCancel} className="px-4 py-2 rounded-lg border hover:bg-gray-50">
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
+        >
+          Save
+        </button>
+      </div>
+    </form>
+  );
+}
+
 // ---------- Helpers ----------
 const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
 
@@ -132,19 +204,20 @@ async function safeJson(res) {
 
 // ---------- Main ----------
 export default function CreateMotorProcess() {
-  const { orderId } = useParams(); // not strictly needed for this UI, but available if you later use it
+  const { orderId } = useParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   // components + processes
-  const [components, setComponents] = useState([]); // [{componentId, componentName, processes:[]}]
+  const [components, setComponents] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedComponentId, setSelectedComponentId] = useState(null);
 
   // raw materials (per selected component)
   const [materialsLoading, setMaterialsLoading] = useState(false);
   const [materialsError, setMaterialsError] = useState("");
-  const [componentMaterials, setComponentMaterials] = useState([]); // [{materialId, componentId, rawMaterialId, quantityPerUnit}]
+  const [componentMaterials, setComponentMaterials] = useState([]);
+  const [editMaterial, setEditMaterial] = useState(null);
 
   // order status card
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -178,7 +251,6 @@ export default function CreateMotorProcess() {
 
         const list = await res.json();
         setComponents(Array.isArray(list) ? list : []);
-        // default: select Shell if present, else first
         const shell = list.find((c) => c.componentName?.toLowerCase() === "shell");
         const firstId = shell?.componentId ?? list[0]?.componentId ?? null;
         setSelectedComponentId(firstId);
@@ -191,7 +263,7 @@ export default function CreateMotorProcess() {
     run();
   }, []);
 
-  // ----- load materials for selected component (if endpoint exists) -----
+  // ----- load materials for selected component -----
   useEffect(() => {
     if (!selectedComponentId) return;
     const run = async () => {
@@ -202,8 +274,6 @@ export default function CreateMotorProcess() {
         const token = localStorage.getItem("token");
         if (!token) throw new Error("Authentication token missing");
 
-        // This GET isn't in your router yet; add it server-side to expose component_raw_materials,
-        // or replace with whatever route you decide. We fail gracefully if 404.
         const url = `${getBackendUrl()}/api/process/components/${selectedComponentId}/materials`;
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
@@ -211,12 +281,6 @@ export default function CreateMotorProcess() {
         });
 
         if (!res.ok) {
-          if (res.status === 404) {
-            setMaterialsError(
-              "Materials endpoint not available yet. (Add GET /api/process/components/:componentId/materials)"
-            );
-            return;
-          }
           const data = await safeJson(res);
           throw new Error(data?.error || `Failed to fetch materials (${res.status})`);
         }
@@ -232,10 +296,45 @@ export default function CreateMotorProcess() {
     run();
   }, [selectedComponentId]);
 
+  // ----- save material edits -----
+  const saveMaterialEdits = async (material, newQuantityPerUnit, newRequiredQuantity) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("Authentication token missing");
+
+      const url = `${getBackendUrl()}/api/process/components/${material.componentId}/materials/${material.materialId}`;
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+        body: JSON.stringify({ quantity_per_unit: newQuantityPerUnit, required_quantity: newRequiredQuantity }),
+      });
+
+      if (!res.ok) {
+        const data = await safeJson(res);
+        throw new Error(data?.error || `Failed to update material (${res.status})`);
+      }
+
+      const updatedMaterial = await res.json();
+      setComponentMaterials((prev) =>
+        prev.map((m) =>
+          m.materialId === material.materialId
+            ? { ...m, quantityPerUnit: updatedMaterial.quantityPerUnit, requiredQuantity: updatedMaterial.requiredQuantity }
+            : m
+        )
+      );
+      setEditMaterial(null);
+    } catch (e) {
+      setMaterialsError(e.message || "Failed to save material changes");
+    }
+  };
+
   // ----- derived state -----
   const options = useMemo(
-    () =>
-      components.map((c) => ({ value: c.componentId, label: c.componentName })),
+    () => components.map((c) => ({ value: c.componentId, label: c.componentName })),
     [components]
   );
 
@@ -250,7 +349,6 @@ export default function CreateMotorProcess() {
     [components, selectedComponentId]
   );
 
-  // Build processes (sorted) + merge local UI fields
   const processes = useMemo(() => {
     const base = (selectedComponent?.processes || [])
       .slice()
@@ -288,6 +386,8 @@ export default function CreateMotorProcess() {
     }));
     setEditRow(null);
   };
+
+  const openMaterialEdit = (material) => setEditMaterial({ ...material });
 
   // ---------- render ----------
   if (loading) {
@@ -388,10 +488,22 @@ export default function CreateMotorProcess() {
                       <p className="text-sm text-gray-600">
                         Quantity / unit: <span className="font-medium">{rm.quantityPerUnit}</span>
                       </p>
+                      <p className="text-sm text-gray-600">
+                        Required Quantity: <span className="font-medium">{rm.requiredQuantity}</span>
+                      </p>
                     </div>
-                    {typeof rm.materialId !== "undefined" && (
-                      <span className="text-xs text-gray-500">material_id: {rm.materialId}</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {typeof rm.materialId !== "undefined" && (
+                        <span className="text-xs text-gray-500">material_id: {rm.materialId}</span>
+                      )}
+                      <button
+                        onClick={() => openMaterialEdit(rm)}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border hover:bg-amber-50"
+                      >
+                        <Pencil size={16} className="text-amber-600" />
+                        Edit
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -435,7 +547,7 @@ export default function CreateMotorProcess() {
                         <td className="py-3 pr-4">{p.targetDate || "—"}</td>
                         <td className="py-3">
                           <button
-                            onClick={() => setEditRow({ ...p })}
+                            onClick={() => openEdit({ ...p })}
                             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border hover:bg-amber-50"
                           >
                             <Pencil size={16} className="text-amber-600" />
@@ -527,6 +639,20 @@ export default function CreateMotorProcess() {
             onChange={setEditRow}
             onCancel={() => setEditRow(null)}
             onSave={saveRowEdits}
+          />
+        </Modal>
+      )}
+
+      {/* Edit Material Modal */}
+      {editMaterial && (
+        <Modal
+          title={`Edit Material: Raw Material ID ${editMaterial.rawMaterialId}`}
+          onClose={() => setEditMaterial(null)}
+        >
+          <MaterialEditor
+            material={editMaterial}
+            onCancel={() => setEditMaterial(null)}
+            onSave={(quantityPerUnit, requiredQuantity) => saveMaterialEdits(editMaterial, quantityPerUnit, requiredQuantity)}
           />
         </Modal>
       )}
