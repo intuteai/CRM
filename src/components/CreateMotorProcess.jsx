@@ -11,7 +11,6 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-// ---------- Small UI primitives ----------
 const Modal = ({ title, onClose, children, widthClass = "max-w-lg" }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
     <div className={`w-full ${widthClass}`}>
@@ -31,45 +30,6 @@ const Modal = ({ title, onClose, children, widthClass = "max-w-lg" }) => (
     </div>
   </div>
 );
-
-function StatusEditor({ task, targetDate, onCancel, onSave }) {
-  const [t, setT] = useState(task || "");
-  const [d, setD] = useState(targetDate || "");
-  return (
-    <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
-      <div>
-        <label className="block text-sm text-gray-700 mb-1">Task</label>
-        <input
-          type="text"
-          value={t}
-          onChange={(e) => setT(e.target.value)}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          placeholder="Define the task…"
-        />
-      </div>
-      <div>
-        <label className="block text-sm text-gray-700 mb-1">Target Date</label>
-        <input
-          type="date"
-          value={d}
-          onChange={(e) => setD(e.target.value)}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-        />
-      </div>
-      <div className="flex justify-end gap-3">
-        <button onClick={onCancel} className="px-4 py-2 rounded-lg border hover:bg-gray-50">
-          Cancel
-        </button>
-        <button
-          onClick={() => onSave(t, d)}
-          className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
-        >
-          Save
-        </button>
-      </div>
-    </form>
-  );
-}
 
 function ProcessRowEditor({ row, onChange, onCancel, onSave }) {
   return (
@@ -190,7 +150,6 @@ function MaterialEditor({ material, onCancel, onSave }) {
   );
 }
 
-// ---------- Helpers ----------
 const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
 
 async function safeJson(res) {
@@ -202,34 +161,35 @@ async function safeJson(res) {
   }
 }
 
-// ---------- Main ----------
+const STAGE_LIST = ["Assembly", "Testing", "PDI", "Packing", "Dispatch"];
+const normalizeStages = (existing = []) => {
+  const by = new Map(existing.map(s => [s.stageName, s.stageDate || ""]));
+  return STAGE_LIST.map(name => ({ name, date: by.get(name) || "" }));
+};
+
 export default function CreateMotorProcess() {
   const { orderId } = useParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // components + processes
   const [components, setComponents] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedComponentId, setSelectedComponentId] = useState(null);
 
-  // raw materials (per selected component)
   const [materialsLoading, setMaterialsLoading] = useState(false);
   const [materialsError, setMaterialsError] = useState("");
   const [componentMaterials, setComponentMaterials] = useState([]);
   const [editMaterial, setEditMaterial] = useState(null);
 
-  // order status card
-  const [showStatusModal, setShowStatusModal] = useState(false);
-  const [statusEditMode, setStatusEditMode] = useState(false);
-  const [orderTask, setOrderTask] = useState("Initial Fit-Up");
-  const [orderTargetDate, setOrderTargetDate] = useState("");
-
-  // per-process local edits (rawQtyUsed, responsible, targetDate)
   const [processLocalState, setProcessLocalState] = useState({});
   const [editRow, setEditRow] = useState(null);
 
-  // ----- initial load: components (with processes) -----
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [stages, setStages] = useState(STAGE_LIST.map(n => ({ name: n, date: "" })));
+  const [stagesLoading, setStagesLoading] = useState(false);
+  const [stagesError, setStagesError] = useState("");
+  const [stagesSaving, setStagesSaving] = useState(false);
+
   useEffect(() => {
     const run = async () => {
       setLoading(true);
@@ -263,7 +223,6 @@ export default function CreateMotorProcess() {
     run();
   }, []);
 
-  // ----- load materials for selected component -----
   useEffect(() => {
     if (!selectedComponentId) return;
     const run = async () => {
@@ -296,7 +255,6 @@ export default function CreateMotorProcess() {
     run();
   }, [selectedComponentId]);
 
-  // ----- save material edits -----
   const saveMaterialEdits = async (material, newQuantityPerUnit, newRequiredQuantity) => {
     try {
       const token = localStorage.getItem("token");
@@ -332,7 +290,6 @@ export default function CreateMotorProcess() {
     }
   };
 
-  // ----- derived state -----
   const options = useMemo(
     () => components.map((c) => ({ value: c.componentId, label: c.componentName })),
     [components]
@@ -366,7 +323,6 @@ export default function CreateMotorProcess() {
     });
   }, [selectedComponent, processLocalState]);
 
-  // ----- handlers -----
   const handleSearch = () => {
     const first = filteredOptions[0];
     if (first) setSelectedComponentId(first.value);
@@ -389,7 +345,87 @@ export default function CreateMotorProcess() {
 
   const openMaterialEdit = (material) => setEditMaterial({ ...material });
 
-  // ---------- render ----------
+useEffect(() => {
+  if (!showStatusModal || !orderId) return;
+
+  const haveAnyLocalDates = stages.some(s => Boolean(s.date));
+  if (haveAnyLocalDates) return;
+
+  const loadStages = async () => {
+    setStagesLoading(true);
+    setStagesError("");
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("Authentication token missing");
+
+      const res = await fetch(`${getBackendUrl()}/api/process/${orderId}?limit=1`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const data = await safeJson(res);
+        throw new Error(data?.error || `Failed to fetch order stages (${res.status})`);
+      }
+
+      const data = await res.json();
+      const existing = data?.workOrders?.[0]?.orderStages || [];
+      setStages(normalizeStages(existing));
+    } catch (e) {
+      setStagesError(e.message || "Unable to load order stages");
+    } finally {
+      setStagesLoading(false);
+    }
+  };
+
+  loadStages();
+}, [showStatusModal, orderId]);  
+
+
+  const saveStages = async () => {
+    if (!orderId) return;
+    setStagesSaving(true);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("Authentication token missing");
+
+      const toSave = stages.filter(s => s.date);
+      let warnings = [];
+
+      for (const s of toSave) {
+        const res = await fetch(`${getBackendUrl()}/api/process/${orderId}/stages`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({ stage_name: s.name, stage_date: s.date }),
+        });
+
+        if (!res.ok) {
+          const data = await safeJson(res);
+          warnings.push(`${s.name}: ${data?.error || `Failed (${res.status})`}`);
+        }
+      }
+
+      if (warnings.length) {
+        alert(`Some stages could not be saved:\n\n${warnings.join("\n")}`);
+      } else {
+
+      }
+
+      setShowStatusModal(false);
+    } catch (e) {
+      alert(e.message || "Failed to save stages");
+    } finally {
+      setStagesSaving(false);
+    }
+  };
+
+  const hasAnyDate = stages.some(s => s.date);
+  const nextDate = stages.map(s => s.date).filter(Boolean).sort()[0] || "";
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-600">
@@ -413,9 +449,7 @@ export default function CreateMotorProcess() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT: Search + Select + Details */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Search + Select */}
           <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4">
             <div className="flex gap-3 items-end">
               <div className="flex-1">
@@ -461,11 +495,10 @@ export default function CreateMotorProcess() {
             </div>
           </div>
 
-          {/* Raw Material Required */}
           <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-5">
             <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <Package size={18} className="text-amber-600" />
-              Raw Material Required —{" "}
+              Raw Materials Needed for:{" "}
               <span className="font-normal text-gray-600">{selectedComponent?.componentName || "—"}</span>
             </h3>
 
@@ -488,9 +521,11 @@ export default function CreateMotorProcess() {
                       <p className="text-sm text-gray-600">
                         Quantity / unit: <span className="font-medium">{rm.quantityPerUnit}</span>
                       </p>
-                      <p className="text-sm text-gray-600">
-                        Required Quantity: <span className="font-medium">{rm.requiredQuantity}</span>
-                      </p>
+                      {"requiredQuantity" in rm && (
+                        <p className="text-sm text-gray-600">
+                          Required Quantity: <span className="font-medium">{rm.requiredQuantity}</span>
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {typeof rm.materialId !== "undefined" && (
@@ -512,10 +547,8 @@ export default function CreateMotorProcess() {
             )}
           </div>
 
-          {/* Processes */}
           <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-5">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Processes</h3>
-
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
@@ -569,69 +602,126 @@ export default function CreateMotorProcess() {
           </div>
         </div>
 
-        {/* RIGHT: Order Status */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-5 sticky top-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-2">Order Status</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              <span className="font-medium">Task:</span> {orderTask || "—"} <br />
-              <span className="font-medium">Target:</span> {orderTargetDate || "—"}
-            </p>
+
+            <div className="space-y-2 text-sm text-gray-700 mb-4">
+              {stages.map(s => (
+                <div key={s.name} className="flex justify-between">
+                  <span className="font-medium">{s.name}</span>
+                  <span className="text-gray-600">{s.date || "—"}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-xs text-gray-500 mb-4">
+              {hasAnyDate ? (
+                <span>
+                  Next target date: <span className="font-medium">{nextDate}</span>
+                </span>
+              ) : (
+                <span>No target dates set</span>
+              )}
+            </div>
+
             <button
               onClick={() => setShowStatusModal(true)}
               className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-2.5 font-medium"
             >
-              Define / Edit
+              Edit Stages
             </button>
           </div>
         </div>
       </div>
 
-      {/* Order Status Modal */}
       {showStatusModal && (
         <Modal
           title="Order Status"
-          onClose={() => {
-            setShowStatusModal(false);
-            setStatusEditMode(false);
-          }}
+          onClose={() => setShowStatusModal(false)}
+          widthClass="max-w-2xl"
         >
-          {!statusEditMode ? (
-            <div className="space-y-4">
-              <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
-                <p className="text-sm text-gray-700">
-                  <span className="font-medium">Task:</span> {orderTask || "—"}
-                </p>
-                <p className="text-sm text-gray-700">
-                  <span className="font-medium">Target Date:</span> {orderTargetDate || "—"}
-                </p>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setStatusEditMode(true)}
-                  className="px-4 py-2 rounded-lg border hover:bg-gray-50"
-                >
-                  Edit
-                </button>
-              </div>
-            </div>
+          {stagesLoading ? (
+            <p className="text-gray-600">Loading current stages…</p>
           ) : (
-            <StatusEditor
-              task={orderTask}
-              targetDate={orderTargetDate}
-              onCancel={() => setStatusEditMode(false)}
-              onSave={(t, d) => {
-                setOrderTask(t);
-                setOrderTargetDate(d);
-                setStatusEditMode(false);
-                setShowStatusModal(false);
-              }}
-            />
+            <>
+              {stagesError && (
+                <div className="mb-4 flex items-start gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <AlertCircle className="mt-0.5" size={18} />
+                  <div>
+                    <p className="font-medium">Couldn’t load existing stages</p>
+                    <p className="text-sm">{stagesError}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-600 border-b">
+                      <th className="py-3 pr-4">Task</th>
+                      <th className="py-3 pr-4">
+                        <span className="inline-flex items-center gap-1">
+                          <Calendar size={14} /> Target Date
+                        </span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stages.map((s, idx) => (
+                      <tr key={s.name} className="border-b last:border-0">
+                        <td className="py-3 pr-4 font-medium text-gray-900">{s.name}</td>
+                        <td className="py-3 pr-4">
+                          <input
+                            type="date"
+                            value={s.date}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setStages(prev => {
+                                const copy = [...prev];
+                                copy[idx] = { ...copy[idx], date: val };
+                                return copy;
+                              });
+                            }}
+                            className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-6 flex justify-between">
+                <button
+                  onClick={() => setStages(STAGE_LIST.map(n => ({ name: n, date: "" })))}
+                  className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+                  disabled={stagesSaving}
+                >
+                  Reset
+                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowStatusModal(false)}
+                    className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+                    disabled={stagesSaving}
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={saveStages}
+                    className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60"
+                    disabled={stagesSaving}
+                  >
+                    {stagesSaving ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </Modal>
       )}
 
-      {/* Edit Process Row Modal */}
       {editRow && (
         <Modal title={`Edit: ${editRow.name}`} onClose={() => setEditRow(null)}>
           <ProcessRowEditor
@@ -643,7 +733,6 @@ export default function CreateMotorProcess() {
         </Modal>
       )}
 
-      {/* Edit Material Modal */}
       {editMaterial && (
         <Modal
           title={`Edit Material: Raw Material ID ${editMaterial.rawMaterialId}`}
@@ -652,7 +741,9 @@ export default function CreateMotorProcess() {
           <MaterialEditor
             material={editMaterial}
             onCancel={() => setEditMaterial(null)}
-            onSave={(quantityPerUnit, requiredQuantity) => saveMaterialEdits(editMaterial, quantityPerUnit, requiredQuantity)}
+            onSave={(quantityPerUnit, requiredQuantity) =>
+              saveMaterialEdits(editMaterial, quantityPerUnit, requiredQuantity)
+            }
           />
         </Modal>
       )}
