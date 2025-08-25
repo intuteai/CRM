@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import { toast } from "react-toastify";
 import {
   Search,
   ChevronDown,
@@ -11,6 +12,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+// Modal component
 const Modal = ({ title, onClose, children, widthClass = "max-w-lg" }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
     <div className={`w-full ${widthClass}`}>
@@ -31,25 +33,50 @@ const Modal = ({ title, onClose, children, widthClass = "max-w-lg" }) => (
   </div>
 );
 
-function ProcessRowEditor({ row, onChange, onCancel, onSave }) {
+// ProcessRowEditor component
+function ProcessRowEditor({ row, onChange, onCancel, onSave, workOrderQuantity, processes }) {
+  const [error, setError] = useState("");
+
+  const handleSave = () => {
+    const completedQty = Number(row.completedQuantity);
+    const rawQty = Number(row.rawQtyUsed);
+    if (row.completedQuantity && (!Number.isInteger(completedQty) || completedQty < 0)) {
+      setError("Completed quantity must be a non-negative integer");
+      return;
+    }
+    if (row.rawQtyUsed && (!Number.isInteger(rawQty) || rawQty < 0)) {
+      setError("Raw quantity used must be a non-negative integer");
+      return;
+    }
+    if (completedQty > rawQty) {
+      setError("Completed quantity cannot exceed raw quantity used");
+      return;
+    }
+    if (row.responsiblePerson && (typeof row.responsiblePerson !== "string" || row.responsiblePerson.length > 255)) {
+      setError("Responsible person must be a string with max length 255");
+      return;
+    }
+    // Calculate total completed quantity, excluding the current process
+    const totalCompletedQty = processes
+      .filter(p => p.id !== row.id)
+      .reduce((sum, p) => sum + Number(p.completedQuantity || 0), 0);
+    const newTotalCompletedQty = totalCompletedQty + completedQty;
+    if (newTotalCompletedQty > workOrderQuantity) {
+      setError(`Total completed quantity (${newTotalCompletedQty}) cannot exceed work order quantity (${workOrderQuantity})`);
+      return;
+    }
+    setError("");
+    onSave();
+  };
+
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
-      <div>
-        <label className="block text-sm text-gray-700 mb-1">Qty of Raw Material Used</label>
-        <input
-          type="text"
-          value={row.rawQtyUsed || ""}
-          onChange={(e) => onChange({ ...row, rawQtyUsed: e.target.value })}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          placeholder="e.g., 1 sheet / 8 rods"
-        />
-      </div>
       <div>
         <label className="block text-sm text-gray-700 mb-1">Responsible Person</label>
         <input
           type="text"
-          value={row.responsible || ""}
-          onChange={(e) => onChange({ ...row, responsible: e.target.value })}
+          value={row.responsiblePerson || ""}
+          onChange={(e) => onChange({ ...row, responsiblePerson: e.target.value })}
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           placeholder="e.g., Asha"
         />
@@ -63,12 +90,39 @@ function ProcessRowEditor({ row, onChange, onCancel, onSave }) {
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
         />
       </div>
+      <div>
+        <label className="block text-sm text-gray-700 mb-1">Raw Quantity Used</label>
+        <input
+          type="number"
+          value={row.rawQtyUsed ?? ""}
+          onChange={(e) => onChange({ ...row, rawQtyUsed: e.target.value })}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          placeholder="Enter raw quantity used"
+          min="0"
+          step="1"
+        />
+      </div>
+      <div>
+        <label className="block text-sm text-gray-700 mb-1">Completed Quantity</label>
+        <input
+          type="number"
+          value={row.completedQuantity ?? ""}
+          onChange={(e) => onChange({ ...row, completedQuantity: e.target.value })}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          placeholder="Enter completed quantity"
+          min="0"
+          step="1"
+        />
+      </div>
+      {error && (
+        <p className="text-sm text-red-600 mt-1">{error}</p>
+      )}
       <div className="flex justify-end gap-3">
         <button onClick={onCancel} className="px-4 py-2 rounded-lg border hover:bg-gray-50">
           Cancel
         </button>
         <button
-          onClick={onSave}
+          onClick={handleSave}
           className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
         >
           Save
@@ -78,6 +132,7 @@ function ProcessRowEditor({ row, onChange, onCancel, onSave }) {
   );
 }
 
+// MaterialEditor component
 function MaterialEditor({ material, onCancel, onSave }) {
   const [quantityPerUnit, setQuantityPerUnit] = useState(material.quantityPerUnit || 0);
   const [requiredQuantity, setRequiredQuantity] = useState(material.requiredQuantity || 0);
@@ -175,6 +230,8 @@ export default function CreateMotorProcess() {
   const [components, setComponents] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedComponentId, setSelectedComponentId] = useState(null);
+  const [workOrderId, setWorkOrderId] = useState(null);
+  const [workOrderQuantity, setWorkOrderQuantity] = useState(0);
 
   const [materialsLoading, setMaterialsLoading] = useState(false);
   const [materialsError, setMaterialsError] = useState("");
@@ -190,6 +247,7 @@ export default function CreateMotorProcess() {
   const [stagesError, setStagesError] = useState("");
   const [stagesSaving, setStagesSaving] = useState(false);
 
+  // Fetch components
   useEffect(() => {
     const run = async () => {
       setLoading(true);
@@ -223,6 +281,108 @@ export default function CreateMotorProcess() {
     run();
   }, []);
 
+  // Fetch or create work order and its processes
+  useEffect(() => {
+    if (!selectedComponentId || !orderId) return;
+
+    const run = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) throw new Error("Authentication token missing");
+
+        // Fetch work orders
+        const res = await fetch(
+          `${getBackendUrl()}/api/process/${orderId}?force_refresh=true`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }
+        );
+
+        if (!res.ok) {
+          const data = await safeJson(res);
+          throw new Error(data?.error || `Failed to fetch work orders (${res.status})`);
+        }
+
+        const data = await res.json();
+        const existingWorkOrder = data.workOrders?.find(
+          (wo) => wo.componentId === Number(selectedComponentId)
+        );
+
+        if (existingWorkOrder) {
+          setWorkOrderId(existingWorkOrder.workOrderId);
+          setWorkOrderQuantity(existingWorkOrder.quantity);
+          const processState = {};
+          existingWorkOrder.processes.forEach((p) => {
+            processState[p.processId] = {
+              responsiblePerson: p.responsiblePerson || "",
+              targetDate: p.completionDate || "",
+              completedQuantity: p.completedQuantity ?? 0,
+              rawQtyUsed: p.rawQuantityUsed ?? 0,
+            };
+          });
+          setProcessLocalState(processState);
+          return;
+        }
+
+        // Fetch material requirements to determine quantity
+        const materialRes = await fetch(
+          `${getBackendUrl()}/api/process/components/${selectedComponentId}/materials`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }
+        );
+        let requiredQuantity = 5; // Default to 5 if no material data
+        if (materialRes.ok) {
+          const materials = await materialRes.json();
+          const material = materials.find(m => m.requiredQuantity);
+          requiredQuantity = material?.requiredQuantity || 5; // Use material's requiredQuantity or fallback to 5
+        }
+
+        // Create a new work order with dynamic quantity
+        const createRes = await fetch(`${getBackendUrl()}/api/process/${orderId}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            component_id: selectedComponentId,
+            quantity: requiredQuantity, // Dynamic quantity from material or default
+            target_date: new Date().toISOString().split("T")[0],
+          }),
+        });
+
+        if (!createRes.ok) {
+          const data = await safeJson(createRes);
+          throw new Error(data?.error || `Failed to create work order (${createRes.status})`);
+        }
+
+        const newWorkOrder = await createRes.json();
+        setWorkOrderId(newWorkOrder.workOrderId);
+        setWorkOrderQuantity(newWorkOrder.quantity);
+        const processState = {};
+        newWorkOrder.processes.forEach((p) => {
+          processState[p.processId] = {
+            responsiblePerson: p.responsiblePerson || "",
+            targetDate: p.completionDate || "",
+            completedQuantity: p.completedQuantity ?? 0,
+            rawQtyUsed: p.rawQuantityUsed ?? 0,
+          };
+        });
+        setProcessLocalState(processState);
+        toast.success("Work order created successfully");
+      } catch (e) {
+        setError(e.message || "Failed to load or create work order");
+        toast.error(e.message || "Failed to load or create work order");
+      }
+    };
+    run();
+  }, [selectedComponentId, orderId]);
+
+  // Fetch materials
   useEffect(() => {
     if (!selectedComponentId) return;
     const run = async () => {
@@ -248,6 +408,7 @@ export default function CreateMotorProcess() {
         setComponentMaterials(Array.isArray(rows) ? rows : []);
       } catch (e) {
         setMaterialsError(e.message || "Failed to load materials");
+        toast.error(e.message || "Failed to load materials");
       } finally {
         setMaterialsLoading(false);
       }
@@ -255,6 +416,44 @@ export default function CreateMotorProcess() {
     run();
   }, [selectedComponentId]);
 
+  // Fetch stages automatically on mount
+  useEffect(() => {
+    if (!orderId) return;
+
+    const loadStages = async () => {
+      setStagesLoading(true);
+      setStagesError("");
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) throw new Error("Authentication token missing");
+
+        const res = await fetch(
+          `${getBackendUrl()}/api/process/${orderId}/stages?force_refresh=true`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }
+        );
+
+        if (!res.ok) {
+          const data = await safeJson(res);
+          throw new Error(data?.error || `Failed to fetch order stages (${res.status})`);
+        }
+
+        const existing = await res.json();
+        setStages(normalizeStages(existing));
+      } catch (e) {
+        setStagesError(e.message || "Unable to load order stages");
+        toast.error(e.message || "Unable to load order stages");
+      } finally {
+        setStagesLoading(false);
+      }
+    };
+
+    loadStages();
+  }, [orderId]);
+
+  // Save material edits
   const saveMaterialEdits = async (material, newQuantityPerUnit, newRequiredQuantity) => {
     try {
       const token = localStorage.getItem("token");
@@ -285,8 +484,200 @@ export default function CreateMotorProcess() {
         )
       );
       setEditMaterial(null);
+      toast.success("Material updated successfully");
+
+      // Re-fetch materials to ensure consistency
+      const refetchRes = await fetch(
+        `${getBackendUrl()}/api/process/components/${material.componentId}/materials`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+      if (refetchRes.ok) {
+        const rows = await refetchRes.json();
+        setComponentMaterials(Array.isArray(rows) ? rows : []);
+      }
     } catch (e) {
       setMaterialsError(e.message || "Failed to save material changes");
+      toast.error(e.message || "Failed to save material changes");
+    }
+  };
+
+  // Save process edits
+  const saveRowEdits = async () => {
+    if (!editRow || !workOrderId) {
+      toast.error("Cannot save: Work order or process not selected");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("Authentication token missing");
+
+      const completedQty = editRow.completedQuantity ? Number(editRow.completedQuantity) : 0;
+      const rawQty = editRow.rawQtyUsed ? Number(editRow.rawQtyUsed) : 0;
+
+      // Fetch current processes to validate total completed quantity
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}?force_refresh=true`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+      if (!res.ok) {
+        const data = await safeJson(res);
+        throw new Error(data?.error || `Failed to fetch work orders (${res.status})`);
+      }
+      const data = await res.json();
+      const workOrder = data.workOrders?.find(
+        (wo) => wo.workOrderId === Number(workOrderId)
+      );
+      if (!workOrder) {
+        throw new Error("Work order not found");
+      }
+      const totalCompletedQty = workOrder.processes
+        .filter(p => p.processId !== Number(editRow.id))
+        .reduce((sum, p) => sum + Number(p.completedQuantity || 0), 0);
+      const newTotalCompletedQty = totalCompletedQty + completedQty;
+      if (newTotalCompletedQty > workOrderQuantity) {
+        throw new Error(`Total completed quantity (${newTotalCompletedQty}) cannot exceed work order quantity (${workOrderQuantity})`);
+      }
+
+      if (!Number.isInteger(completedQty) || completedQty < 0) {
+        throw new Error("Completed quantity must be a non-negative integer");
+      }
+      if (!Number.isInteger(rawQty) || rawQty < 0) {
+        throw new Error("Raw quantity used must be a non-negative integer");
+      }
+      if (completedQty > rawQty) {
+        throw new Error("Completed quantity cannot exceed raw quantity used");
+      }
+      if (editRow.responsiblePerson && (typeof editRow.responsiblePerson !== "string" || editRow.responsiblePerson.length > 255)) {
+        throw new Error("Responsible person must be a string with max length 255");
+      }
+
+      const url = `${getBackendUrl()}/api/process/${workOrderId}/process-status`;
+      const updateRes = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          process_id: Number(editRow.id),
+          status: editRow.responsiblePerson ? "In Progress" : "Pending",
+          completed_quantity: completedQty,
+          raw_quantity_used: rawQty,
+          completion_date: editRow.targetDate || null,
+          responsible_person: editRow.responsiblePerson || null,
+        }),
+      });
+
+      if (!updateRes.ok) {
+        const data = await safeJson(updateRes);
+        throw new Error(data?.error || `Failed to update process status (${updateRes.status})`);
+      }
+
+      const updatedWorkOrder = await updateRes.json();
+      setProcessLocalState((prev) => ({
+        ...prev,
+        [editRow.id]: {
+          responsiblePerson: editRow.responsiblePerson || "",
+          targetDate: editRow.targetDate || "",
+          completedQuantity: completedQty,
+          rawQtyUsed: rawQty,
+        },
+      }));
+      setEditRow(null);
+      toast.success("Process updated successfully");
+
+      // Re-fetch work order to ensure consistency
+      const refetchRes = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}?force_refresh=true`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+      if (refetchRes.ok) {
+        const data = await refetchRes.json();
+        const workOrder = data.workOrders?.find(
+          (wo) => wo.componentId === Number(selectedComponentId)
+        );
+        if (workOrder) {
+          const processState = {};
+          workOrder.processes.forEach((p) => {
+            processState[p.processId] = {
+              responsiblePerson: p.responsiblePerson || "",
+              targetDate: p.completionDate || "",
+              completedQuantity: p.completedQuantity ?? 0,
+              rawQtyUsed: p.rawQuantityUsed ?? 0,
+            };
+          });
+          setProcessLocalState(processState);
+          setWorkOrderQuantity(workOrder.quantity);
+        }
+      }
+    } catch (e) {
+      toast.error(e.message || "Failed to save process changes");
+    }
+  };
+
+  // Save stages
+  const saveStages = async () => {
+    if (!orderId) return;
+    setStagesSaving(true);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("Authentication token missing");
+
+      const toSave = stages.filter(s => s.date);
+      let warnings = [];
+
+      for (const s of toSave) {
+        const res = await fetch(`${getBackendUrl()}/api/process/${orderId}/stages`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({ stage_name: s.name, stage_date: s.date }),
+        });
+
+        if (!res.ok) {
+          const data = await safeJson(res);
+          warnings.push(`${s.name}: ${data?.error || `Failed (${res.status})`}`);
+        }
+      }
+
+      if (warnings.length) {
+        toast.error(`Some stages could not be saved:\n${warnings.join("\n")}`);
+      } else {
+        toast.success("Order stages updated successfully");
+      }
+
+      // Re-fetch stages
+      const refetchRes = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}/stages?force_refresh=true`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+      if (refetchRes.ok) {
+        const existing = await refetchRes.json();
+        setStages(normalizeStages(existing));
+      }
+
+      setShowStatusModal(false);
+    } catch (e) {
+      toast.error(e.message || "Failed to save stages");
+    } finally {
+      setStagesSaving(false);
     }
   };
 
@@ -316,12 +707,22 @@ export default function CreateMotorProcess() {
         id: p.processId,
         sequence: p.sequence,
         name: p.processName,
-        responsible: local.responsible ?? p.responsiblePerson ?? "",
-        rawQtyUsed: local.rawQtyUsed ?? "",
-        targetDate: local.targetDate ?? "",
+        responsiblePerson: local.responsiblePerson ?? p.responsiblePerson ?? "",
+        targetDate: local.targetDate ?? p.completionDate ?? "",
+        completedQuantity: local.completedQuantity ?? p.completedQuantity ?? 0,
+        rawQtyUsed: local.rawQtyUsed ?? p.rawQuantityUsed ?? 0,
       };
     });
   }, [selectedComponent, processLocalState]);
+
+  const getCompletedQtyColor = (rawQtyUsed, completedQty) => {
+    const raw = Number(rawQtyUsed);
+    const completed = Number(completedQty);
+    if (completed === 0) return "bg-red-600 text-white";
+    if (completed === raw && completed > 0) return "bg-green-600 text-white";
+    if (0 < completed && completed < raw) return "bg-yellow-600 text-white";
+    return "bg-gray-500 text-white"; // For invalid cases (e.g., completed > raw)
+  };
 
   const handleSearch = () => {
     const first = filteredOptions[0];
@@ -330,98 +731,7 @@ export default function CreateMotorProcess() {
 
   const openEdit = (row) => setEditRow({ ...row });
 
-  const saveRowEdits = () => {
-    if (!editRow) return;
-    setProcessLocalState((prev) => ({
-      ...prev,
-      [editRow.id]: {
-        rawQtyUsed: editRow.rawQtyUsed,
-        responsible: editRow.responsible,
-        targetDate: editRow.targetDate,
-      },
-    }));
-    setEditRow(null);
-  };
-
   const openMaterialEdit = (material) => setEditMaterial({ ...material });
-
-useEffect(() => {
-  if (!showStatusModal || !orderId) return;
-
-  const haveAnyLocalDates = stages.some(s => Boolean(s.date));
-  if (haveAnyLocalDates) return;
-
-  const loadStages = async () => {
-    setStagesLoading(true);
-    setStagesError("");
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) throw new Error("Authentication token missing");
-
-      const res = await fetch(`${getBackendUrl()}/api/process/${orderId}?limit=1`, {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include",
-      });
-
-      if (!res.ok) {
-        const data = await safeJson(res);
-        throw new Error(data?.error || `Failed to fetch order stages (${res.status})`);
-      }
-
-      const data = await res.json();
-      const existing = data?.workOrders?.[0]?.orderStages || [];
-      setStages(normalizeStages(existing));
-    } catch (e) {
-      setStagesError(e.message || "Unable to load order stages");
-    } finally {
-      setStagesLoading(false);
-    }
-  };
-
-  loadStages();
-}, [showStatusModal, orderId]);  
-
-
-  const saveStages = async () => {
-    if (!orderId) return;
-    setStagesSaving(true);
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) throw new Error("Authentication token missing");
-
-      const toSave = stages.filter(s => s.date);
-      let warnings = [];
-
-      for (const s of toSave) {
-        const res = await fetch(`${getBackendUrl()}/api/process/${orderId}/stages`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          credentials: "include",
-          body: JSON.stringify({ stage_name: s.name, stage_date: s.date }),
-        });
-
-        if (!res.ok) {
-          const data = await safeJson(res);
-          warnings.push(`${s.name}: ${data?.error || `Failed (${res.status})`}`);
-        }
-      }
-
-      if (warnings.length) {
-        alert(`Some stages could not be saved:\n\n${warnings.join("\n")}`);
-      } else {
-
-      }
-
-      setShowStatusModal(false);
-    } catch (e) {
-      alert(e.message || "Failed to save stages");
-    } finally {
-      setStagesSaving(false);
-    }
-  };
 
   const hasAnyDate = stages.some(s => s.date);
   const nextDate = stages.map(s => s.date).filter(Boolean).sort()[0] || "";
@@ -527,7 +837,7 @@ useEffect(() => {
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex sinks-center gap-2">
                       {typeof rm.materialId !== "undefined" && (
                         <span className="text-xs text-gray-500">material_id: {rm.materialId}</span>
                       )}
@@ -555,7 +865,6 @@ useEffect(() => {
                   <tr className="text-left text-gray-600 border-b">
                     <th className="py-3 pr-4">Seq</th>
                     <th className="py-3 pr-4">Process Name</th>
-                    <th className="py-3 pr-4">Qty of Raw Material Used</th>
                     <th className="py-3 pr-4">
                       <span className="inline-flex items-center gap-1">
                         <User size={14} /> Responsible
@@ -566,6 +875,8 @@ useEffect(() => {
                         <Calendar size={14} /> Target Date
                       </span>
                     </th>
+                    <th className="py-3 pr-4">Raw Qty Used</th>
+                    <th className="py-3 pr-4">Completed Qty</th>
                     <th className="py-3">Actions</th>
                   </tr>
                 </thead>
@@ -575,9 +886,14 @@ useEffect(() => {
                       <tr key={p.id} className="border-b last:border-0">
                         <td className="py-3 pr-4 text-gray-500">{p.sequence}</td>
                         <td className="py-3 pr-4 font-medium text-gray-900">{p.name}</td>
-                        <td className="py-3 pr-4">{p.rawQtyUsed || "—"}</td>
-                        <td className="py-3 pr-4">{p.responsible || "—"}</td>
+                        <td className="py-3 pr-4">{p.responsiblePerson || "—"}</td>
                         <td className="py-3 pr-4">{p.targetDate || "—"}</td>
+                        <td className="py-3 pr-4">{p.rawQtyUsed}</td>
+                        <td className="py-3 pr-4">
+                          <span className={`px-3 py-1 rounded-full text-white text-sm font-medium ${getCompletedQtyColor(p.rawQtyUsed, p.completedQuantity)}`}>
+                            {p.completedQuantity}
+                          </span>
+                        </td>
                         <td className="py-3">
                           <button
                             onClick={() => openEdit({ ...p })}
@@ -591,7 +907,7 @@ useEffect(() => {
                     ))
                   ) : (
                     <tr>
-                      <td className="py-4 text-gray-500" colSpan={6}>
+                      <td className="py-4 text-gray-500" colSpan={7}>
                         No processes listed.
                       </td>
                     </tr>
@@ -605,16 +921,26 @@ useEffect(() => {
         <div className="lg:col-span-1">
           <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-5 sticky top-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-2">Order Status</h3>
-
-            <div className="space-y-2 text-sm text-gray-700 mb-4">
-              {stages.map(s => (
-                <div key={s.name} className="flex justify-between">
-                  <span className="font-medium">{s.name}</span>
-                  <span className="text-gray-600">{s.date || "—"}</span>
+            {stagesLoading ? (
+              <p className="text-gray-600">Loading stages…</p>
+            ) : stagesError ? (
+              <div className="flex items-start gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <AlertCircle className="mt-0.5" size={18} />
+                <div>
+                  <p className="font-medium">Stages unavailable</p>
+                  <p className="text-sm">{stagesError}</p>
                 </div>
-              ))}
-            </div>
-
+              </div>
+            ) : (
+              <div className="space-y-2 text-sm text-gray-700 mb-4">
+                {stages.map(s => (
+                  <div key={s.name} className="flex justify-between">
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-gray-600">{s.date || "—"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="text-xs text-gray-500 mb-4">
               {hasAnyDate ? (
                 <span>
@@ -624,7 +950,6 @@ useEffect(() => {
                 <span>No target dates set</span>
               )}
             </div>
-
             <button
               onClick={() => setShowStatusModal(true)}
               className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-2.5 font-medium"
@@ -654,7 +979,6 @@ useEffect(() => {
                   </div>
                 </div>
               )}
-
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
@@ -691,7 +1015,6 @@ useEffect(() => {
                   </tbody>
                 </table>
               </div>
-
               <div className="mt-6 flex justify-between">
                 <button
                   onClick={() => setStages(STAGE_LIST.map(n => ({ name: n, date: "" })))}
@@ -729,6 +1052,8 @@ useEffect(() => {
             onChange={setEditRow}
             onCancel={() => setEditRow(null)}
             onSave={saveRowEdits}
+            workOrderQuantity={workOrderQuantity}
+            processes={processes}
           />
         </Modal>
       )}
