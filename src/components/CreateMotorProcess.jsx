@@ -487,16 +487,45 @@ export default function CreateMotorProcess() {
       toast.success("Material updated successfully");
 
       // Re-fetch materials to ensure consistency
-      const refetchRes = await fetch(
+      const refetchMaterialsRes = await fetch(
         `${getBackendUrl()}/api/process/components/${material.componentId}/materials`,
         {
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include",
         }
       );
-      if (refetchRes.ok) {
-        const rows = await refetchRes.json();
+      if (refetchMaterialsRes.ok) {
+        const rows = await refetchMaterialsRes.json();
         setComponentMaterials(Array.isArray(rows) ? rows : []);
+      }
+
+      // Re-fetch work order to update workOrderQuantity
+      const refetchWorkOrderRes = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}?force_refresh=true`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+      if (refetchWorkOrderRes.ok) {
+        const data = await refetchWorkOrderRes.json();
+        const workOrder = data.workOrders?.find(
+          (wo) => wo.componentId === Number(selectedComponentId)
+        );
+        if (workOrder) {
+          setWorkOrderId(workOrder.workOrderId);
+          setWorkOrderQuantity(workOrder.quantity);
+          const processState = {};
+          workOrder.processes.forEach((p) => {
+            processState[p.processId] = {
+              responsiblePerson: p.responsiblePerson || "",
+              targetDate: p.completionDate || "",
+              completedQuantity: p.completedQuantity ?? 0,
+              rawQtyUsed: p.rawQuantityUsed ?? 0,
+            };
+          });
+          setProcessLocalState(processState);
+        }
       }
     } catch (e) {
       setMaterialsError(e.message || "Failed to save material changes");
