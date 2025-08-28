@@ -866,7 +866,7 @@ export default function CreateMotorProcess() {
                         </p>
                       )}
                     </div>
-                    <div className="flex sinks-center gap-2">
+                    <div className="flex items-center gap-2">
                       {typeof rm.materialId !== "undefined" && (
                         <span className="text-xs text-gray-500">material_id: {rm.materialId}</span>
                       )}
@@ -905,7 +905,7 @@ export default function CreateMotorProcess() {
                       </span>
                     </th>
                     <th className="py-3 pr-4">Raw Qty Used</th>
-                    <th className="py-3 pr-4">Completed Qty</th>
+                    <th className="py-3 pr-4">In use</th>
                     <th className="py-3">Actions</th>
                   </tr>
                 </thead>
