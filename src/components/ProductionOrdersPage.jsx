@@ -134,10 +134,7 @@ function ProductionOrdersPage({ socket, userRole }) {
     if (sortConfig.key) {
       sortableOrders.sort((a, b) => {
         let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
-        if (sortConfig.key === 'totalAmount') {
-          aValue = calculateTotalAmount(a.items || []);
-          bValue = calculateTotalAmount(b.items || []);
-        } else if (sortConfig.key === 'items') {
+        if (sortConfig.key === 'items') {
           aValue = (a.items || []).length;
           bValue = (b.items || []).length;
         } else if (sortConfig.key === 'createdAt' || sortConfig.key === 'targetDeliveryDate') {
@@ -255,7 +252,6 @@ function ProductionOrdersPage({ socket, userRole }) {
                   { key: 'id', label: 'Order ID' },
                   { key: 'customerName', label: 'Customer Name' },
                   { key: 'items', label: 'Items' },
-                  { key: 'totalAmount', label: 'Total Amount' },
                   { key: 'status', label: 'Status' },
                   { key: 'targetDeliveryDate', label: 'Target Delivery' },
                   { key: 'paymentStatus', label: 'Payment Status' },
@@ -296,7 +292,6 @@ function ProductionOrdersPage({ socket, userRole }) {
                       ))}
                     </ul>
                   </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{formatCurrency(calculateTotalAmount(order.items || []))}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">
                     <span className={`px-3 py-1 rounded-full text-white text-sm font-medium ${STATUS_COLORS[order.status] || 'bg-gray-500'}`}>
                       {order.status || 'N/A'}
