@@ -53,9 +53,10 @@ import ProblemsPage from "./components/ProblemsPage";
 import EmployeeDashboard from "./components/EmployeeDashboard";
 import AttendanceHistory from "./components/AttendanceHistory";
 import MarkAttendance from "./components/MarkAttendance";
-import WorkOrderPage from "./components/WordOrderPage";
+import WorkOrderPage from "./components/WorkOrderPage";
 import SelectOrderPage from "./components/SelectOrderPage";
 import CreateMotorProcess from "./components/CreateMotorProcess";
+import CreateNonMotorProcess from "./components/CreateNonMotorProcess";
 import "./styles.css";
 
 const ROLES = {
@@ -92,8 +93,9 @@ const allowedPathsByRole = {
     "/edit-profile",
     "/problems",
     "/work-orders",
-    "/select-component/:orderId/:action", 
+    "/select-component/:orderId/:action",
     "/processes/:orderId",
+    "/processes/non-motor/:orderId",
   ],
   [ROLES.CUSTOMER]: [
     "/customer-dashboard",
@@ -706,6 +708,18 @@ function App() {
             userRole === "admin" ? (
               <ErrorBoundary>
                 <CreateMotorProcess />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/processes/non-motor/:orderId"
+          element={
+            userRole === "admin" ? (
+              <ErrorBoundary>
+                <CreateNonMotorProcess />
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />

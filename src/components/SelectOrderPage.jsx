@@ -38,7 +38,7 @@ export default function SelectOrderPage() {
               desc="Track the process of motor!"
             />
             <Card
-              to="/non-motor"
+              to={`/processes/non-motor/${orderId}`}
               icon={<Edit />}
               title="Non-Motor Process"
               desc="Track the process!"
