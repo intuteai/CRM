@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
   Route,
@@ -208,6 +208,7 @@ function App() {
     });
     newSocket.on("connect_error", (err) => {
       console.error("Socket.IO connection error in App:", err.message);
+      setSocketReady(false);
     });
     newSocket.on("disconnect", (reason) => {
       console.log("Socket.IO disconnected in App:", reason);
@@ -216,19 +217,8 @@ function App() {
 
     setSocket(newSocket);
 
-    const timeout = setTimeout(() => {
-      if (!newSocket.connected) {
-        console.warn(
-          "Socket.IO connection timeout; proceeding without real-time updates"
-        );
-        setSocketReady(true);
-      }
-    }, 10000);
-
     return () => {
-      clearTimeout(timeout);
       newSocket.disconnect();
-      console.log("Socket.IO disconnected from App");
       setSocketReady(false);
     };
   }, [userRole, token, socket]);
@@ -255,10 +245,9 @@ function App() {
 
     const isAllowedPath = allowedPaths.some((path) => {
       if (path.includes(":")) {
-        // Handle routes with parameters (e.g., :orderId, :action)
         let regexPattern = path
-          .replace(":orderId", "\\d+")
-          .replace(":action", "[a-zA-Z]+"); // Match action as letters (e.g., 'create', 'view')
+          .replace(":orderId", "[^/]+")
+          .replace(":action", "[a-zA-Z]+");
         regexPattern = `^${regexPattern}$`;
         const regex = new RegExp(regexPattern);
         return regex.test(normalizedPath);
@@ -267,7 +256,10 @@ function App() {
     });
 
     if (!targetPath) {
-      console.warn(`Unknown userRole: ${userRole}, redirecting to /`);
+      console.warn(
+        `Unknown userRole: ${userRole}, redirecting to /. Allowed paths:`,
+        allowedPaths
+      );
       navigate("/", { replace: true });
     } else if (
       normalizedPath === "" ||
@@ -276,7 +268,8 @@ function App() {
     ) {
       if (normalizedPath !== targetPath) {
         console.log(
-          `Redirecting: userRole=${userRole}, from=${normalizedPath}, to=${targetPath}`
+          `Redirecting: userRole=${userRole}, from=${normalizedPath}, to=${targetPath}, allowedPaths=`,
+          allowedPaths
         );
         navigate(targetPath, { replace: true });
       }
@@ -707,7 +700,7 @@ function App() {
           element={
             userRole === "admin" ? (
               <ErrorBoundary>
-                <CreateMotorProcess />
+                <CreateMotorProcess socket={socket} />
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />
