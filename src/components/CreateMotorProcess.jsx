@@ -1105,7 +1105,6 @@
 //   );
 // }
 
-// CreateMotorProcess.jsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
@@ -1126,7 +1125,11 @@ import "react-toastify/dist/ReactToastify.css";
 const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
 async function safeJson(res) {
   const txt = await res.text();
-  try { return txt ? JSON.parse(txt) : null; } catch { return null; }
+  try {
+    return txt ? JSON.parse(txt) : null;
+  } catch {
+    return null;
+  }
 }
 const STAGE_LIST = ["Assembly", "Testing", "PDI", "Packing", "Dispatch"];
 
@@ -1144,7 +1147,8 @@ const DESIRED_COMPONENT_ORDER = [
   ...STAGE_LIST, // appended at the end
 ];
 
-const normalizeNameKey = (s="") => s.toLowerCase().replace(/\s+/g, " ").trim();
+const normalizeNameKey = (s = "") =>
+  s.toLowerCase().replace(/\s+/g, " ").trim();
 
 // Normalize instance group objects to a consistent shape the UI expects
 const normalizeMotor = (m) => ({
@@ -1153,8 +1157,7 @@ const normalizeMotor = (m) => ({
     m?.instance_group_id ?? m?.instanceGroupId ?? m?.id ?? m?.group_id ?? null,
   instance_name:
     m?.instance_name ?? m?.instanceName ?? m?.name ?? m?.group_name ?? "",
-  instance_type:
-    m?.instance_type ?? m?.instanceType ?? m?.type ?? "",
+  instance_type: m?.instance_type ?? m?.instanceType ?? m?.type ?? "",
 });
 
 // Status helpers
@@ -1166,9 +1169,13 @@ const DISPLAY_STATUS = {
 const STATUS_OPTIONS = ["Pending", "In Progress", "Completed"];
 const statusToBadgeClass = (status) => {
   switch (status) {
-    case "Completed": return "bg-green-600 text-white";
-    case "In Progress": return "bg-yellow-600 text-white";
-    case "Pending": default: return "bg-gray-400 text-white";
+    case "Completed":
+      return "bg-green-600 text-white";
+    case "In Progress":
+      return "bg-yellow-600 text-white";
+    case "Pending":
+    default:
+      return "bg-gray-400 text-white";
   }
 };
 
@@ -1193,33 +1200,58 @@ const Modal = ({ title, onClose, children, widthClass = "max-w-2xl" }) => (
   </div>
 );
 
-/* ---------- Editors (unchanged) ---------- */
-function ProcessRowEditor({ row, onChange, onCancel, onSave, workOrderQuantity, processes }) {
+/* ---------- Editors ---------- */
+function ProcessRowEditor({
+  row,
+  onChange,
+  onCancel,
+  onSave,
+  workOrderQuantity,
+  processes,
+}) {
   const [error, setError] = useState("");
   const handleSave = () => {
     const completedQty = Number(row.completedQuantity || 0);
     const rawQty = Number(row.rawQtyUsed || 0);
-    if (!Number.isInteger(completedQty) || completedQty < 0) return setError("Completed quantity must be a non-negative integer");
-    if (!Number.isInteger(rawQty) || rawQty < 0) return setError("Raw quantity used must be a non-negative integer");
-    if (completedQty > rawQty) return setError("Completed quantity cannot exceed raw quantity used");
-    if (row.responsiblePerson && (typeof row.responsiblePerson !== "string" || row.responsiblePerson.length > 255)) {
-      return setError("Responsible person must be a string with max length 255");
+    if (!Number.isInteger(completedQty) || completedQty < 0)
+      return setError("Completed quantity must be a non-negative integer");
+    if (!Number.isInteger(rawQty) || rawQty < 0)
+      return setError("Raw quantity used must be a non-negative integer");
+    if (completedQty > rawQty)
+      return setError("Completed quantity cannot exceed raw quantity used");
+    if (
+      row.responsiblePerson &&
+      (typeof row.responsiblePerson !== "string" ||
+        row.responsiblePerson.length > 255)
+    ) {
+      return setError(
+        "Responsible person must be a string with max length 255"
+      );
     }
-    const totalCompletedQty = processes.filter(p => p.id !== row.id).reduce((sum, p) => sum + Number(p.completedQuantity || 0), 0);
+    const totalCompletedQty = processes
+      .filter((p) => p.id !== row.id)
+      .reduce((sum, p) => sum + Number(p.completedQuantity || 0), 0);
     const newTotalCompletedQty = totalCompletedQty + completedQty;
     if (newTotalCompletedQty > workOrderQuantity) {
-      return setError(`Total completed quantity (${newTotalCompletedQty}) cannot exceed work order quantity (${workOrderQuantity})`);
+      return setError(
+        `Total completed quantity (${newTotalCompletedQty}) cannot exceed work order quantity (${workOrderQuantity})`
+      );
     }
-    setError(""); onSave();
+    setError("");
+    onSave();
   };
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
       <div>
-        <label className="block text-sm text-gray-700 mb-1">Responsible Person</label>
+        <label className="block text-sm text-gray-700 mb-1">
+          Responsible Person
+        </label>
         <input
           type="text"
           value={row.responsiblePerson || ""}
-          onChange={(e) => onChange({ ...row, responsiblePerson: e.target.value })}
+          onChange={(e) =>
+            onChange({ ...row, responsiblePerson: e.target.value })
+          }
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           placeholder="e.g., Asha"
         />
@@ -1235,132 +1267,183 @@ function ProcessRowEditor({ row, onChange, onCancel, onSave, workOrderQuantity, 
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm text-gray-700 mb-1">Raw Quantity Used</label>
+          <label className="block text-sm text-gray-700 mb-1">
+            Raw Quantity Used
+          </label>
           <input
             type="number"
             value={row.rawQtyUsed ?? ""}
             onChange={(e) => onChange({ ...row, rawQtyUsed: e.target.value })}
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-            min="0" step="1"
+            min="0"
+            step="1"
           />
         </div>
         <div>
-          <label className="block text-sm text-gray-700 mb-1">Completed Quantity</label>
+          <label className="block text-sm text-gray-700 mb-1">
+            Completed Quantity
+          </label>
           <input
             type="number"
             value={row.completedQuantity ?? ""}
-            onChange={(e) => onChange({ ...row, completedQuantity: e.target.value })}
+            onChange={(e) =>
+              onChange({ ...row, completedQuantity: e.target.value })
+            }
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-            min="0" step="1"
+            min="0"
+            step="1"
           />
         </div>
       </div>
       {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
       <div className="flex justify-end gap-3">
-        <button onClick={onCancel} className="px-4 py-2 rounded-lg border hover:bg-gray-50">Cancel</button>
-        <button onClick={handleSave} className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600">Save</button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
+        >
+          Save
+        </button>
       </div>
     </form>
   );
 }
 
 function MaterialEditor({ material, onCancel, onSave }) {
-  const [quantityPerUnit, setQuantityPerUnit] = useState(material.quantityPerUnit || 0);
-  const [requiredQuantity, setRequiredQuantity] = useState(material.requiredQuantity || 0);
+  const [quantityPerUnit, setQuantityPerUnit] = useState(
+    material.quantityPerUnit || 0
+  );
+  const [requiredQuantity, setRequiredQuantity] = useState(
+    material.requiredQuantity || 0
+  );
   const [error, setError] = useState("");
   const handleSave = () => {
     const qtyPerUnit = Number(quantityPerUnit);
     const reqQty = Number(requiredQuantity);
-    if (!Number.isInteger(qtyPerUnit) || qtyPerUnit < 0) return setError("Quantity per unit must be a non-negative integer");
-    if (!Number.isInteger(reqQty) || reqQty < 0) return setError("Required quantity must be a non-negative integer");
-    if (qtyPerUnit < reqQty) return setError("Required quantity cannot exceed quantity per unit");
-    setError(""); onSave(qtyPerUnit, reqQty);
+    if (!Number.isInteger(qtyPerUnit) || qtyPerUnit < 0)
+      return setError("Quantity per unit must be a non-negative integer");
+    if (!Number.isInteger(reqQty) || reqQty < 0)
+      return setError("Required quantity must be a non-negative integer");
+    if (qtyPerUnit < reqQty)
+      return setError("Required quantity cannot exceed quantity per unit");
+    setError("");
+    onSave(qtyPerUnit, reqQty);
   };
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
       <div>
-        <label className="block text-sm text-gray-700 mb-1">Quantity per Unit (Raw Material ID: {material.rawMaterialId})</label>
-        <input type="number" value={quantityPerUnit} onChange={(e) => setQuantityPerUnit(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300" min="0" step="1" />
+        <label className="block text-sm text-gray-700 mb-1">
+          Quantity per Unit (Raw Material ID: {material.rawMaterialId})
+        </label>
+        <input
+          type="number"
+          value={quantityPerUnit}
+          onChange={(e) => setQuantityPerUnit(e.target.value)}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          min="0"
+          step="1"
+        />
       </div>
       <div>
-        <label className="block text-sm text-gray-700 mb-1">Required Quantity (Raw Material ID: {material.rawMaterialId})</label>
-        <input type="number" value={requiredQuantity} onChange={(e) => setRequiredQuantity(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300" min="0" step="1" />
+        <label className="block text-sm text-gray-700 mb-1">
+          Required Quantity (Raw Material ID: {material.rawMaterialId})
+        </label>
+        <input
+          type="number"
+          value={requiredQuantity}
+          onChange={(e) => setRequiredQuantity(e.target.value)}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          min="0"
+          step="1"
+        />
       </div>
       {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
       <div className="flex justify-end gap-3">
-        <button onClick={onCancel} className="px-4 py-2 rounded-lg border hover:bg-gray-50">Cancel</button>
-        <button onClick={handleSave} className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600">Save</button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
+        >
+          Save
+        </button>
       </div>
     </form>
   );
 }
 
-/* ---------- Add Motor Modal ---------- */
-function AddMotorModal({ orderId, customerName, onClose, onCreated }) {
-  const [name, setName] = useState("");
-  const [type, setType] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const handleCreate = async () => {
-    if (!name.trim()) return toast.error("Motor name is required");
-    setSaving(true);
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) throw new Error("Authentication token missing");
-      const res = await fetch(
-        `${getBackendUrl()}/api/process/${orderId}/instance-groups`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          credentials: "include",
-          // send both naming styles to be safe with backend
-          body: JSON.stringify({
-            instance_name: name.trim(),
-            instanceName: name.trim(),
-            instance_type: type.trim() || null,
-            instanceType: type.trim() || null,
-          }),
-        }
-      );
-      if (!res.ok) {
-        const data = await safeJson(res);
-        throw new Error(data?.error || `Failed to create motor (${res.status})`);
-      }
-      toast.success("Motor added");
-      onCreated && onCreated();
-      onClose();
-    } catch (e) {
-      toast.error(e.message || "Failed to add motor");
-    } finally {
-      setSaving(false);
-    }
-  };
+/* Stage editor (for order-level stages like Assembly/Testing/...) */
+function StageEditor({ stage, onCancel, onSave }) {
+  const [responsiblePerson, setResponsiblePerson] = useState(
+    stage.responsiblePerson ?? stage.responsible_person ?? ""
+  );
+  const [targetDate, setTargetDate] = useState(
+    stage.targetDate ?? stage.stageDate ?? ""
+  );
+  const [status, setStatus] = useState(stage.status || "Pending");
 
   return (
-    <Modal title="Add Motor" onClose={onClose}>
+    <Modal
+      title={`Edit Stage: ${stage.name || stage.stageName}`}
+      onClose={onCancel}
+      widthClass="max-w-lg"
+    >
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm text-gray-700 mb-1">Order ID</label>
-            <input value={orderId} readOnly className="w-full px-3 py-2 border rounded-lg bg-gray-50" />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-700 mb-1">Customer</label>
-            <input value={customerName || "Unknown"} readOnly className="w-full px-3 py-2 border rounded-lg bg-gray-50" />
-          </div>
+        <div>
+          <label className="block text-sm text-gray-700 mb-1">
+            Responsible Person
+          </label>
+          <input
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+            value={responsiblePerson}
+            onChange={(e) => setResponsiblePerson(e.target.value)}
+            placeholder="e.g., Asha"
+          />
         </div>
         <div>
-          <label className="block text-sm text-gray-700 mb-1">Motor Name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300" placeholder="e.g., Motor A" />
+          <label className="block text-sm text-gray-700 mb-1">
+            Target Date
+          </label>
+          <input
+            type="date"
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+          />
         </div>
         <div>
-          <label className="block text-sm text-gray-700 mb-1">Motor Type (optional)</label>
-          <input value={type} onChange={(e) => setType(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300" placeholder="e.g., 3-Phase" />
+          <label className="block text-sm text-gray-700 mb-1">Status</label>
+          <select
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {DISPLAY_STATUS[s]}
+              </option>
+            ))}
+          </select>
         </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border hover:bg-gray-50">Close</button>
-          <button onClick={handleCreate} disabled={saving} className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60">
-            {saving ? "Creating…" : "Create"}
+
+        <div className="flex justify-end gap-3">
+          <button onClick={onCancel} className="px-4 py-2 rounded-lg border">
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave({ responsiblePerson, targetDate, status })}
+            className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
+          >
+            Save
           </button>
         </div>
       </div>
@@ -1368,14 +1451,14 @@ function AddMotorModal({ orderId, customerName, onClose, onCreated }) {
   );
 }
 
-/* ---------- Component Detail Modal (optional deep dive) ---------- */
+/* ---------- Component Detail Modal (unchanged logic) ---------- */
 function ComponentDetailModal({
   orderId,
-  motor,          // { instance_group_id, instance_name, ... }
-  component,      // { componentId, componentName, ... }
+  motor, // { instance_group_id, instance_name, ... }
+  component, // { componentId, componentName, ... }
   existingWorkOrder, // may be null
   onClose,
-  onAfterChange,  // refetch hook from parent
+  onAfterChange, // refetch hook from parent
 }) {
   const [workOrder, setWorkOrder] = useState(existingWorkOrder || null);
   const [materials, setMaterials] = useState([]);
@@ -1384,15 +1467,6 @@ function ComponentDetailModal({
   const [editRow, setEditRow] = useState(null);
   const [editMaterial, setEditMaterial] = useState(null);
   const [busy, setBusy] = useState(false);
-
-  const getCompletedQtyColor = (rawQtyUsed, completedQty) => {
-    const raw = Number(rawQtyUsed);
-    const completed = Number(completedQty);
-    if (completed === 0) return "bg-red-600 text-white";
-    if (completed === raw && completed > 0) return "bg-green-600 text-white";
-    if (0 < completed && completed < raw) return "bg-yellow-600 text-white";
-    return "bg-gray-500 text-white";
-  };
 
   const ensureWorkOrder = useCallback(async () => {
     if (workOrder) return workOrder;
@@ -1404,8 +1478,13 @@ function ComponentDetailModal({
       // get required_quantity from component materials (fallback 1)
       let requiredQuantity = 1;
       const mRes = await fetch(
-        `${getBackendUrl()}/api/process/components/${component.componentId}/materials`,
-        { headers: { Authorization: `Bearer ${token}` }, credentials: "include" }
+        `${getBackendUrl()}/api/process/components/${
+          component.componentId
+        }/materials`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
       );
       if (mRes.ok) {
         const mats = await mRes.json();
@@ -1414,20 +1493,28 @@ function ComponentDetailModal({
       }
 
       // create work order bound to this motor (instance group)
-      const createRes = await fetch(`${getBackendUrl()}/api/process/${orderId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        credentials: "include",
-        body: JSON.stringify({
-          component_id: component.componentId,
-          instance_group_id: motor.instance_group_id,
-          quantity: requiredQuantity,
-          target_date: new Date().toISOString().split("T")[0],
-        }),
-      });
+      const createRes = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            component_id: component.componentId,
+            instance_group_id: motor.instance_group_id,
+            quantity: requiredQuantity,
+            target_date: new Date().toISOString().split("T")[0],
+          }),
+        }
+      );
       if (!createRes.ok) {
         const data = await safeJson(createRes);
-        throw new Error(data?.error || `Failed to create work order (${createRes.status})`);
+        throw new Error(
+          data?.error || `Failed to create work order (${createRes.status})`
+        );
       }
       const wo = await createRes.json();
       setWorkOrder(wo);
@@ -1446,8 +1533,13 @@ function ComponentDetailModal({
 
       // load materials
       const mats2 = await fetch(
-        `${getBackendUrl()}/api/process/components/${component.componentId}/materials`,
-        { headers: { Authorization: `Bearer ${token}` }, credentials: "include" }
+        `${getBackendUrl()}/api/process/components/${
+          component.componentId
+        }/materials`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
       );
       setMaterials(mats2.ok ? await mats2.json() : []);
 
@@ -1456,7 +1548,9 @@ function ComponentDetailModal({
       return wo;
     } catch (e) {
       toast.error(e.message || "Failed to create work order");
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }, [workOrder, orderId, component, motor, onAfterChange]);
 
   const hydrateExisting = useCallback(async () => {
@@ -1478,8 +1572,13 @@ function ComponentDetailModal({
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(
-        `${getBackendUrl()}/api/process/components/${component.componentId}/materials`,
-        { headers: { Authorization: `Bearer ${token}` }, credentials: "include" }
+        `${getBackendUrl()}/api/process/components/${
+          component.componentId
+        }/materials`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
       );
       setMaterials(res.ok ? await res.json() : []);
     } catch {
@@ -1487,52 +1586,74 @@ function ComponentDetailModal({
     }
   }, [existingWorkOrder, component]);
 
-  useEffect(() => { existingWorkOrder ? hydrateExisting() : undefined; }, [hydrateExisting, existingWorkOrder]);
-
-  const openEditRow = (row) => setEditRow({ ...row });
+  useEffect(() => {
+    existingWorkOrder ? hydrateExisting() : undefined;
+  }, [hydrateExisting, existingWorkOrder]);
 
   const saveRowEdits = async () => {
     if (!editRow) return;
     const token = localStorage.getItem("token");
     if (!token) return toast.error("Authentication token missing");
     try {
-      const completedQty = editRow.completedQuantity ? Number(editRow.completedQuantity) : 0;
+      const completedQty = editRow.completedQuantity
+        ? Number(editRow.completedQuantity)
+        : 0;
       const rawQty = editRow.rawQtyUsed ? Number(editRow.rawQtyUsed) : 0;
-      const res = await fetch(`${getBackendUrl()}/api/process/${workOrder.workOrderId}/process-status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        credentials: "include",
-        body: JSON.stringify({
-          process_id: Number(editRow.id),
-          status: editRow.responsiblePerson ? "In Progress" : "Pending",
-          completed_quantity: completedQty,
-          raw_quantity_used: rawQty,
-          completion_date: editRow.targetDate || null,
-          responsible_person: editRow.responsiblePerson || null,
-        }),
-      });
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/${
+          workOrder.workOrderId
+        }/process-status`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            process_id: Number(editRow.id),
+            status: editRow.responsiblePerson ? "In Progress" : "Pending",
+            completed_quantity: completedQty,
+            raw_quantity_used: rawQty,
+            completion_date: editRow.targetDate || null,
+            responsible_person: editRow.responsiblePerson || null,
+          }),
+        }
+      );
       if (!res.ok) {
         const data = await safeJson(res);
-        throw new Error(data?.error || `Failed to update process status (${res.status})`);
+        throw new Error(
+          data?.error || `Failed to update process status (${res.status})`
+        );
       }
       // refresh the work order payload
-      const refetch = await fetch(`${getBackendUrl()}/api/process/${workOrder.orderId}?force_refresh=true`, {
-        headers: { Authorization: `Bearer ${token}` }, credentials: "include",
-      });
+      const refetch = await fetch(
+        `${getBackendUrl()}/api/process/${
+          workOrder.orderId
+        }?force_refresh=true`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
       const data = (await refetch.json()) || {};
-      const updated = (data.workOrders || []).find(wo => wo.workOrderId === Number(workOrder.workOrderId));
+      const updated = (data.workOrders || []).find(
+        (wo) => wo.workOrderId === Number(workOrder.workOrderId)
+      );
       if (updated) {
         setWorkOrder(updated);
         setWorkOrderQuantity(updated.quantity || 0);
-        setProcessRows(updated.processes.map(p => ({
-          id: p.processId,
-          sequence: p.sequence,
-          name: p.processName,
-          responsiblePerson: p.responsiblePerson || "",
-          targetDate: p.completionDate || "",
-          completedQuantity: p.completedQuantity ?? 0,
-          rawQtyUsed: p.rawQuantityUsed ?? 0,
-        })));
+        setProcessRows(
+          updated.processes.map((p) => ({
+            id: p.processId,
+            sequence: p.sequence,
+            name: p.processName,
+            responsiblePerson: p.responsiblePerson || "",
+            targetDate: p.completionDate || "",
+            completedQuantity: p.completedQuantity ?? 0,
+            rawQtyUsed: p.rawQuantityUsed ?? 0,
+          }))
+        );
       }
       onAfterChange && onAfterChange();
       setEditRow(null);
@@ -1543,25 +1664,45 @@ function ComponentDetailModal({
   };
 
   const openEditMaterial = (m) => setEditMaterial({ ...m });
-  const saveMaterialEdits = async (material, newQuantityPerUnit, newRequiredQuantity) => {
+  const saveMaterialEdits = async (
+    material,
+    newQuantityPerUnit,
+    newRequiredQuantity
+  ) => {
     const token = localStorage.getItem("token");
     if (!token) return toast.error("Authentication token missing");
     try {
-      const url = `${getBackendUrl()}/api/process/components/${material.componentId}/materials/${material.materialId}`;
+      const url = `${getBackendUrl()}/api/process/components/${
+        material.componentId
+      }/materials/${material.materialId}`;
       const res = await fetch(url, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         credentials: "include",
-        body: JSON.stringify({ quantity_per_unit: newQuantityPerUnit, required_quantity: newRequiredQuantity }),
+        body: JSON.stringify({
+          quantity_per_unit: newQuantityPerUnit,
+          required_quantity: newRequiredQuantity,
+        }),
       });
       if (!res.ok) {
         const data = await safeJson(res);
-        throw new Error(data?.error || `Failed to update material (${res.status})`);
+        throw new Error(
+          data?.error || `Failed to update material (${res.status})`
+        );
       }
       toast.success("Material updated");
-      const mRes = await fetch(`${getBackendUrl()}/api/process/components/${component.componentId}/materials`, {
-        headers: { Authorization: `Bearer ${token}` }, credentials: "include",
-      });
+      const mRes = await fetch(
+        `${getBackendUrl()}/api/process/components/${
+          component.componentId
+        }/materials`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
       setMaterials(mRes.ok ? await mRes.json() : []);
       onAfterChange && onAfterChange();
       setEditMaterial(null);
@@ -1571,7 +1712,13 @@ function ComponentDetailModal({
   };
 
   return (
-    <Modal title={`${component.componentName} — ${motor.instance_name || "(unnamed)"}`} onClose={onClose} widthClass="max-w-3xl">
+    <Modal
+      title={`${component.componentName} — ${
+        motor.instance_name || "(unnamed)"
+      }`}
+      onClose={onClose}
+      widthClass="max-w-3xl"
+    >
       <div className="space-y-6">
         {!workOrder && (
           <button
@@ -1585,7 +1732,9 @@ function ComponentDetailModal({
 
         {/* Processes */}
         <div className="bg-white rounded-xl border p-4">
-          <h4 className="text-lg font-semibold text-gray-800 mb-3">Processes</h4>
+          <h4 className="text-lg font-semibold text-gray-800 mb-3">
+            Processes
+          </h4>
           {processRows.length ? (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
@@ -1593,39 +1742,54 @@ function ComponentDetailModal({
                   <tr className="text-left text-gray-600 border-b">
                     <th className="py-2 pr-4">Seq</th>
                     <th className="py-2 pr-4">Process Name</th>
-                    <th className="py-2 pr-4"><span className="inline-flex items-center gap-1"><User size={14}/> Responsible</span></th>
-                    <th className="py-2 pr-4"><span className="inline-flex items-center gap-1"><Calendar size={14}/> Target Date</span></th>
+                    <th className="py-2 pr-4">
+                      <span className="inline-flex items-center gap-1">
+                        <User size={14} /> Responsible
+                      </span>
+                    </th>
+                    <th className="py-2 pr-4">
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar size={14} /> Target Date
+                      </span>
+                    </th>
                     <th className="py-2 pr-4">Raw Qty Used</th>
                     <th className="py-2 pr-4">In use</th>
                     <th className="py-2">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {processRows.map(p => (
+                  {processRows.map((p) => (
                     <tr key={p.id} className="border-b last:border-0">
                       <td className="py-2 pr-4 text-gray-500">{p.sequence}</td>
-                      <td className="py-2 pr-4 font-medium text-gray-900">{p.name}</td>
-                      <td className="py-2 pr-4">{p.responsiblePerson || "—"}</td>
+                      <td className="py-2 pr-4 font-medium text-gray-900">
+                        {p.name}
+                      </td>
+                      <td className="py-2 pr-4">
+                        {p.responsiblePerson || "—"}
+                      </td>
                       <td className="py-2 pr-4">{p.targetDate || "—"}</td>
                       <td className="py-2 pr-4">{p.rawQtyUsed}</td>
                       <td className="py-2 pr-4">
                         <span
-                          className={`px-3 py-1 rounded-full text-white text-sm font-medium ${
-                            (function () {
-                              const raw = Number(p.rawQtyUsed);
-                              const completed = Number(p.completedQuantity);
-                              if (completed === 0) return "bg-red-600";
-                              if (completed === raw && completed > 0) return "bg-green-600";
-                              if (0 < completed && completed < raw) return "bg-yellow-600";
-                              return "bg-gray-500";
-                            })()
-                          }`}
+                          className={`px-3 py-1 rounded-full text-white text-sm font-medium ${(function () {
+                            const raw = Number(p.rawQtyUsed);
+                            const completed = Number(p.completedQuantity);
+                            if (completed === 0) return "bg-red-600";
+                            if (completed === raw && completed > 0)
+                              return "bg-green-600";
+                            if (0 < completed && completed < raw)
+                              return "bg-yellow-600";
+                            return "bg-gray-500";
+                          })()}`}
                         >
                           {p.completedQuantity}
                         </span>
                       </td>
                       <td className="py-2">
-                        <button onClick={() => setEditRow(p)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border hover:bg-amber-50">
+                        <button
+                          onClick={() => setEditRow(p)}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border hover:bg-amber-50"
+                        >
                           <Pencil size={16} className="text-amber-600" /> Edit
                         </button>
                       </td>
@@ -1635,7 +1799,12 @@ function ComponentDetailModal({
               </table>
             </div>
           ) : (
-            <p className="text-gray-500">No processes yet. {workOrder ? "Check component definition." : "Create the work order first."}</p>
+            <p className="text-gray-500">
+              No processes yet.{" "}
+              {workOrder
+                ? "Check component definition."
+                : "Create the work order first."}
+            </p>
           )}
         </div>
 
@@ -1647,32 +1816,56 @@ function ComponentDetailModal({
           {materials?.length ? (
             <ul className="divide-y">
               {materials.map((rm) => (
-                <li key={rm.materialId ?? `${rm.componentId}-${rm.rawMaterialId}`} className="py-3 flex justify-between items-center">
+                <li
+                  key={rm.materialId ?? `${rm.componentId}-${rm.rawMaterialId}`}
+                  className="py-3 flex justify-between items-center"
+                >
                   <div>
-                    <p className="font-medium text-gray-900">Raw Material ID: {rm.rawMaterialId}</p>
-                    <p className="text-sm text-gray-600">Quantity / unit: <span className="font-medium">{rm.quantityPerUnit}</span></p>
+                    <p className="font-medium text-gray-900">
+                      Raw Material ID: {rm.rawMaterialId}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Quantity / unit:{" "}
+                      <span className="font-medium">{rm.quantityPerUnit}</span>
+                    </p>
                     {"requiredQuantity" in rm && (
-                      <p className="text-sm text-gray-600">Required Quantity: <span className="font-medium">{rm.requiredQuantity}</span></p>
+                      <p className="text-sm text-gray-600">
+                        Required Quantity:{" "}
+                        <span className="font-medium">
+                          {rm.requiredQuantity}
+                        </span>
+                      </p>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     {typeof rm.materialId !== "undefined" && (
-                      <span className="text-xs text-gray-500">material_id: {rm.materialId}</span>
+                      <span className="text-xs text-gray-500">
+                        material_id: {rm.materialId}
+                      </span>
                     )}
-                    <button onClick={() => openEditMaterial(rm)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border hover:bg-amber-50">
+                    <button
+                      onClick={() => openEditMaterial(rm)}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border hover:bg-amber-50"
+                    >
                       <Pencil size={16} className="text-amber-600" /> Edit
                     </button>
                   </div>
                 </li>
               ))}
             </ul>
-          ) : <p className="text-gray-500">No materials listed.</p>}
+          ) : (
+            <p className="text-gray-500">No materials listed.</p>
+          )}
         </div>
       </div>
 
       {/* nested editors */}
       {editRow && (
-        <Modal title={`Edit: ${editRow.name}`} onClose={() => setEditRow(null)} widthClass="max-w-lg">
+        <Modal
+          title={`Edit: ${editRow.name}`}
+          onClose={() => setEditRow(null)}
+          widthClass="max-w-lg"
+        >
           <ProcessRowEditor
             row={editRow}
             onChange={setEditRow}
@@ -1685,14 +1878,15 @@ function ComponentDetailModal({
       )}
 
       {editMaterial && (
-        <Modal title={`Edit Material: Raw Material ID ${editMaterial.rawMaterialId}`} onClose={() => setEditMaterial(null)} widthClass="max-w-lg">
+        <Modal
+          title={`Edit Material: Raw Material ID ${editMaterial.rawMaterialId}`}
+          onClose={() => setEditMaterial(null)}
+          widthClass="max-w-lg"
+        >
           <MaterialEditor
             material={editMaterial}
             onCancel={() => setEditMaterial(null)}
-            onSave={(qpu, rq) => {
-              // delegate to parent handler in saveMaterialEdits
-              // (kept blank here to keep modal generic)
-            }}
+            onSave={(qpu, rq) => saveMaterialEdits(editMaterial, qpu, rq)}
           />
         </Modal>
       )}
@@ -1707,14 +1901,16 @@ export default function CreateMotorProcess() {
   // page state
   const [customerName, setCustomerName] = useState("");
   const [components, setComponents] = useState([]);
-  const [motors, setMotors] = useState([]);            // normalized instance groups
-  const [workOrders, setWorkOrders] = useState([]);    // each has status, etc
+  const [motors, setMotors] = useState([]); // normalized instance groups
+  const [workOrders, setWorkOrders] = useState([]); // each has status, etc
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingList, setLoadingList] = useState(false);
 
   const [showAddMotor, setShowAddMotor] = useState(false);
-  const [openDetail, setOpenDetail] = useState(null);  // { motor, component, wo }
+  const [openDetail, setOpenDetail] = useState(null); // { motor, component, wo }
+  const [stages, setStages] = useState([]);
+  const [editStage, setEditStage] = useState(null); // current stage being edited
 
   // inline status editing state
   const [editingCell, setEditingCell] = useState(null); // { motorId, componentId }
@@ -1741,7 +1937,10 @@ export default function CreateMotorProcess() {
     try {
       const mRes = await fetch(
         `${getBackendUrl()}/api/process/components/${componentId}/materials`,
-        { headers: { Authorization: `Bearer ${token}` }, credentials: "include" }
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
       );
       if (!mRes.ok) return 1;
       const mats = await mRes.json();
@@ -1751,6 +1950,75 @@ export default function CreateMotorProcess() {
       return 1;
     }
   }, []);
+  const toStage = (x) => ({
+    id: x.stageId ?? x.id,
+    name: (x.stageName ?? x.stage_name ?? x.name ?? "").trim(),
+    status: x.status ?? "Pending",
+    targetDate:
+      x.targetDate ??
+      x.stageDate ??
+      x.target_date ??
+      x.planned_date ??
+      x.plannedDate ??
+      "",
+    responsiblePerson: x.responsiblePerson ?? x.responsible_person ?? "",
+  });
+  const fetchStages = useCallback(async () => {
+    const token = tokenGuard();
+    const r = await fetch(`${getBackendUrl()}/api/process/${orderId}/stages`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    });
+    const arr = r.ok ? await r.json() : [];
+    const normalized = Array.isArray(arr) ? arr.map(toStage) : [];
+    setStages(normalized);
+    return normalized; // so callers can use the fresh list
+  }, [orderId]);
+  const createStage = useCallback(
+    async (label) => {
+      try {
+        const token = tokenGuard();
+        const res = await fetch(
+          `${getBackendUrl()}/api/process/${orderId}/stages`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              stage_name: label, // send snake_case too
+              stageName: label,
+              status: "Pending",
+            }),
+          }
+        );
+        if (!res.ok) {
+          const data = await safeJson(res);
+          throw new Error(
+            data?.error || `Failed to create stage (${res.status})`
+          );
+        }
+        toast.success(`${label} stage created`);
+        const list = await fetchStages(); // get fresh normalized list
+        const created =
+          list.find(
+            (s) => normalizeNameKey(s.name) === normalizeNameKey(label)
+          ) || null;
+        if (created) setEditStage(created);
+      } catch (e) {
+        toast.error(e.message || "Could not create stage");
+      }
+    },
+    [orderId, fetchStages]
+  );
+
+  const stageByName = useMemo(() => {
+    const map = new Map();
+    stages.forEach((s) => map.set(normalizeNameKey(s.name), s));
+    return map;
+  }, [stages]);
 
   const createWorkOrderFor = useCallback(
     async (motor, component) => {
@@ -1758,7 +2026,10 @@ export default function CreateMotorProcess() {
       const qty = await fetchRequiredQuantity(component.componentId, token);
       const res = await fetch(`${getBackendUrl()}/api/process/${orderId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         credentials: "include",
         body: JSON.stringify({
           component_id: component.componentId,
@@ -1769,7 +2040,9 @@ export default function CreateMotorProcess() {
       });
       if (!res.ok) {
         const data = await safeJson(res);
-        throw new Error(data?.error || `Failed to create work order (${res.status})`);
+        throw new Error(
+          data?.error || `Failed to create work order (${res.status})`
+        );
       }
       return await res.json();
     },
@@ -1779,8 +2052,11 @@ export default function CreateMotorProcess() {
   // choose a "board" process to reflect the cell's status
   function pickBoardProcess(wo) {
     if (!wo?.processes?.length) return null;
-    const incomplete = wo.processes.find(p => (p.status !== "Completed"));
-    return incomplete || [...wo.processes].sort((a,b)=> (a.sequence||0)-(b.sequence||0))[0];
+    const incomplete = wo.processes.find((p) => p.status !== "Completed");
+    return (
+      incomplete ||
+      [...wo.processes].sort((a, b) => (a.sequence || 0) - (b.sequence || 0))[0]
+    );
   }
 
   // Update via existing /:workOrderId/process-status route
@@ -1798,18 +2074,67 @@ export default function CreateMotorProcess() {
       responsible_person: proc.responsiblePerson || null,
     };
 
-    const res = await fetch(`${getBackendUrl()}/api/process/${wo.workOrderId}/process-status`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      credentials: "include",
-      body: JSON.stringify(body),
-    });
+    const res = await fetch(
+      `${getBackendUrl()}/api/process/${wo.workOrderId}/process-status`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+        body: JSON.stringify(body),
+      }
+    );
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`${res.status} ${res.statusText} — ${text.slice(0,200)}`);
+      throw new Error(
+        `${res.status} ${res.statusText} — ${text.slice(0, 200)}`
+      );
     }
     return true;
   }, []);
+
+  // Save stage edits
+  const saveStageEdits = useCallback(
+    async ({ responsiblePerson, targetDate, status }) => {
+      try {
+        const token = tokenGuard();
+        const id = editStage.stageId ?? editStage.id;
+        const res = await fetch(
+          `${getBackendUrl()}/api/process/${orderId}/stages/${id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              // send both casings to be safe with backend
+              status,
+              target_date: targetDate || null,
+              targetDate: targetDate || null,
+              responsible_person: responsiblePerson || null,
+              responsiblePerson: responsiblePerson || null,
+            }),
+          }
+        );
+        if (!res.ok) {
+          const data = await safeJson(res);
+          throw new Error(
+            data?.error || `Failed to update stage (${res.status})`
+          );
+        }
+        toast.success("Stage updated");
+        setEditStage(null);
+        await fetchStages();
+      } catch (e) {
+        toast.error(e.message || "Failed to save stage");
+      }
+    },
+    [editStage, orderId, fetchStages]
+  );
 
   // main refetch
   const refetchAll = useCallback(async () => {
@@ -1818,25 +2143,37 @@ export default function CreateMotorProcess() {
       const token = tokenGuard();
 
       // motors
-      const ig = await fetch(`${getBackendUrl()}/api/process/${orderId}/instance-groups`, {
-        headers: { Authorization: `Bearer ${token}` }, credentials: "include"
-      });
+      const ig = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}/instance-groups`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
       const rawList = ig.ok ? await ig.json() : [];
-      const motorList = Array.isArray(rawList) ? rawList.map(normalizeMotor) : [];
+      const motorList = Array.isArray(rawList)
+        ? rawList.map(normalizeMotor)
+        : [];
       setMotors(motorList);
 
       // work orders
-      const wo = await fetch(`${getBackendUrl()}/api/process/${orderId}?force_refresh=true`, {
-        headers: { Authorization: `Bearer ${token}` }, credentials: "include"
-      });
+      const wo = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}?force_refresh=true`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
       const woData = wo.ok ? await wo.json() : { workOrders: [] };
       setWorkOrders(woData.workOrders || []);
+
+      await fetchStages();
     } catch (e) {
       toast.error(e.message || "Failed to refresh");
     } finally {
       setLoadingList(false);
     }
-  }, [orderId]);
+  }, [orderId, fetchStages]);
 
   // initial load
   useEffect(() => {
@@ -1847,7 +2184,8 @@ export default function CreateMotorProcess() {
 
         // customer name for heading
         const ordersRes = await fetch(`${getBackendUrl()}/api/process/orders`, {
-          headers: { Authorization: `Bearer ${token}` }, credentials: "include",
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         if (ordersRes.ok) {
           const all = await ordersRes.json();
@@ -1857,7 +2195,8 @@ export default function CreateMotorProcess() {
 
         // components master
         const comps = await fetch(`${getBackendUrl()}/api/process/components`, {
-          headers: { Authorization: `Bearer ${token}` }, credentials: "include",
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         setComponents(comps.ok ? await comps.json() : []);
 
@@ -1871,13 +2210,19 @@ export default function CreateMotorProcess() {
   }, [orderId, refetchAll]);
 
   // Build the exact columns in the requested order.
-  // We match by name against components list; if a name is missing in master,
-  // we still render the column but disable editing (so you know to add it).
   const displayColumns = useMemo(() => {
     const byName = new Map(
-      (components || []).map(c => [normalizeNameKey(c.componentName || ""), c])
+      (components || []).map((c) => [
+        normalizeNameKey(c.componentName || ""),
+        c,
+      ])
     );
-    return DESIRED_COMPONENT_ORDER.map(label => {
+
+    return DESIRED_COMPONENT_ORDER.map((label) => {
+      if (STAGE_LIST.includes(label)) {
+        // These are order-level stages, not components
+        return { label, isStage: true }; // don't mark missing
+      }
       const hit = byName.get(normalizeNameKey(label));
       return hit ? { ...hit, label } : { label, missing: true };
     });
@@ -1887,7 +2232,9 @@ export default function CreateMotorProcess() {
   const filteredMotors = useMemo(() => {
     if (!search.trim()) return motors;
     const q = search.toLowerCase();
-    return motors.filter((m) => (m.instance_name || "").toLowerCase().includes(q));
+    return motors.filter((m) =>
+      (m.instance_name || "").toLowerCase().includes(q)
+    );
   }, [motors, search]);
 
   // details modal (optional)
@@ -1897,20 +2244,23 @@ export default function CreateMotorProcess() {
     setOpenDetail({ motor, component, wo });
   };
 
-  // open inline editor
+  // open inline editor for component cells
   const startEditStatus = (motorId, component, current) => {
     if (component.missing) {
-      toast.warn(`“${component.label}” isn’t defined in Components. Add it in master to enable editing.`);
+      toast.warn(
+        `“${component.label}” isn’t defined in Components. Add it in master to enable editing.`
+      );
       return;
     }
     setEditingCell({ motorId, componentId: component.componentId });
     setEditingValue(current || "Pending");
   };
 
-  // save inline status
+  // save inline status for component cells
   const saveStatus = async (motor, component, newStatus) => {
     try {
-      if (component.missing) throw new Error(`Component “${component.label}” not defined`);
+      if (component.missing)
+        throw new Error(`Component “${component.label}” not defined`);
       let wo = findWO(motor.instance_group_id, component.componentId);
       if (!wo) {
         wo = await createWorkOrderFor(motor, component);
@@ -1918,11 +2268,17 @@ export default function CreateMotorProcess() {
 
       // refresh to get processes before updating
       const token = tokenGuard();
-      const ref = await fetch(`${getBackendUrl()}/api/process/${orderId}?force_refresh=true`, {
-        headers: { Authorization: `Bearer ${token}` }, credentials: "include",
-      });
+      const ref = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}?force_refresh=true`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
       const woData = ref.ok ? await ref.json() : { workOrders: [] };
-      const freshWO = (woData.workOrders || []).find(w => w.workOrderId === wo.workOrderId);
+      const freshWO = (woData.workOrders || []).find(
+        (w) => w.workOrderId === wo.workOrderId
+      );
       if (!freshWO) throw new Error("Work order not found after refresh");
 
       await updateBoardStatusViaProcess(freshWO, newStatus);
@@ -1935,19 +2291,26 @@ export default function CreateMotorProcess() {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-600">Loading motors…</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-600">
+        Loading motors…
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-        Work Orders — Order #{orderId} — {customerName?.trim() ? customerName : "Unknown"}
+        Work Orders — Order #{orderId} —{" "}
+        {customerName?.trim() ? customerName : "Unknown"}
       </h1>
 
       {/* toolbar */}
       <div className="max-w-7xl mx-auto mb-8 flex gap-6 flex-wrap items-end">
         <div className="relative flex-grow">
-          <label htmlFor="search-motors" className="sr-only">Search Motors</label>
+          <label htmlFor="search-motors" className="sr-only">
+            Search Motors
+          </label>
           <input
             id="search-motors"
             type="text"
@@ -1981,26 +2344,93 @@ export default function CreateMotorProcess() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50">
-              <th className="py-5 px-3 text-gray-800 text-base font-semibold whitespace-nowrap">Motor Name</th>
-              {displayColumns.map(col => (
-                <th key={col.label} className="py-5 px-3 text-gray-800 text-base font-semibold whitespace-nowrap">{col.label}</th>
+              <th className="py-5 px-3 text-gray-800 text-base font-semibold whitespace-nowrap">
+                Motor Name
+              </th>
+              {displayColumns.map((col) => (
+                <th
+                  key={col.label}
+                  className="py-5 px-3 text-gray-800 text-base font-semibold whitespace-nowrap"
+                >
+                  {col.label}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filteredMotors.length ? (
               filteredMotors.map((m) => (
-                <tr key={m.instance_group_id ?? m.instanceName ?? m.id} className="border-t hover:bg-amber-50 transition-all duration-200">
+                <tr
+                  key={m.instance_group_id ?? m.instanceName ?? m.id}
+                  className="border-t hover:bg-amber-50 transition-all duration-200"
+                >
                   <td className="py-4 px-3 text-gray-800">
-                    <div className="font-semibold">{m.instance_name || "(unnamed)"}</div>
-                    {m.instance_type && <div className="text-sm text-gray-600">{m.instance_type}</div>}
+                    <div className="font-semibold">
+                      {m.instance_name || "(unnamed)"}
+                    </div>
+                    {m.instance_type && (
+                      <div className="text-sm text-gray-600">
+                        {m.instance_type}
+                      </div>
+                    )}
                   </td>
 
                   {displayColumns.map((col) => {
+                    // 1) Stage columns (order-level)
+                    // inside displayColumns.map(...) in the row renderer
+                    if (col.isStage) {
+                      const s = stageByName.get(normalizeNameKey(col.label));
+                      return (
+                        <td
+                          key={`stage-${col.label}`}
+                          className="py-4 px-3 align-middle"
+                        >
+                          {s ? (
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-semibold ${statusToBadgeClass(
+                                  s.status || "Pending"
+                                )}`}
+                              >
+                                {DISPLAY_STATUS[s.status || "Pending"] ||
+                                  "Yet To Start"}
+                              </span>
+                              <span className="text-xs text-gray-600">
+                                {s.targetDate || "—"}
+                              </span>
+                              <button
+                                onClick={() =>
+                                  setEditStage({ ...s, name: col.label })
+                                }
+                                className="text-gray-600 hover:text-amber-700 text-xs underline"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => createStage(col.label)}
+                              className="px-2 py-1 text-xs rounded-lg border hover:bg-amber-50"
+                              title={`Create ${col.label} stage`}
+                            >
+                              Set
+                            </button>
+                          )}
+                        </td>
+                      );
+                    }
+
+                    // 2) Component columns (existing behavior)
                     if (col.missing) {
                       return (
-                        <td key={`${col.label}-missing`} className="py-4 px-3 align-middle">
-                          <span className="text-xs text-gray-400 italic" title="Define this in Components master to enable editing">
+                        <td
+                          key={`${col.label}-missing`}
+                          className="py-4 px-3 align-middle"
+                        >
+                          <span
+                            className="text-xs text-gray-400 italic"
+                            title="Define this in Components master to enable editing"
+                          >
                             Not defined
                           </span>
                         </td>
@@ -2015,12 +2445,23 @@ export default function CreateMotorProcess() {
                       editingCell.componentId === col.componentId;
 
                     return (
-                      <td key={col.componentId} className="py-4 px-3 align-middle">
+                      <td
+                        key={col.componentId}
+                        className="py-4 px-3 align-middle"
+                      >
                         {!isEditing ? (
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => startEditStatus(m.instance_group_id, col, status)}
-                              className={`px-3 py-1 rounded-full text-xs font-semibold ${statusToBadgeClass(status)}`}
+                              onClick={() =>
+                                startEditStatus(
+                                  m.instance_group_id,
+                                  col,
+                                  status
+                                )
+                              }
+                              className={`px-3 py-1 rounded-full text-xs font-semibold ${statusToBadgeClass(
+                                status
+                              )}`}
                               title="Click to edit status"
                             >
                               {DISPLAY_STATUS[status] || "Yet To Start"}
@@ -2041,7 +2482,9 @@ export default function CreateMotorProcess() {
                               className="border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-amber-300"
                             >
                               {STATUS_OPTIONS.map((opt) => (
-                                <option key={opt} value={opt}>{DISPLAY_STATUS[opt]}</option>
+                                <option key={opt} value={opt}>
+                                  {DISPLAY_STATUS[opt]}
+                                </option>
                               ))}
                             </select>
                             <button
@@ -2065,7 +2508,10 @@ export default function CreateMotorProcess() {
               ))
             ) : (
               <tr>
-                <td colSpan={1 + displayColumns.length} className="py-10 text-center text-gray-500">
+                <td
+                  colSpan={1 + displayColumns.length}
+                  className="py-10 text-center text-gray-500"
+                >
                   No motors found. Click “Add Motor” to create one.
                 </td>
               </tr>
@@ -2095,9 +2541,22 @@ export default function CreateMotorProcess() {
         />
       )}
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
+      {editStage && (
+        <StageEditor
+          stage={editStage}
+          onCancel={() => setEditStage(null)}
+          onSave={saveStageEdits}
+        />
+      )}
+
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        closeOnClick
+        pauseOnHover
+        draggable
+      />
     </div>
   );
 }
-
-  
