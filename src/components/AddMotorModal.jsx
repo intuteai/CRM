@@ -28,7 +28,6 @@ const Modal = ({ title, onClose, children, widthClass = "max-w-2xl" }) => (
 
 function AddMotorModal({ orderId, customerName, onClose, onCreated }) {
   const [instanceName, setInstanceName] = useState("");
-  const [instanceType, setInstanceType] = useState("Motor");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -40,11 +39,6 @@ function AddMotorModal({ orderId, customerName, onClose, onCreated }) {
     // Input validation
     if (!instanceName.trim()) {
       setError("Instance name is required");
-      setBusy(false);
-      return;
-    }
-    if (!["Motor", "Non-Motor"].includes(instanceType)) {
-      setError("Instance type must be Motor or Non-Motor");
       setBusy(false);
       return;
     }
@@ -64,7 +58,7 @@ function AddMotorModal({ orderId, customerName, onClose, onCreated }) {
           credentials: "include",
           body: JSON.stringify({
             instance_name: instanceName.trim(),
-            instance_type: instanceType,
+            instance_type: "Motor",
           }),
         }
       );
@@ -111,20 +105,6 @@ function AddMotorModal({ orderId, customerName, onClose, onCreated }) {
             placeholder="e.g., Motor A"
             disabled={busy}
           />
-        </div>
-        <div>
-          <label className="block text-sm text-gray-700 mb-1">
-            Instance Type
-          </label>
-          <select
-            value={instanceType}
-            onChange={(e) => setInstanceType(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-            disabled={busy}
-          >
-            <option value="Motor">Motor</option>
-            <option value="Non-Motor">Non-Motor</option>
-          </select>
         </div>
         {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
         <div className="flex justify-end gap-3">
