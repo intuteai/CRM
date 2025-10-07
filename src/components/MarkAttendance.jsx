@@ -5,8 +5,7 @@ import 'react-toastify/dist/ReactToastify.css';
 function MarkAttendance({ socket }) {
   const [formData, setFormData] = useState({
     present_absent: 'present',
-    online_office: 'office',
-    wfh: false,
+    mode: 'office',
     check_in_time: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }).slice(0, 5),
     check_out_time: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }).slice(0, 5),
   });
@@ -52,8 +51,7 @@ function MarkAttendance({ socket }) {
         setIsCheckOutMode(attendance[0].present_absent === 'present' && attendance[0].check_in_time && !attendance[0].check_out_time);
         setFormData({
           present_absent: attendance[0].present_absent,
-          online_office: attendance[0].online_office || 'office',
-          wfh: attendance[0].wfh || false,
+          mode: attendance[0].mode || 'office',
           check_in_time: attendance[0].check_in_time
             ? new Date(attendance[0].check_in_time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }).slice(0, 5)
             : getCurrentISTTime(),
@@ -65,8 +63,7 @@ function MarkAttendance({ socket }) {
         setExistingRecord(null);
         setFormData({
           present_absent: 'present',
-          online_office: 'office',
-          wfh: false,
+          mode: 'office',
           check_in_time: getCurrentISTTime(),
           check_out_time: getCurrentISTTime(),
         });
@@ -97,36 +94,32 @@ function MarkAttendance({ socket }) {
       }
 
       const today = getCurrentDateISO();
-      let checkInTime, checkOutTime, onlineOffice, wfh;
+      let checkInTime, checkOutTime, mode;
 
       if (formData.present_absent === 'absent') {
         checkInTime = null;
         checkOutTime = null;
-        onlineOffice = null;
-        wfh = null;
+        mode = null;
       } else if (isCheckOutMode) {
         if (!existingRecord || !existingRecord.check_in_time) {
           throw new Error('No existing check-in record found');
         }
         checkInTime = existingRecord.check_in_time;
         checkOutTime = `${today}T${formData.check_out_time}:00Z`;
-        onlineOffice = formData.wfh ? 'online' : 'office';
-        wfh = formData.wfh;
+        mode = existingRecord.mode; // Retain the mode from check-in
         if (new Date(checkOutTime) <= new Date(checkInTime)) {
           throw new Error('Check-out time must be after check-in time');
         }
       } else {
         checkInTime = `${today}T${formData.check_in_time}:00Z`;
         checkOutTime = null;
-        onlineOffice = formData.wfh ? 'online' : 'office';
-        wfh = formData.wfh;
+        mode = formData.mode;
       }
 
       const payload = {
         date: today,
         present_absent: formData.present_absent,
-        online_office: onlineOffice,
-        wfh: wfh,
+        mode: mode,
         check_in_time: isCheckOutMode ? undefined : checkInTime,
         check_out_time: checkOutTime,
       };
@@ -148,8 +141,7 @@ function MarkAttendance({ socket }) {
       toast.success(isCheckOutMode ? 'Check-out marked successfully' : formData.present_absent === 'absent' ? 'Absent marked successfully' : 'Check-in marked successfully');
       setFormData({
         present_absent: 'present',
-        online_office: 'office',
-        wfh: false,
+        mode: 'office',
         check_in_time: getCurrentISTTime(),
         check_out_time: getCurrentISTTime(),
       });
@@ -170,6 +162,12 @@ function MarkAttendance({ socket }) {
         toast.error('Date must be today’s date.');
       } else if (err.message === 'Check-out time must be after check-in time') {
         toast.error('Check-out time must be after check-in time.');
+      } else if (err.message === 'Work mode is required for present status') {
+        toast.error('Please select a work mode for present status.');
+      } else if (err.message === 'Invalid work mode: must be office or remote') {
+        toast.error('Invalid work mode. Please select office or remote.');
+      } else if (err.message === 'When absent, check-in, check-out, and mode must be null') {
+        toast.error('When absent, work mode and times must be empty.');
       } else {
         toast.error(err.message);
       }
@@ -195,7 +193,7 @@ function MarkAttendance({ socket }) {
               hour: '2-digit',
               minute: '2-digit',
               hour12: true,
-            })}
+            })} ({existingRecord.mode.charAt(0).toUpperCase() + existingRecord.mode.slice(1)})
           </p>
         )}
         {isCheckInAllowed ? (
@@ -213,27 +211,17 @@ function MarkAttendance({ socket }) {
             </div>
             {formData.present_absent === 'present' && (
               <>
-                <div className="flex items-center">
-                  <label className="text-gray-200 font-medium mr-4">Work From Home</label>
-                  <input
-                    type="checkbox"
-                    checked={formData.wfh}
-                    onChange={(e) => setFormData({ ...formData, wfh: e.target.checked })}
-                    className="h-5 w-5 text-amber-400 border-amber-200 focus:ring-2 focus:ring-amber-300"
-                  />
+                <div>
+                  <label className="block text-gray-200 font-medium mb-2">Work Mode</label>
+                  <select
+                    value={formData.mode}
+                    onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
+                    className="w-full p-3 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-300 focus:border-amber-300 bg-gray-600 text-gray-200"
+                  >
+                    <option value="office">Office</option>
+                    <option value="remote">Remote</option>
+                  </select>
                 </div>
-                {formData.wfh && (
-                  <div>
-                    <label className="block text-gray-200 font-medium mb-2">Location</label>
-                    <select
-                      value="online"
-                      disabled
-                      className="w-full p-3 border border-amber-200 rounded-lg bg-gray-500 text-gray-200 cursor-not-allowed"
-                    >
-                      <option value="online">Online</option>
-                    </select>
-                  </div>
-                )}
                 <div>
                   <label className="block text-gray-200 font-medium mb-2">Check-In Time</label>
                   <input
