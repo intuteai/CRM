@@ -5,11 +5,30 @@ import axios from 'axios';
 import { debounce } from 'lodash';
 
 // ──────────────────────────────────────────────────────────────
-// Native date helpers (no date-fns → no timezone bugs)
+// TIMEZONE-SAFE DATE HELPERS ✅
+// Backend sends: date as 'YYYY-MM-DD', times as 'YYYY-MM-DDTHH:mm:ss' (no Z)
+// ──────────────────────────────────────────────────────────────
+const todayIST = () => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date()); // 'YYYY-MM-DD'
+};
+
 const formatDisplayDate = (s) => {
   if (!s) return '-';
-  const date = new Date(s);
-  if (isNaN(date)) return '-';
+
+  // Extract just the date part to avoid timezone conversion
+  const dateStr = s.split('T')[0]; // Get 'YYYY-MM-DD'
+  const [year, month, day] = dateStr.split('-').map(Number);
+
+  if (!year || !month || !day) return '-';
+
+  // Create date in local timezone (not UTC)
+  const date = new Date(year, month - 1, day);
+
   return date.toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
@@ -19,20 +38,36 @@ const formatDisplayDate = (s) => {
 
 const formatTime = (s) => {
   if (!s) return '-';
-  const date = new Date(s);
-  if (isNaN(date)) return '-';
-  return date.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  }).toLowerCase();
+  if (!s.includes('T')) return '-';
+
+  // Extract time portion: '2024-10-30T14:30:00' → '14:30:00'
+  const timePart = s.split('T')[1];
+  const [hours, minutes] = timePart.split(':').map(Number);
+
+  if (hours === undefined || minutes === undefined) return '-';
+
+  // Format as 12-hour time without timezone conversion
+  const period = hours >= 12 ? 'pm' : 'am';
+  const displayHours = hours % 12 || 12;
+  const displayMinutes = minutes.toString().padStart(2, '0');
+
+  return `${displayHours}:${displayMinutes} ${period}`;
 };
 
 const isoDate = (s) => {
   if (!s) return 'all';
+  // If already in YYYY-MM-DD format, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
   const date = new Date(s);
   if (isNaN(date)) return 'all';
-  return date.toISOString().split('T')[0];
+
+  // Use local date parts to avoid timezone shift
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
 };
 // ──────────────────────────────────────────────────────────────
 
@@ -42,9 +77,7 @@ function AttendanceSummary({ socket }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [dateFilter, setDateFilter] = useState(() =>
-    new Date().toISOString().split('T')[0]
-  );
+  const [dateFilter, setDateFilter] = useState(() => todayIST());
   const [cursor, setCursor] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [total, setTotal] = useState(0);
@@ -53,52 +86,69 @@ function AttendanceSummary({ socket }) {
   const abortRef = useRef(null);
 
   // ────── STABLE FETCH FUNCTION ──────
-  const fetchData = useCallback(async (reset = false) => {
-    if (loading) return;
-    setLoading(true);
+  const fetchData = useCallback(
+    async (reset = false) => {
+      if (loading) return;
+      setLoading(true);
 
-    // Cancel previous request
-    if (abortRef.current) {
-      abortRef.current.cancel('Cancelled by newer request');
-    }
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const params = {
-        limit: 50,
-        ...(search && { search }),
-        ...(dateFilter && { date: dateFilter }),
-        ...(reset ? {} : cursor ? { cursor } : {}),
-      };
-
-      const token = localStorage.getItem('token');
-      if (!token) {
-        toast.error('Please log in again');
-        return;
+      // Cancel previous request
+      if (abortRef.current) {
+        abortRef.current.abort();
       }
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-      const res = await axios.get(`${API_URL}/api/attendance/summary`, {
-        params,
-        headers: { Authorization: `Bearer ${token}` },
-        signal: controller.signal,
-      });
+      try {
+        const params = {
+          limit: 50,
+          ...(search && { search }),
+          ...(dateFilter && { date: dateFilter }),
+          ...(reset ? {} : cursor ? { cursor } : {}),
+        };
 
-      const newData = res.data.attendance || [];
-      setData(prev => reset ? newData : [...prev, ...newData]);
-      setTotal(res.data.total || 0);
-      setCursor(res.data.nextCursor);
-      setHasMore(!!res.data.nextCursor);
-    } catch (err) {
-      if (err.name === 'AbortError') return; // Ignore cancelled requests
-      const msg = err.response?.data?.error || 'Failed to load attendance';
-      toast.error(msg);
-      console.error('Fetch error:', err);
-    } finally {
-      setLoading(false);
-      abortRef.current = null;
-    }
-  }, [search, dateFilter, cursor]);
+        const token = localStorage.getItem('token');
+        if (!token) {
+          toast.error('Please log in again');
+          return;
+        }
+
+        const res = await axios.get(`${API_URL}/api/attendance/summary`, {
+          params,
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+
+        const newData = res.data.attendance || [];
+        setData((prev) => (reset ? newData : [...prev, ...newData]));
+        setTotal(res.data.total || 0);
+        setCursor(res.data.nextCursor || null);
+        setHasMore(!!res.data.nextCursor);
+      } catch (err) {
+        // Ignore cancelled/aborted requests
+        if (
+          err?.name === 'AbortError' ||
+          err?.name === 'CanceledError' ||
+          err?.code === 'ERR_CANCELED'
+        ) {
+          return;
+        }
+        const msg = err.response?.data?.error || 'Failed to load attendance';
+        toast.error(msg);
+        console.error('Fetch error:', err);
+      } finally {
+        setLoading(false);
+        abortRef.current = null;
+      }
+    },
+    [search, dateFilter, cursor, loading]
+  );
+
+  // Cancel any in-flight request when unmounting
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, []);
 
   // ────── FILTER CHANGE → RESET ──────
   useEffect(() => {
@@ -106,7 +156,8 @@ function AttendanceSummary({ socket }) {
     setCursor(null);
     setHasMore(true);
     fetchData(true);
-  }, [search, dateFilter, fetchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, dateFilter]);
 
   // ────── REAL-TIME UPDATES ──────
   useEffect(() => {
@@ -129,10 +180,15 @@ function AttendanceSummary({ socket }) {
     [fetchData]
   );
 
+  // Clean up debounce on unmount
+  useEffect(() => {
+    return () => debouncedLoadMore.cancel();
+  }, [debouncedLoadMore]);
+
   // ────── EXPORT CSV ──────
   const exportCSV = useCallback(() => {
     const headers = ['Date', 'Emp ID', 'Name', 'Email', 'Status', 'Mode', 'In', 'Out'];
-    const rows = data.map(r => [
+    const rows = data.map((r) => [
       formatDisplayDate(r.date),
       r.employee_id || '-',
       r.name,
@@ -142,12 +198,12 @@ function AttendanceSummary({ socket }) {
       r.check_in ? formatTime(r.check_in) : '-',
       r.check_out ? formatTime(r.check_out) : '-',
     ]);
-    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const csv = [headers, ...rows].map((row) => row.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const filename = search 
+    const filename = search
       ? `attendance_search_${search.replace(/[^a-z0-9]/gi, '_')}`
       : `attendance_${isoDate(dateFilter)}`;
     a.download = `${filename}.csv`;
@@ -196,15 +252,15 @@ function AttendanceSummary({ socket }) {
               placeholder="Search name, email, ID..."
               className="w-full pl-10 pr-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 focus:outline-none"
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <input
             type="date"
             className="px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
             value={dateFilter}
-            onChange={e => setDateFilter(e.target.value)}
-            max={new Date().toISOString().split('T')[0]}
+            onChange={(e) => setDateFilter(e.target.value)}
+            max={todayIST()}
           />
           <button
             onClick={exportCSV}
@@ -237,7 +293,7 @@ function AttendanceSummary({ socket }) {
                     </td>
                   </tr>
                 ) : (
-                  data.map(r => (
+                  data.map((r) => (
                     <tr key={r.attendance_id} className="hover:bg-amber-50 transition-colors">
                       <td className="px-6 py-4 text-sm text-gray-800">
                         {formatDisplayDate(r.date)}
@@ -245,11 +301,13 @@ function AttendanceSummary({ socket }) {
                       <td className="px-6 py-4 text-sm text-gray-600">{r.employee_id || '-'}</td>
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">{r.name}</td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
-                          r.status === 'present' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
+                        <span
+                          className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
+                            r.status === 'present'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
                           {r.status}
                         </span>
                       </td>

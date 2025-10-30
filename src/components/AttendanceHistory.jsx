@@ -1,117 +1,114 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Calendar, Clock, LogIn, LogOut, MapPin, RefreshCw, TrendingUp } from 'lucide-react';
 
 // ──────────────────────────────────────────────────────────────
-// Native date helpers (same as AttendanceSummary – no timezone bugs)
-const formatDisplayDate = (s) => {
-  if (!s) return '-';
-  const date = new Date(s);
-  if (isNaN(date)) return '-';
-  return date.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-};
-
-const formatTime = (s) => {
-  if (!s) return '-';
-  const date = new Date(s);
-  if (isNaN(date)) return '-';
-  return date.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  }).toLowerCase();
-};
-
-const isoDate = (s) => {
-  if (!s) return 'all';
-  const date = new Date(s);
-  if (isNaN(date)) return 'all';
-  return date.toISOString().split('T')[0];
-};
+// TIMEZONE-SAFE FORMATTERS (no Date → UTC conversions)
+// Backend sends local strings: 
+//   date: 'YYYY-MM-DD'
+//   times: 'YYYY-MM-DDTHH:mm:ss' (no Z)
 // ──────────────────────────────────────────────────────────────
+const formatDateLocal = (s) => {
+  if (!s) return '-';
+  // expect 'YYYY-MM-DD'
+  const parts = s.split('T')[0].split('-');
+  if (parts.length !== 3) return '-';
+  const [y, m, d] = parts;
+  // en-IN display (DD/MM/YYYY)
+  return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+};
+
+const formatTimeLocal = (s) => {
+  if (!s || !s.includes('T')) return '-';
+  // 'YYYY-MM-DDTHH:mm:ss'
+  const time = s.split('T')[1];
+  const [H, M] = time.split(':').map(Number);
+  if (Number.isNaN(H) || Number.isNaN(M)) return '-';
+  const period = H >= 12 ? 'PM' : 'AM';
+  const hh = (H % 12) || 12;
+  return `${String(hh).padStart(2, '0')}:${String(M).padStart(2, '0')} ${period}`;
+};
+
+const formatMode = (mode) => (mode ? mode.charAt(0).toUpperCase() + mode.slice(1) : '-');
+
+const getStatusColor = (status) =>
+  !status
+    ? 'bg-gray-100 text-gray-800 border-gray-200'
+    : status.toLowerCase() === 'present'
+    ? 'bg-green-100 text-green-800 border-green-200'
+    : 'bg-red-100 text-red-800 border-red-200';
+
+const getModeIcon = (mode) =>
+  !mode ? null : mode.toLowerCase() === 'office' ? <MapPin className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />;
 
 function AttendanceHistory({ socket }) {
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const formatMode = (mode) => {
-    if (!mode) return '-';
-    return mode.charAt(0).toUpperCase() + mode.slice(1);
-  };
-
-  const getStatusColor = (status) => {
-    if (!status) return 'bg-gray-100 text-gray-800 border-gray-200';
-    return status.toLowerCase() === 'present'
-      ? 'bg-green-100 text-green-800 border-green-200'
-      : 'bg-red-100 text-red-800 border-red-200';
-  };
-
-  const getModeIcon = (mode) => {
-    if (!mode) return null;
-    return mode.toLowerCase() === 'office' ? (
-      <MapPin className="w-4 h-4" />
-    ) : (
-      <TrendingUp className="w-4 h-4" />
-    );
-  };
+  const abortRef = useRef(null);
 
   const fetchAttendance = async () => {
     try {
+      // cancel any in-flight request
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       const token = localStorage.getItem('token');
       if (!token) throw new Error('No authentication token found');
 
       const response = await fetch(
         `${import.meta.env.VITE_BACKEND_URL}/api/attendance?force_refresh=true`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }
       );
 
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP error ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
       }
 
       const { attendance: records } = await response.json();
-      setAttendance(records);
+      setAttendance(records || []);
       setLoading(false);
     } catch (err) {
-      console.error('Error fetching attendance:', err.message);
-      setError(err.message);
-      toast.error(err.message);
+      // ignore cancellations
+      if (err?.name === 'AbortError') return;
+      console.error('Error fetching attendance:', err?.message || err);
+      setError(err?.message || 'Failed to fetch');
+      toast.error(err?.message || 'Failed to fetch');
       setLoading(false);
+    } finally {
+      abortRef.current = null;
     }
   };
 
   useEffect(() => {
     fetchAttendance();
 
-    if (socket) {
-      const handler = (newAttendance) => {
-        setAttendance((prev) => [
-          newAttendance,
-          ...prev.filter((r) => r.date !== newAttendance.date),
-        ]);
-        toast.info(`Attendance updated for ${formatDisplayDate(newAttendance.date)}`);
-      };
+    if (!socket) return;
 
-      socket.on('attendanceMarked', handler);
-      return () => socket.off('attendanceMarked', handler);
-    }
+    const handler = (payload) => {
+      // payload from model: { attendance_id, user_id, date, check_in_time, check_out_time, present_absent, mode, name, created_at }
+      setAttendance((prev) => [
+        // insert/replace by date (one row per day per user)
+        payload,
+        ...prev.filter((r) => !(r.user_id === payload.user_id && r.date === payload.date)),
+      ]);
+      toast.info(`Attendance updated for ${formatDateLocal(payload.date)}`);
+    };
+
+    socket.on('attendanceMarked', handler);
+    return () => {
+      socket.off('attendanceMarked', handler);
+      if (abortRef.current) abortRef.current.abort();
+    };
   }, [socket]);
 
   const stats = {
     total: attendance.length,
-    present: attendance.filter(
-      (r) => r.present_absent?.toLowerCase() === 'present'
-    ).length,
-    absent: attendance.filter(
-      (r) => r.present_absent?.toLowerCase() === 'absent'
-    ).length,
+    present: attendance.filter((r) => r.present_absent?.toLowerCase() === 'present').length,
+    absent: attendance.filter((r) => r.present_absent?.toLowerCase() === 'absent').length,
   };
 
   return (
@@ -142,7 +139,6 @@ function AttendanceHistory({ socket }) {
                 </div>
               </div>
             </div>
-
             <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
@@ -154,7 +150,6 @@ function AttendanceHistory({ socket }) {
                 </div>
               </div>
             </div>
-
             <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
@@ -242,49 +237,37 @@ function AttendanceHistory({ socket }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {attendance.map((record, idx) => (
+                  {attendance.map((record, index) => (
                     <tr
                       key={`${record.user_id}-${record.date}`}
                       className={`border-b border-gray-100 hover:bg-amber-50 transition-colors ${
-                        idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                        index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
                       }`}
                     >
                       <td className="px-6 py-4">
-                        <span className="font-medium text-gray-800">
-                          {formatDisplayDate(record.date)}
-                        </span>
+                        <span className="font-medium text-gray-800">{formatDateLocal(record.date)}</span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-gray-400" />
-                          <span className="text-gray-700">
-                            {formatTime(record.check_in_time)}
-                          </span>
+                          <span className="text-gray-700">{formatTimeLocal(record.check_in_time)}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-gray-400" />
-                          <span className="text-gray-700">
-                            {formatTime(record.check_out_time)}
-                          </span>
+                          <span className="text-gray-700">{formatTimeLocal(record.check_out_time)}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(
-                            record.present_absent
-                          )}`}
-                        >
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(record.present_absent)}`}>
                           {record.present_absent}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           {getModeIcon(record.mode)}
-                          <span className="text-gray-700">
-                            {formatMode(record.mode)}
-                          </span>
+                          <span className="text-gray-700">{formatMode(record.mode)}</span>
                         </div>
                       </td>
                     </tr>
@@ -296,55 +279,37 @@ function AttendanceHistory({ socket }) {
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-100">
               {attendance.map((record) => (
-                <div
-                  key={`${record.user_id}-${record.date}`}
-                  className="p-4 hover:bg-amber-50 transition-colors"
-                >
+                <div key={`${record.user_id}-${record.date}`} className="p-4 hover:bg-amber-50 transition-colors">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-5 h-5 text-amber-500" />
-                      <span className="font-semibold text-gray-800">
-                        {formatDisplayDate(record.date)}
-                      </span>
+                      <span className="font-semibold text-gray-800">{formatDateLocal(record.date)}</span>
                     </div>
-                    <span
-                      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(
-                        record.present_absent
-                      )}`}
-                    >
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(record.present_absent)}`}>
                       {record.present_absent}
                     </span>
                   </div>
-
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-600">
                         <LogIn className="w-4 h-4" />
                         <span>Check-In:</span>
                       </div>
-                      <span className="font-medium text-gray-800">
-                        {formatTime(record.check_in_time)}
-                      </span>
+                      <span className="font-medium text-gray-800">{formatTimeLocal(record.check_in_time)}</span>
                     </div>
-
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-600">
                         <LogOut className="w-4 h-4" />
                         <span>Check-Out:</span>
                       </div>
-                      <span className="font-medium text-gray-800">
-                        {formatTime(record.check_out_time)}
-                      </span>
+                      <span className="font-medium text-gray-800">{formatTimeLocal(record.check_out_time)}</span>
                     </div>
-
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-600">
                         {getModeIcon(record.mode)}
                         <span>Mode:</span>
                       </div>
-                      <span className="font-medium text-gray-800">
-                        {formatMode(record.mode)}
-                      </span>
+                      <span className="font-medium text-gray-800">{formatMode(record.mode)}</span>
                     </div>
                   </div>
                 </div>
@@ -353,7 +318,6 @@ function AttendanceHistory({ socket }) {
           </div>
         )}
       </div>
-
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </div>
   );

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Clock, CheckCircle, Sparkles } from 'lucide-react';
+import { Clock, Sparkles } from 'lucide-react'; // removed CheckCircle
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -45,6 +45,7 @@ function EmployeeDashboard({ socket }) {
 
         <div className="max-w-6xl mx-auto">
           <Section title="Attendance Management">
+            {/* Only Attendance History card remains */}
             <DashboardCard
               to="/attendance-history"
               icon={<Clock />}
@@ -53,15 +54,6 @@ function EmployeeDashboard({ socket }) {
               gradient="from-amber-100 to-yellow-50"
               hoverGradient="hover:from-amber-200 hover:to-yellow-100"
               iconBg="bg-amber-500"
-            />
-            <DashboardCard
-              to="/mark-attendance"
-              icon={<CheckCircle />}
-              title="Mark Attendance"
-              desc="Record your daily attendance"
-              gradient="from-orange-100 to-amber-50"
-              hoverGradient="hover:from-orange-200 hover:to-amber-100"
-              iconBg="bg-orange-500"
             />
           </Section>
         </div>

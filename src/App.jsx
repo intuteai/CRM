@@ -52,13 +52,13 @@ import ProductionBOMPage from "./components/ProductionBOMPage";
 import ProblemsPage from "./components/ProblemsPage";
 import EmployeeDashboard from "./components/EmployeeDashboard";
 import AttendanceHistory from "./components/AttendanceHistory";
-import MarkAttendance from "./components/MarkAttendance";
+// import MarkAttendance from "./components/MarkAttendance"; // removed
 import WorkOrderPage from "./components/WorkOrderPage";
 import SelectOrderPage from "./components/SelectOrderPage";
 import CreateMotorProcess from "./components/CreateMotorProcess";
 import CreateNonMotorProcess from "./components/CreateNonMotorProcess";
 import HRDashboard from "./components/HRDashboard";
-import AttendanceSummary from "./components/AttendanceSummary"; // NEW: HR Attendance Summary
+import AttendanceSummary from "./components/AttendanceSummary"; // HR summary
 import "./styles.css";
 
 const ROLES = {
@@ -165,12 +165,12 @@ const allowedPathsByRole = {
   [ROLES.EMPLOYEE]: [
     "/employee-dashboard",
     "/attendance-history",
-    "/mark-attendance",
+    // "/mark-attendance", // removed
     "/edit-profile",
   ],
   [ROLES.HR]: [
     "/hr-dashboard",
-    "/attendance-summary", // NEW: HR can access summary
+    "/attendance-summary",
     "/edit-profile",
   ],
 };
@@ -185,7 +185,6 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Socket.IO Connection
   useEffect(() => {
     if (!userRole || !token || socket) return;
 
@@ -219,14 +218,12 @@ function App() {
     });
 
     setSocket(newSocket);
-
     return () => {
       newSocket.disconnect();
       setSocketReady(false);
     };
   }, [userRole, token, socket]);
 
-  // Redirect to correct dashboard on role change or invalid path
   useEffect(() => {
     if (!userRole) return;
 
@@ -274,7 +271,6 @@ function App() {
     }
   }, [userRole, location.pathname, navigate]);
 
-  // Restore login state from localStorage
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
     if (storedToken) {
@@ -333,8 +329,9 @@ function App() {
           socket={socket}
         />
       )}
+
       <Routes>
-        {/* HR Routes */}
+        {/* HR */}
         <Route
           path="/hr-dashboard"
           element={
@@ -441,10 +438,8 @@ function App() {
             )
           }
         />
-        <Route
-          path="/account-dashboard"
-          element={<Navigate to="/accounts-dashboard" replace />}
-        />
+        <Route path="/account-dashboard" element={<Navigate to="/accounts-dashboard" replace />} />
+
         <Route
           path="/customer-dashboard"
           element={
@@ -851,6 +846,7 @@ function App() {
             )
           }
         />
+        {/* Attendance (only history now) */}
         <Route
           path="/attendance-history"
           element={
@@ -863,18 +859,8 @@ function App() {
             )
           }
         />
-        <Route
-          path="/mark-attendance"
-          element={
-            userRole === "employee" ? (
-              <ErrorBoundary>
-                <MarkAttendance socket={socket} />
-              </ErrorBoundary>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
+        {/* Removed /mark-attendance route */}
+
         <Route
           path="/problems"
           element={
