@@ -57,6 +57,8 @@ import WorkOrderPage from "./components/WorkOrderPage";
 import SelectOrderPage from "./components/SelectOrderPage";
 import CreateMotorProcess from "./components/CreateMotorProcess";
 import CreateNonMotorProcess from "./components/CreateNonMotorProcess";
+import HRDashboard from "./components/HRDashboard";
+import AttendanceSummary from "./components/AttendanceSummary"; // NEW: HR Attendance Summary
 import "./styles.css";
 
 const ROLES = {
@@ -166,16 +168,16 @@ const allowedPathsByRole = {
     "/mark-attendance",
     "/edit-profile",
   ],
-  [ROLES.HR]: ["/edit-profile"],
+  [ROLES.HR]: [
+    "/hr-dashboard",
+    "/attendance-summary", // NEW: HR can access summary
+    "/edit-profile",
+  ],
 };
 
 function App() {
-  const [userRole, setUserRole] = useState(
-    localStorage.getItem("role") || null
-  );
-  const [userName, setUserName] = useState(
-    localStorage.getItem("name") || "User"
-  );
+  const [userRole, setUserRole] = useState(localStorage.getItem("role") || null);
+  const [userName, setUserName] = useState(localStorage.getItem("name") || "User");
   const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [showLogin, setShowLogin] = useState(!localStorage.getItem("token"));
   const [socket, setSocket] = useState(null);
@@ -183,6 +185,7 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Socket.IO Connection
   useEffect(() => {
     if (!userRole || !token || socket) return;
 
@@ -191,7 +194,7 @@ function App() {
       console.error("VITE_BACKEND_URL is not defined in .env");
       return;
     }
-    console.log("VITE_BACKEND_URL in App:", backendUrl);
+
     const newSocket = io(backendUrl, {
       withCredentials: true,
       path: "/socket.io",
@@ -223,6 +226,7 @@ function App() {
     };
   }, [userRole, token, socket]);
 
+  // Redirect to correct dashboard on role change or invalid path
   useEffect(() => {
     if (!userRole) return;
 
@@ -236,7 +240,7 @@ function App() {
       [ROLES.ACCOUNTS]: "/accounts-dashboard",
       [ROLES.CUSTOMER]: "/customer-dashboard",
       [ROLES.EMPLOYEE]: "/employee-dashboard",
-      [ROLES.HR]: "/edit-profile",
+      [ROLES.HR]: "/hr-dashboard",
     };
 
     const allowedPaths = allowedPathsByRole[userRole] || [];
@@ -256,10 +260,7 @@ function App() {
     });
 
     if (!targetPath) {
-      console.warn(
-        `Unknown userRole: ${userRole}, redirecting to /. Allowed paths:`,
-        allowedPaths
-      );
+      console.warn(`Unknown userRole: ${userRole}`);
       navigate("/", { replace: true });
     } else if (
       normalizedPath === "" ||
@@ -267,15 +268,13 @@ function App() {
       !isAllowedPath
     ) {
       if (normalizedPath !== targetPath) {
-        console.log(
-          `Redirecting: userRole=${userRole}, from=${normalizedPath}, to=${targetPath}, allowedPaths=`,
-          allowedPaths
-        );
+        console.log(`Redirecting ${userRole} to ${targetPath}`);
         navigate(targetPath, { replace: true });
       }
     }
   }, [userRole, location.pathname, navigate]);
 
+  // Restore login state from localStorage
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
     if (storedToken) {
@@ -286,9 +285,7 @@ function App() {
         setToken(storedToken);
         setShowLogin(false);
       } else {
-        localStorage.removeItem("role");
-        localStorage.removeItem("name");
-        localStorage.removeItem("token");
+        localStorage.clear();
         setShowLogin(true);
       }
     } else {
@@ -314,9 +311,7 @@ function App() {
     setUserRole(null);
     setUserName("User");
     setToken(null);
-    localStorage.removeItem("role");
-    localStorage.removeItem("name");
-    localStorage.removeItem("token");
+    localStorage.clear();
     setShowLogin(true);
     if (socket) socket.disconnect();
     setSocket(null);
@@ -339,6 +334,33 @@ function App() {
         />
       )}
       <Routes>
+        {/* HR Routes */}
+        <Route
+          path="/hr-dashboard"
+          element={
+            userRole === "hr" ? (
+              <ErrorBoundary>
+                <HRDashboard socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/attendance-summary"
+          element={
+            userRole === "hr" ? (
+              <ErrorBoundary>
+                <AttendanceSummary socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        {/* Other Dashboards */}
         <Route
           path="/admin-dashboard"
           element={
@@ -347,6 +369,108 @@ function App() {
             </ErrorBoundary>
           }
         />
+        <Route
+          path="/sales-dashboard"
+          element={
+            userRole === "sales" ? (
+              <ErrorBoundary>
+                <SalesDashboard socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/design-dashboard"
+          element={
+            userRole === "design" ? (
+              <ErrorBoundary>
+                <DesignDashboard socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/production-dashboard"
+          element={
+            userRole === "production" ? (
+              <ErrorBoundary>
+                <ProductionDashboard socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/store-dashboard"
+          element={
+            userRole === "store" ? (
+              <ErrorBoundary>
+                <StoreDashboard socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/dispatch-dashboard"
+          element={
+            userRole === "dispatch" ? (
+              <ErrorBoundary>
+                <DispatchDashboard socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/accounts-dashboard"
+          element={
+            userRole === "accounts" ? (
+              <ErrorBoundary>
+                <AccountsDashboard socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/account-dashboard"
+          element={<Navigate to="/accounts-dashboard" replace />}
+        />
+        <Route
+          path="/customer-dashboard"
+          element={
+            userRole === "customer" ? (
+              <ErrorBoundary>
+                <CustomerDashboard socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/employee-dashboard"
+          element={
+            userRole === "employee" ? (
+              <ErrorBoundary>
+                <EmployeeDashboard socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        {/* Core Pages */}
         <Route
           path="/orders"
           element={
@@ -381,18 +505,6 @@ function App() {
             userRole === "admin" ? (
               <ErrorBoundary>
                 <CustomerList socket={socket} />
-              </ErrorBoundary>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
-          path="/customer-dashboard"
-          element={
-            userRole === "customer" ? (
-              <ErrorBoundary>
-                <CustomerDashboard socket={socket} />
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />
@@ -516,82 +628,6 @@ function App() {
               <Navigate to="/" replace />
             )
           }
-        />
-        <Route
-          path="/sales-dashboard"
-          element={
-            userRole === "sales" ? (
-              <ErrorBoundary>
-                <SalesDashboard socket={socket} />
-              </ErrorBoundary>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
-          path="/design-dashboard"
-          element={
-            userRole === "design" ? (
-              <ErrorBoundary>
-                <DesignDashboard socket={socket} />
-              </ErrorBoundary>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
-          path="/production-dashboard"
-          element={
-            userRole === "production" ? (
-              <ErrorBoundary>
-                <ProductionDashboard socket={socket} />
-              </ErrorBoundary>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
-          path="/store-dashboard"
-          element={
-            userRole === "store" ? (
-              <ErrorBoundary>
-                <StoreDashboard socket={socket} />
-              </ErrorBoundary>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
-          path="/dispatch-dashboard"
-          element={
-            userRole === "dispatch" ? (
-              <ErrorBoundary>
-                <DispatchDashboard socket={socket} />
-              </ErrorBoundary>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
-          path="/accounts-dashboard"
-          element={
-            userRole === "accounts" ? (
-              <ErrorBoundary>
-                <AccountsDashboard socket={socket} />
-              </ErrorBoundary>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
-          path="/account-dashboard"
-          element={<Navigate to="/accounts-dashboard" replace />}
         />
         <Route
           path="/part-drawings"
@@ -816,18 +852,6 @@ function App() {
           }
         />
         <Route
-          path="/employee-dashboard"
-          element={
-            userRole === "employee" ? (
-              <ErrorBoundary>
-                <EmployeeDashboard socket={socket} />
-              </ErrorBoundary>
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
-        <Route
           path="/attendance-history"
           element={
             userRole === "employee" ? (
@@ -863,6 +887,8 @@ function App() {
             )
           }
         />
+
+        {/* Home / Login */}
         <Route
           path="/"
           element={
@@ -907,8 +933,7 @@ function App() {
                     Invalid Role
                   </h1>
                   <p className="text-gray-600 mb-6">
-                    Your user role ({userRole}) is not recognized. Please log
-                    out and try again.
+                    Your user role ({userRole}) is not recognized. Please log out and try again.
                   </p>
                   <button
                     onClick={handleLogout}
@@ -922,6 +947,7 @@ function App() {
           }
         />
       </Routes>
+
       {showLogin && (
         <LoginModal setShowLogin={setShowLogin} onSubmit={handleLoginSubmit} />
       )}
