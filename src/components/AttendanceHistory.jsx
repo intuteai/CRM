@@ -3,32 +3,42 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Calendar, Clock, LogIn, LogOut, MapPin, RefreshCw, TrendingUp } from 'lucide-react';
 
+// ──────────────────────────────────────────────────────────────
+// Native date helpers (same as AttendanceSummary – no timezone bugs)
+const formatDisplayDate = (s) => {
+  if (!s) return '-';
+  const date = new Date(s);
+  if (isNaN(date)) return '-';
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+const formatTime = (s) => {
+  if (!s) return '-';
+  const date = new Date(s);
+  if (isNaN(date)) return '-';
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).toLowerCase();
+};
+
+const isoDate = (s) => {
+  if (!s) return 'all';
+  const date = new Date(s);
+  if (isNaN(date)) return 'all';
+  return date.toISOString().split('T')[0];
+};
+// ──────────────────────────────────────────────────────────────
+
 function AttendanceHistory({ socket }) {
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-  };
-
-  const formatTime = (dateTime) => {
-    if (!dateTime) return '-';
-    const date = new Date(dateTime);
-    return date.toLocaleTimeString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-  };
 
   const formatMode = (mode) => {
     if (!mode) return '-';
@@ -37,35 +47,36 @@ function AttendanceHistory({ socket }) {
 
   const getStatusColor = (status) => {
     if (!status) return 'bg-gray-100 text-gray-800 border-gray-200';
-    return status.toLowerCase() === 'present' 
-      ? 'bg-green-100 text-green-800 border-green-200' 
+    return status.toLowerCase() === 'present'
+      ? 'bg-green-100 text-green-800 border-green-200'
       : 'bg-red-100 text-red-800 border-red-200';
   };
 
   const getModeIcon = (mode) => {
     if (!mode) return null;
-    return mode.toLowerCase() === 'office' 
-      ? <MapPin className="w-4 h-4" />
-      : <TrendingUp className="w-4 h-4" />;
+    return mode.toLowerCase() === 'office' ? (
+      <MapPin className="w-4 h-4" />
+    ) : (
+      <TrendingUp className="w-4 h-4" />
+    );
   };
 
   const fetchAttendance = async () => {
     try {
       const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-      console.log('Fetching attendance with token:', token.slice(0, 10) + '...');
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/attendance?force_refresh=true`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      console.log('Response status:', response.status, response.statusText);
+      if (!token) throw new Error('No authentication token found');
+
+      const response = await fetch(
+        `${import.meta.env.VITE_BACKEND_URL}/api/attendance?force_refresh=true`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error ${response.status}`);
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP error ${response.status}`);
       }
+
       const { attendance: records } = await response.json();
-      console.log('Raw attendance records:', records);
       setAttendance(records);
       setLoading(false);
     } catch (err) {
@@ -80,27 +91,27 @@ function AttendanceHistory({ socket }) {
     fetchAttendance();
 
     if (socket) {
-      console.log('Listening for attendanceMarked in AttendanceHistory');
-      socket.on('attendanceMarked', (newAttendance) => {
-        console.log('Received attendanceMarked:', newAttendance);
+      const handler = (newAttendance) => {
         setAttendance((prev) => [
           newAttendance,
-          ...prev.filter((record) => record.date !== newAttendance.date),
+          ...prev.filter((r) => r.date !== newAttendance.date),
         ]);
-        toast.info(`Attendance updated for ${formatDate(newAttendance.date)}`);
-      });
-
-      return () => {
-        console.log('Stopped listening for attendanceMarked in AttendanceHistory');
-        socket.off('attendanceMarked');
+        toast.info(`Attendance updated for ${formatDisplayDate(newAttendance.date)}`);
       };
+
+      socket.on('attendanceMarked', handler);
+      return () => socket.off('attendanceMarked', handler);
     }
   }, [socket]);
 
   const stats = {
     total: attendance.length,
-    present: attendance.filter(r => r.present_absent?.toLowerCase() === 'present').length,
-    absent: attendance.filter(r => r.present_absent?.toLowerCase() === 'absent').length,
+    present: attendance.filter(
+      (r) => r.present_absent?.toLowerCase() === 'present'
+    ).length,
+    absent: attendance.filter(
+      (r) => r.present_absent?.toLowerCase() === 'absent'
+    ).length,
   };
 
   return (
@@ -131,6 +142,7 @@ function AttendanceHistory({ socket }) {
                 </div>
               </div>
             </div>
+
             <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
@@ -142,6 +154,7 @@ function AttendanceHistory({ socket }) {
                 </div>
               </div>
             </div>
+
             <div className="bg-white rounded-2xl p-6 shadow-md border border-gray-100 hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
@@ -229,44 +242,53 @@ function AttendanceHistory({ socket }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {attendance.map((record, index) => {
-                    console.log('Rendering record:', record);
-                    return (
-                      <tr 
-                        key={`${record.user_id}-${record.date}`} 
-                        className={`border-b border-gray-100 hover:bg-amber-50 transition-colors ${
-                          index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                        }`}
-                      >
-                        <td className="px-6 py-4">
-                          <span className="font-medium text-gray-800">{formatDate(record.date)}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-gray-400" />
-                            <span className="text-gray-700">{formatTime(record.check_in_time)}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-gray-400" />
-                            <span className="text-gray-700">{formatTime(record.check_out_time)}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(record.present_absent)}`}>
-                            {record.present_absent}
+                  {attendance.map((record, idx) => (
+                    <tr
+                      key={`${record.user_id}-${record.date}`}
+                      className={`border-b border-gray-100 hover:bg-amber-50 transition-colors ${
+                        idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                      }`}
+                    >
+                      <td className="px-6 py-4">
+                        <span className="font-medium text-gray-800">
+                          {formatDisplayDate(record.date)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-gray-400" />
+                          <span className="text-gray-700">
+                            {formatTime(record.check_in_time)}
                           </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            {getModeIcon(record.mode)}
-                            <span className="text-gray-700">{formatMode(record.mode)}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-gray-400" />
+                          <span className="text-gray-700">
+                            {formatTime(record.check_out_time)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(
+                            record.present_absent
+                          )}`}
+                        >
+                          {record.present_absent}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          {getModeIcon(record.mode)}
+                          <span className="text-gray-700">
+                            {formatMode(record.mode)}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -274,37 +296,55 @@ function AttendanceHistory({ socket }) {
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-100">
               {attendance.map((record) => (
-                <div key={`${record.user_id}-${record.date}`} className="p-4 hover:bg-amber-50 transition-colors">
+                <div
+                  key={`${record.user_id}-${record.date}`}
+                  className="p-4 hover:bg-amber-50 transition-colors"
+                >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-5 h-5 text-amber-500" />
-                      <span className="font-semibold text-gray-800">{formatDate(record.date)}</span>
+                      <span className="font-semibold text-gray-800">
+                        {formatDisplayDate(record.date)}
+                      </span>
                     </div>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(record.present_absent)}`}>
+                    <span
+                      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(
+                        record.present_absent
+                      )}`}
+                    >
                       {record.present_absent}
                     </span>
                   </div>
+
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-600">
                         <LogIn className="w-4 h-4" />
                         <span>Check-In:</span>
                       </div>
-                      <span className="font-medium text-gray-800">{formatTime(record.check_in_time)}</span>
+                      <span className="font-medium text-gray-800">
+                        {formatTime(record.check_in_time)}
+                      </span>
                     </div>
+
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-600">
                         <LogOut className="w-4 h-4" />
                         <span>Check-Out:</span>
                       </div>
-                      <span className="font-medium text-gray-800">{formatTime(record.check_out_time)}</span>
+                      <span className="font-medium text-gray-800">
+                        {formatTime(record.check_out_time)}
+                      </span>
                     </div>
+
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-600">
                         {getModeIcon(record.mode)}
                         <span>Mode:</span>
                       </div>
-                      <span className="font-medium text-gray-800">{formatMode(record.mode)}</span>
+                      <span className="font-medium text-gray-800">
+                        {formatMode(record.mode)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -313,6 +353,7 @@ function AttendanceHistory({ socket }) {
           </div>
         )}
       </div>
+
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </div>
   );

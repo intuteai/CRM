@@ -1,8 +1,40 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { Search, Download, Loader2, Sparkles } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
 import axios from 'axios';
-import { format, parseISO } from 'date-fns';
+import { debounce } from 'lodash';
+
+// ──────────────────────────────────────────────────────────────
+// Native date helpers (no date-fns → no timezone bugs)
+const formatDisplayDate = (s) => {
+  if (!s) return '-';
+  const date = new Date(s);
+  if (isNaN(date)) return '-';
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+const formatTime = (s) => {
+  if (!s) return '-';
+  const date = new Date(s);
+  if (isNaN(date)) return '-';
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).toLowerCase();
+};
+
+const isoDate = (s) => {
+  if (!s) return 'all';
+  const date = new Date(s);
+  if (isNaN(date)) return 'all';
+  return date.toISOString().split('T')[0];
+};
+// ──────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -10,67 +42,80 @@ function AttendanceSummary({ socket }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [dateFilter, setDateFilter] = useState(() => {
-    return new Date().toISOString().split('T')[0]; // Today in YYYY-MM-DD
-  });
+  const [dateFilter, setDateFilter] = useState(() =>
+    new Date().toISOString().split('T')[0]
+  );
   const [cursor, setCursor] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [total, setTotal] = useState(0);
 
+  // Abort controller for in-flight requests
+  const abortRef = useRef(null);
+
+  // ────── STABLE FETCH FUNCTION ──────
   const fetchData = useCallback(async (reset = false) => {
     if (loading) return;
     setLoading(true);
+
+    // Cancel previous request
+    if (abortRef.current) {
+      abortRef.current.cancel('Cancelled by newer request');
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const params = {
         limit: 50,
-        // Always send search if not empty
         ...(search && { search }),
-        // Always send date if selected
         ...(dateFilter && { date: dateFilter }),
-        cursor: reset ? undefined : cursor,
+        ...(reset ? {} : cursor ? { cursor } : {}),
       };
 
       const token = localStorage.getItem('token');
       if (!token) {
         toast.error('Please log in again');
-        setLoading(false);
         return;
       }
 
       const res = await axios.get(`${API_URL}/api/attendance/summary`, {
         params,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       });
 
       const newData = res.data.attendance || [];
       setData(prev => reset ? newData : [...prev, ...newData]);
-      setTotal(res.data.total);
+      setTotal(res.data.total || 0);
       setCursor(res.data.nextCursor);
       setHasMore(!!res.data.nextCursor);
     } catch (err) {
+      if (err.name === 'AbortError') return; // Ignore cancelled requests
       const msg = err.response?.data?.error || 'Failed to load attendance';
       toast.error(msg);
-      console.error('Attendance fetch error:', err);
+      console.error('Fetch error:', err);
     } finally {
       setLoading(false);
+      abortRef.current = null;
     }
-  }, [search, dateFilter, cursor, loading]);
+  }, [search, dateFilter, cursor]);
 
-  // Fetch on mount + filter change
+  // ────── FILTER CHANGE → RESET ──────
   useEffect(() => {
     setData([]);
     setCursor(null);
+    setHasMore(true);
     fetchData(true);
-  }, [search, dateFilter]);
+  }, [search, dateFilter, fetchData]);
 
-  // Real-time updates
+  // ────── REAL-TIME UPDATES ──────
   useEffect(() => {
     if (!socket) return;
 
     const handler = (payload) => {
-      toast.info(`${payload.name || 'Employee'} marked attendance`, { autoClose: 3000 });
+      toast.info(`${payload.name || 'Employee'} marked attendance`, {
+        autoClose: 3000,
+      });
       fetchData(true);
     };
 
@@ -78,27 +123,37 @@ function AttendanceSummary({ socket }) {
     return () => socket.off('attendanceMarked', handler);
   }, [socket, fetchData]);
 
-  const exportCSV = () => {
+  // ────── DEBOUNCED LOAD MORE ──────
+  const debouncedLoadMore = useMemo(
+    () => debounce(() => fetchData(false), 300),
+    [fetchData]
+  );
+
+  // ────── EXPORT CSV ──────
+  const exportCSV = useCallback(() => {
     const headers = ['Date', 'Emp ID', 'Name', 'Email', 'Status', 'Mode', 'In', 'Out'];
     const rows = data.map(r => [
-      format(parseISO(r.date), 'dd MMM yyyy'),
+      formatDisplayDate(r.date),
       r.employee_id || '-',
       r.name,
       r.email,
       r.status,
       r.mode,
-      r.check_in ? format(parseISO(r.check_in), 'hh:mm a') : '-',
-      r.check_out ? format(parseISO(r.check_out), 'hh:mm a') : '-',
+      r.check_in ? formatTime(r.check_in) : '-',
+      r.check_out ? formatTime(r.check_out) : '-',
     ]);
-    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `attendance_${search || dateFilter || 'all'}.csv`;
+    const filename = search 
+      ? `attendance_search_${search.replace(/[^a-z0-9]/gi, '_')}`
+      : `attendance_${isoDate(dateFilter)}`;
+    a.download = `${filename}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [data, search, dateFilter]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-25 to-gray-100 relative overflow-hidden">
@@ -119,14 +174,17 @@ function AttendanceSummary({ socket }) {
             Attendance Summary
           </h1>
           <p className="text-gray-600 text-lg font-light">
-            {search 
-              ? `Search: "${search}"${dateFilter ? ` • ${format(parseISO(dateFilter), 'dd MMM yyyy')}` : ''}`
-              : dateFilter 
-                ? `Attendance for ${format(parseISO(dateFilter), 'dd MMM yyyy')}`
-                : 'All employees • Real-time'
-            }
+            {search
+              ? `Search: "${search}"${dateFilter ? ` • ${formatDisplayDate(dateFilter)}` : ''}`
+              : dateFilter
+              ? `Attendance for ${formatDisplayDate(dateFilter)}`
+              : 'All employees • Real-time'}
           </p>
-          {total > 0 && <p className="text-sm text-gray-500 mt-2">{total} record{total > 1 ? 's' : ''}</p>}
+          {total > 0 && (
+            <p className="text-sm text-gray-500 mt-2">
+              {total} record{total > 1 ? 's' : ''}
+            </p>
+          )}
         </div>
 
         {/* Filters */}
@@ -182,23 +240,25 @@ function AttendanceSummary({ socket }) {
                   data.map(r => (
                     <tr key={r.attendance_id} className="hover:bg-amber-50 transition-colors">
                       <td className="px-6 py-4 text-sm text-gray-800">
-                        {format(parseISO(r.date), 'dd MMM yyyy')}
+                        {formatDisplayDate(r.date)}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{r.employee_id || '-'}</td>
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">{r.name}</td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
-                          r.status === 'present' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          r.status === 'present' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
                         }`}>
                           {r.status}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{r.mode}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {r.check_in ? format(parseISO(r.check_in), 'hh:mm a') : '-'}
+                        {r.check_in ? formatTime(r.check_in) : '-'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        {r.check_out ? format(parseISO(r.check_out), 'hh:mm a') : '-'}
+                        {r.check_out ? formatTime(r.check_out) : '-'}
                       </td>
                     </tr>
                   ))
@@ -211,7 +271,7 @@ function AttendanceSummary({ socket }) {
           {hasMore && (
             <div className="p-4 text-center">
               <button
-                onClick={() => fetchData()}
+                onClick={debouncedLoadMore}
                 disabled={loading}
                 className="px-6 py-2 bg-amber-400 text-white rounded-lg hover:bg-amber-500 disabled:opacity-50 flex items-center gap-2 mx-auto transition-all"
               >
