@@ -52,13 +52,16 @@ import ProductionBOMPage from "./components/ProductionBOMPage";
 import ProblemsPage from "./components/ProblemsPage";
 import EmployeeDashboard from "./components/EmployeeDashboard";
 import AttendanceHistory from "./components/AttendanceHistory";
-// import MarkAttendance from "./components/MarkAttendance"; // removed
 import WorkOrderPage from "./components/WorkOrderPage";
 import SelectOrderPage from "./components/SelectOrderPage";
 import CreateMotorProcess from "./components/CreateMotorProcess";
 import CreateNonMotorProcess from "./components/CreateNonMotorProcess";
 import HRDashboard from "./components/HRDashboard";
-import AttendanceSummary from "./components/AttendanceSummary"; // HR summary
+import AttendanceSummary from "./components/AttendanceSummary";
+
+// ADDED: ActivitiesPage
+import ActivitiesPage from "./components/ActivitiesPage";
+
 import "./styles.css";
 
 const ROLES = {
@@ -165,13 +168,14 @@ const allowedPathsByRole = {
   [ROLES.EMPLOYEE]: [
     "/employee-dashboard",
     "/attendance-history",
-    // "/mark-attendance", // removed
     "/edit-profile",
+    "/activities", // ← ADDED
   ],
   [ROLES.HR]: [
     "/hr-dashboard",
     "/attendance-summary",
     "/edit-profile",
+    "/activities", // ← ADDED
   ],
 };
 
@@ -337,7 +341,7 @@ function App() {
           element={
             userRole === "hr" ? (
               <ErrorBoundary>
-                <HRDashboard socket={socket} />
+                <HRDashboard socket={socket} userRole={userRole} />
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />
@@ -350,6 +354,20 @@ function App() {
             userRole === "hr" ? (
               <ErrorBoundary>
                 <AttendanceSummary socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        {/* Activities Page - ALL employees & HR */}
+        <Route
+          path="/activities"
+          element={
+            (userRole === "employee" || userRole === "hr") ? (
+              <ErrorBoundary>
+                <ActivitiesPage socket={socket} />
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />
@@ -457,7 +475,7 @@ function App() {
           element={
             userRole === "employee" ? (
               <ErrorBoundary>
-                <EmployeeDashboard socket={socket} />
+                <EmployeeDashboard socket={socket} userRole={userRole} />
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />
@@ -859,7 +877,6 @@ function App() {
             )
           }
         />
-        {/* Removed /mark-attendance route */}
 
         <Route
           path="/problems"
