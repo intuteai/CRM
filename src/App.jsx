@@ -59,8 +59,9 @@ import CreateNonMotorProcess from "./components/CreateNonMotorProcess";
 import HRDashboard from "./components/HRDashboard";
 import AttendanceSummary from "./components/AttendanceSummary";
 
-// ADDED: ActivitiesPage
+// ADDED: ActivitiesPage & HRPayslipForm
 import ActivitiesPage from "./components/ActivitiesPage";
+import HRPayslipForm from "./components/HRPayslipForm";
 
 import "./styles.css";
 
@@ -169,13 +170,14 @@ const allowedPathsByRole = {
     "/employee-dashboard",
     "/attendance-history",
     "/edit-profile",
-    "/activities", // ← ADDED
+    "/activities",
   ],
   [ROLES.HR]: [
     "/hr-dashboard",
     "/attendance-summary",
     "/edit-profile",
-    "/activities", // ← ADDED
+    "/activities",
+    "/hr-payslips", // ← NEW: Payslip Generator
   ],
 };
 
@@ -354,6 +356,18 @@ function App() {
             userRole === "hr" ? (
               <ErrorBoundary>
                 <AttendanceSummary socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/hr-payslips"
+          element={
+            userRole === "hr" ? (
+              <ErrorBoundary>
+                <HRPayslipForm socket={socket} />
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />
@@ -864,7 +878,7 @@ function App() {
             )
           }
         />
-        {/* Attendance (only history now) */}
+        {/* Attendance */}
         <Route
           path="/attendance-history"
           element={
