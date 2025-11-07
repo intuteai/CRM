@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────────────────────
-// ActivitiesPage.jsx – Fixed + Click-to-Sort on every column
+// ActivitiesPage.jsx – Fixed + Click-to-Sort + Full Summary Modal
 // ──────────────────────────────────────────────────────────────
 
 import React, {
@@ -121,8 +121,9 @@ function ActivitiesPage({ socket }) {
     comments: "",
   });
 
-  // Full comment modal
+  // Full comment & summary modals
   const [commentModal, setCommentModal] = useState(null);
+  const [summaryModal, setSummaryModal] = useState(null); // ← NEW
 
   // ────── Sorting ──────
   const [sortConfig, setSortConfig] = useState({
@@ -670,12 +671,24 @@ function ActivitiesPage({ socket }) {
                       <td className="px-6 py-4 text-sm font-mono text-gray-600">
                         #{a.id}
                       </td>
-                      <td
-                        className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate"
-                        title={a.summary}
-                      >
-                        {a.summary}
+
+                      {/* SUMMARY – Click to view full */}
+                      <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
+                        {a.summary ? (
+                          <button
+                            onClick={() => setSummaryModal(a.summary)}
+                            className="text-left text-amber-700 hover:text-amber-900 underline truncate block w-full"
+                            title="Click to view full summary"
+                          >
+                            {a.summary.length > 60
+                              ? `${a.summary.slice(0, 60)}…`
+                              : a.summary}
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 italic">—</span>
+                        )}
                       </td>
+
                       <td className="px-6 py-4">
                         <span
                           className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[a.status]}`}
@@ -709,6 +722,8 @@ function ActivitiesPage({ socket }) {
                           {a.priority}
                         </span>
                       </td>
+
+                      {/* COMMENTS – Click to view full */}
                       <td className="px-6 py-4 text-sm text-gray-600 max-w-xs">
                         {a.comments ? (
                           <button
@@ -724,6 +739,7 @@ function ActivitiesPage({ socket }) {
                           <span className="text-gray-400 italic">—</span>
                         )}
                       </td>
+
                       <td className="px-6 py-4 text-sm">
                         <div className="flex gap-2">
                           <button
@@ -769,6 +785,31 @@ function ActivitiesPage({ socket }) {
         </div>
       </div>
 
+      {/* Full Summary Modal */}
+      <Modal
+        isOpen={!!summaryModal}
+        onRequestClose={() => setSummaryModal(null)}
+        className="bg-white rounded-2xl p-6 max-w-2xl mx-auto mt-20 shadow-2xl outline-none max-h-screen overflow-y-auto"
+        overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      >
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-800">
+            Full Summary
+          </h3>
+          <button
+            onClick={() => setSummaryModal(null)}
+            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5 text-gray-600" />
+          </button>
+        </div>
+        <div className="bg-gray-50 p-4 rounded-xl">
+          <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans break-words">
+            {summaryModal}
+          </pre>
+        </div>
+      </Modal>
+
       {/* Full Comment Modal */}
       <Modal
         isOpen={!!commentModal}
@@ -802,7 +843,7 @@ function ActivitiesPage({ socket }) {
         overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       >
         <h2 className="text-2xl font-bold text-gray-800 mb-6">
-          {editingActivity ? "Edit Activity" : "New Activity"}
+          {editingActivity ? "Edit Activity" : "New.publish Activity"}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
