@@ -123,12 +123,12 @@ function ActivitiesPage({ socket }) {
 
   // Full comment & summary modals
   const [commentModal, setCommentModal] = useState(null);
-  const [summaryModal, setSummaryModal] = useState(null); // ← NEW
+  const [summaryModal, setSummaryModal] = useState(null);
 
   // ────── Sorting ──────
   const [sortConfig, setSortConfig] = useState({
     key: null,
-    direction: "asc", // asc | desc
+    direction: "asc",
   });
 
   const requestSort = (key) => {
@@ -843,7 +843,7 @@ function ActivitiesPage({ socket }) {
         overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       >
         <h2 className="text-2xl font-bold text-gray-800 mb-6">
-          {editingActivity ? "Edit Activity" : "New.publish Activity"}
+          {editingActivity ? "Edit Activity" : "New Activity"}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
@@ -959,7 +959,6 @@ function ActivitiesPage({ socket }) {
               onChange={(e) =>
                 setForm({ ...form, due_date: toYMD(e.target.value) })
               }
-              min={todayIST()}
             />
           </div>
 
