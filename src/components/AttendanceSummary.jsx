@@ -81,13 +81,14 @@ function AttendanceSummary({ socket }) {
   const [cursor, setCursor] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [total, setTotal] = useState(0);
+  const [lastUpdate, setLastUpdate] = useState(null); // ✅ Track last update time
 
   // Abort controller for in-flight requests
   const abortRef = useRef(null);
 
   // ────── STABLE FETCH FUNCTION ──────
   const fetchData = useCallback(
-    async (reset = false) => {
+    async (reset = false, currentCursor = null) => {
       if (loading) return;
       setLoading(true);
 
@@ -103,7 +104,7 @@ function AttendanceSummary({ socket }) {
           limit: 50,
           ...(search && { search }),
           ...(dateFilter && { date: dateFilter }),
-          ...(reset ? {} : cursor ? { cursor } : {}),
+          ...(reset ? {} : currentCursor ? { cursor: currentCursor } : {}),
         };
 
         const token = localStorage.getItem('token');
@@ -123,6 +124,7 @@ function AttendanceSummary({ socket }) {
         setTotal(res.data.total || 0);
         setCursor(res.data.nextCursor || null);
         setHasMore(!!res.data.nextCursor);
+        setLastUpdate(new Date()); // ✅ Update timestamp
       } catch (err) {
         // Ignore cancelled/aborted requests
         if (
@@ -140,7 +142,7 @@ function AttendanceSummary({ socket }) {
         abortRef.current = null;
       }
     },
-    [search, dateFilter, cursor, loading]
+    [search, dateFilter, loading]
   );
 
   // Cancel any in-flight request when unmounting
@@ -164,20 +166,45 @@ function AttendanceSummary({ socket }) {
     if (!socket) return;
 
     const handler = (payload) => {
-      toast.info(`${payload.name || 'Employee'} marked attendance`, {
-        autoClose: 3000,
-      });
-      fetchData(true);
+      // ✅ Only show toast and refresh if viewing today or relevant data
+      const isRelevant = !dateFilter || dateFilter === todayIST();
+      
+      if (isRelevant) {
+        toast.info(`${payload.name || 'Employee'} marked attendance`, {
+          autoClose: 2000,
+        });
+        fetchData(true);
+      }
     };
 
     socket.on('attendanceMarked', handler);
     return () => socket.off('attendanceMarked', handler);
-  }, [socket, fetchData]);
+  }, [socket, fetchData, dateFilter]);
+
+  // ────── SMART AUTO-REFRESH POLLING ──────
+  useEffect(() => {
+    // Poll every 5 seconds (only when no filters active)
+    // WebSocket provides real-time updates anyway
+    if (!search && dateFilter === todayIST()) {
+      const intervalId = setInterval(() => {
+        fetchData(true);
+      }, 5000); // 5 seconds for today's view only
+
+      return () => clearInterval(intervalId);
+    }
+    // No polling for filtered views - they'll update via WebSocket
+  }, [fetchData, search, dateFilter]);
 
   // ────── DEBOUNCED LOAD MORE ──────
+  const loadMore = useCallback(() => {
+    if (!loading && hasMore && cursor) {
+      fetchData(false, cursor);
+    }
+  }, [loading, hasMore, cursor, fetchData]);
+
   const debouncedLoadMore = useMemo(
-    () => debounce(() => fetchData(false), 300),
-    [fetchData]
+    () => debounce(loadMore, 300),
+    [loadMore]
   );
 
   // Clean up debounce on unmount
@@ -237,9 +264,17 @@ function AttendanceSummary({ socket }) {
               : 'All employees • Real-time'}
           </p>
           {total > 0 && (
-            <p className="text-sm text-gray-500 mt-2">
-              {total} record{total > 1 ? 's' : ''}
-            </p>
+            <div className="flex items-center justify-center gap-4 mt-2">
+              <p className="text-sm text-gray-500">
+                {total} record{total > 1 ? 's' : ''}
+              </p>
+              {lastUpdate && (
+                <p className="text-xs text-gray-400 flex items-center gap-1">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  Last updated: {lastUpdate.toLocaleTimeString()}
+                </p>
+              )}
+            </div>
           )}
         </div>
 
