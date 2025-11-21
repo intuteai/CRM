@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { formatDate } from '../utils/helpers';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import {
   ArrowDownUp, Search, ChevronLeft, ChevronRight, X, RefreshCw,
-  AlertCircle, Plus, Edit2, XCircle, MoreVertical, Download, Upload, Eye
+  Plus, Edit2, XCircle, MoreVertical, Download, Upload, Eye
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import QRCode from 'qrcode';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -39,6 +37,34 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
+// Format Date Helper
+const formatDate = (date) => {
+  if (!date) return 'N/A';
+  return new Date(date).toLocaleDateString('en-IN', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+};
+
+// Weserv Image Proxy Helper
+const getWeservUrl = (imageUrl) => {
+  if (!imageUrl) return null;
+  
+  // If it's already a weserv URL, return as-is
+  if (imageUrl.includes('images.weserv.nl')) return imageUrl;
+  
+  // Extract Google Drive file ID if it's a Drive URL
+  let directUrl = imageUrl;
+  const driveMatch = imageUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (driveMatch) {
+    directUrl = `https://drive.google.com/uc?export=view&id=${driveMatch[1]}`;
+  }
+  
+  // Proxy through Weserv
+  return `https://images.weserv.nl/?url=${encodeURIComponent(directUrl)}&w=1400&h=1000&fit=outside&output=webp&q=90`;
+};
+
 function StockPage({ socket }) {
   const [stockItems, setStockItems] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -59,15 +85,14 @@ function StockPage({ socket }) {
     price: '',
     stockQuantity: '',
     qtyRequired: '',
-    location: '' // NEW
+    location: ''
   });
   const [formErrors, setFormErrors] = useState({});
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [selectedDescription, setSelectedDescription] = useState('');
-  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
-  const [selectedBarcode, setSelectedBarcode] = useState('');
-  const [selectedProductName, setSelectedProductName] = useState('');
-  const [selectedProductDescription, setSelectedProductDescription] = useState('');
+  const [uploadingId, setUploadingId] = useState(null);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
   const tableRef = useRef(null);
   const searchInputRef = useRef(null);
   const modalRef = useRef(null);
@@ -110,7 +135,8 @@ function StockPage({ socket }) {
         productName: item.productName || '',
         productId: item.productId,
         createdAt: item.createdAt || null,
-        location: item.location || '' // NEW
+        location: item.location || '',
+        imageUrl: item.imageUrl || item.image_url || null,
       }));
 
       setStockItems(normalizedData);
@@ -137,26 +163,23 @@ function StockPage({ socket }) {
     socket.on('disconnect', () => toast.warn('Real-time connection lost', { autoClose: 3000 }));
     socket.on('reconnect', () => { toast.success('Reconnected!', { autoClose: 2000 }); fetchStock(); });
 
-    socket.on('stockUpdate', ({ product_id, stock_quantity, location, status }) => {
+    socket.on('stockUpdate', ({ product_id, stock_quantity, location, image_url, status }) => {
       setStockItems(prev => {
         if (!Array.isArray(prev)) return prev || [];
         if (status === 'Deleted') {
           toast.info(`Product #${product_id} deleted`, { autoClose: 2000 });
           return prev.filter(item => item.productId !== product_id);
         }
-        const index = prev.findIndex(item => item.productId === product_id);
-        if (index === -1) {
-          fetchStock();
-          return prev;
-        }
-        const updated = [...prev];
-        updated[index] = {
-          ...updated[index],
-          stockQuantity: Number(stock_quantity),
-          location: location ?? updated[index].location
-        };
-        toast.info(`Updated: ${updated[index].productName} → ${stock_quantity} @ ${updated[index].location || 'N/A'}`, { autoClose: 2000 });
-        return updated;
+        return prev.map(item =>
+          item.productId === product_id
+            ? { 
+                ...item, 
+                stockQuantity: Number(stock_quantity), 
+                location: location || item.location, 
+                imageUrl: image_url || item.imageUrl 
+              }
+            : item
+        );
       });
       if (tableRef.current) tableRef.current.focus();
     });
@@ -173,7 +196,7 @@ function StockPage({ socket }) {
   // Initial Load
   useEffect(() => {
     let mounted = true;
-    fetchStock().then(cleanup => { if (!mounted) cleanup(); });
+    fetchStock().then(cleanup => { if (!mounted && cleanup) cleanup(); });
     return () => { mounted = false; };
   }, [fetchStock]);
 
@@ -201,23 +224,6 @@ function StockPage({ socket }) {
       return () => document.removeEventListener('keydown', handleTab);
     }
   }, [showModal]);
-
-  // QR Code
-  const generateQRCode = useCallback(async (productCode, productName, description, location, elementId) => {
-    try {
-      const data = JSON.stringify({ productCode, productName, description: description || 'N/A', location: location || 'N/A' });
-      await QRCode.toCanvas(document.getElementById(elementId), data, { width: 200, margin: 2, errorCorrectionLevel: 'H' });
-    } catch (err) {
-      toast.error('QR code generation failed', { autoClose: 3000 });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (showBarcodeModal && selectedBarcode) {
-      const item = stockItems.find(i => i.productCode === selectedBarcode);
-      generateQRCode(selectedBarcode, selectedProductName, selectedProductDescription, item?.location, 'qrcode-canvas');
-    }
-  }, [showBarcodeModal, selectedBarcode, selectedProductName, selectedProductDescription, stockItems, generateQRCode]);
 
   // Sorting & Filtering
   const sortedStock = useMemo(() => {
@@ -406,13 +412,6 @@ function StockPage({ socket }) {
     setShowDescriptionModal(true);
   }, []);
 
-  const showBarcode = useCallback((code, name, desc) => {
-    setSelectedBarcode(code);
-    setSelectedProductName(name);
-    setSelectedProductDescription(desc);
-    setShowBarcodeModal(true);
-  }, []);
-
   // Form Validation
   const validateForm = useCallback(() => {
     const errors = {};
@@ -465,28 +464,117 @@ function StockPage({ socket }) {
     } catch (err) {
       toast.error(err.message);
     }
-  }, [formData, modalMode, selectedItem, fetchStock]);
+  }, [formData, modalMode, selectedItem, fetchStock, validateForm]);
+
+  // Upload Photo with Weserv
+  const uploadPhoto = useCallback(async (productId, file) => {
+    if (!file) return;
+    
+    console.log('UPLOAD STARTED', { productId, fileName: file.name });
+    setUploadingId(productId);
+    const toastId = toast.loading(`Uploading ${file.name}...`);
+    
+    const formData = new FormData();
+    formData.append('photo', file);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${BASE_URL}/api/stock/${productId}/photo`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+
+      const result = await res.json();
+      console.log('Upload response:', result);
+
+      if (!res.ok) {
+        throw new Error(result.message || result.error || 'Upload failed');
+      }
+
+      // Get the raw image URL and convert to Weserv
+      const rawImageUrl = result.imageUrl || result.image_url || result.link || null;
+      const weservImageUrl = getWeservUrl(rawImageUrl);
+      
+      // Update local state with Weserv URL
+      setStockItems(prev => prev.map(item =>
+        item.productId === productId ? { ...item, imageUrl: weservImageUrl } : item
+      ));
+      
+      toast.update(toastId, { 
+        render: 'Image uploaded successfully!', 
+        type: 'success', 
+        isLoading: false, 
+        autoClose: 3000 
+      });
+    } catch (err) {
+      console.error('Upload error:', err);
+      toast.update(toastId, { 
+        render: `Upload failed: ${err.message}`, 
+        type: 'error', 
+        isLoading: false, 
+        autoClose: 5000 
+      });
+    } finally {
+      setUploadingId(null);
+    }
+  }, []);
 
   // Actions Dropdown
-  const ActionsDropdown = ({ item, onEdit, onDelete }) => {
+  const ActionsDropdown = ({ item }) => {
     const [open, setOpen] = useState(false);
-    const ref = useRef(null);
+    const menuRef = useRef(null);
+
     useEffect(() => {
-      const handle = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
-      document.addEventListener('mousedown', handle);
-      return () => document.removeEventListener('mousedown', handle);
+      const handleOutside = (e) => {
+        if (menuRef.current && !menuRef.current.contains(e.target)) {
+          setOpen(false);
+        }
+      };
+      document.addEventListener('mousedown', handleOutside);
+      return () => document.removeEventListener('mousedown', handleOutside);
     }, []);
+
     return (
-      <div ref={ref} className="relative">
-        <button onClick={() => setOpen(!open)} className="p-2 hover:bg-gray-100 rounded-full">
+      <div ref={menuRef} className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="p-2 hover:bg-gray-100 rounded-full transition"
+        >
           <MoreVertical size={20} />
         </button>
+        
         {open && (
           <div className="absolute right-0 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5 z-10">
-            <button onClick={() => { onEdit(item); setOpen(false); }} className="flex w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 items-center">
+            <button 
+              onClick={() => { handleEdit(item); setOpen(false); }} 
+              className="flex w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 items-center"
+            >
               <Edit2 size={16} className="mr-2" /> Edit
             </button>
-            <button onClick={() => { onDelete(item.productId); setOpen(false); }} className="flex w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 items-center">
+            
+            <label className="flex w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 items-center cursor-pointer">
+              <Upload size={16} className="mr-2" /> Upload Photo
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    console.log('FILE SELECTED:', file.name);
+                    uploadPhoto(item.productId, file);
+                  }
+                  setOpen(false);
+                }}
+              />
+            </label>
+            
+            <button 
+              onClick={() => { handleDelete(item.productId); setOpen(false); }} 
+              className="flex w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 items-center"
+            >
               <XCircle size={16} className="mr-2" /> Delete
             </button>
           </div>
@@ -504,7 +592,7 @@ function StockPage({ socket }) {
     );
   }
 
-  if (error && !showModal && !showDescriptionModal && !showBarcodeModal) {
+  if (error && !showModal && !showDescriptionModal) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
         <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg text-center">
@@ -573,27 +661,26 @@ function StockPage({ socket }) {
                     {[
                       { key: 'productId', label: 'ID' },
                       { key: 'productName', label: 'Name' },
-                      { key: 'location', label: 'Location' }, // NEW
+                      { key: 'location', label: 'Location' },
                       { key: 'stockQuantity', label: 'Stock' },
                       { key: 'qtyRequired', label: 'Req' },
                       { key: 'price', label: 'Price (₹)' },
                       { key: 'productCode', label: 'Code' },
                       { key: 'description', label: 'Desc' },
-                      { key: 'qrcode', label: 'QR' },
                       { key: 'createdAt', label: 'Created' },
                       { key: 'actions', label: 'Actions' }
                     ].map(({ key, label }) => (
                       <th
                         key={key}
-                        className={`py-5 px-3 text-gray-800 font-semibold text-base ${key !== 'actions' && key !== 'qrcode' ? 'cursor-pointer hover:bg-amber-300' : ''}`}
-                        onClick={() => key !== 'actions' && key !== 'qrcode' && sortData(key)}
-                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && key !== 'actions' && key !== 'qrcode' && sortData(key)}
-                        tabIndex={key !== 'actions' && key !== 'qrcode' ? 0 : -1}
+                        className={`py-5 px-3 text-gray-800 font-semibold text-base ${key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''}`}
+                        onClick={() => key !== 'actions' && sortData(key)}
+                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && key !== 'actions' && sortData(key)}
+                        tabIndex={key !== 'actions' ? 0 : -1}
                         aria-sort={sortConfig.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
                       >
                         <div className="flex items-center justify-between">
                           {label}
-                          {key !== 'actions' && key !== 'qrcode' && (
+                          {key !== 'actions' && (
                             <ArrowDownUp size={16} className={`ml-2 text-gray-600 ${sortConfig.key === key ? 'text-gray-900' : 'opacity-50'}`} />
                           )}
                         </div>
@@ -604,10 +691,39 @@ function StockPage({ socket }) {
                 <tbody>
                   {paginatedStock.map(item => {
                     const stockClass = item.stockQuantity >= item.qtyRequired ? 'text-green-600' : 'text-red-600';
+                    const weservImageUrl = getWeservUrl(item.imageUrl);
+                    
                     return (
                       <tr key={item.productId} className="border-t hover:bg-amber-50">
                         <td className="py-4 px-3 text-gray-600">{item.productId}</td>
-                        <td className="py-4 px-3 text-gray-600 font-medium">{item.productName}</td>
+                        <td className="py-4 px-3 text-gray-600 font-medium">
+                          <div className="flex items-center gap-3">
+                            {/* Thumbnail with Weserv proxy */}
+                            {weservImageUrl ? (
+                              <img 
+                                src={weservImageUrl} 
+                                alt={item.productName} 
+                                className="w-10 h-10 rounded-md object-cover border cursor-pointer hover:opacity-80 transition" 
+                                onClick={() => {
+                                  setSelectedImage({ url: weservImageUrl, name: item.productName });
+                                  setShowImageModal(true);
+                                }}
+                                onError={(e) => {
+                                  console.error('Image load failed:', weservImageUrl);
+                                  e.target.style.display = 'none';
+                                  e.target.nextElementSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : null}
+                            {!weservImageUrl && (
+                              <div className="w-10 h-10 rounded-md bg-gray-100 border flex items-center justify-center text-sm text-gray-400">No</div>
+                            )}
+                            <div>
+                              <div className="font-medium">{item.productName}</div>
+                              <div className="text-xs text-gray-500">{item.productCode}</div>
+                            </div>
+                          </div>
+                        </td>
                         <td className="py-4 px-3 text-gray-600">{item.location || <span className="text-gray-400 italic">Not set</span>}</td>
                         <td className={`py-4 px-3 font-medium ${stockClass}`}>
                           {item.stockQuantity}
@@ -625,13 +741,13 @@ function StockPage({ socket }) {
                             </button>
                           ) : '-'}
                         </td>
-                        <td className="py-4 px-3">
-                          <button onClick={() => showBarcode(item.productCode, item.productName, item.description)} className="text-amber-600 hover:text-amber-800 flex items-center">
-                            <Eye size={16} className="mr-1" /> QR
-                          </button>
-                        </td>
                         <td className="py-4 px-3 text-gray-600 text-sm">{formatDate(item.createdAt)}</td>
-                        <td className="py-4 px-3"><ActionsDropdown item={item} onEdit={handleEdit} onDelete={handleDelete} /></td>
+                        <td className="py-4 px-3">
+                          <div className="flex items-center gap-2">
+                            <ActionsDropdown item={item} />
+                            {uploadingId === item.productId && <div className="text-sm text-amber-600 animate-pulse">Uploading...</div>}
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -661,46 +777,95 @@ function StockPage({ socket }) {
           )}
         </div>
 
-        {/* Modal */}
+        {/* Create/Edit Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50" role="dialog">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl w-[520px]" ref={modalRef}>
-              <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-gray-500"><XCircle size={24} /></button>
+            <div className="bg-white p-8 rounded-2xl shadow-2xl w-[520px] relative" ref={modalRef}>
+              <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-gray-700">
+                <XCircle size={24} />
+              </button>
               <h2 className="text-2xl font-bold text-gray-800 mb-6">
                 {modalMode === 'create' ? 'Create Product' : `Edit #${selectedItem?.productId}`}
               </h2>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Product Name *</label>
-                  <input type="text" value={formData.productName} onChange={e => setFormData({ ...formData, productName: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.productName ? 'border-red-500' : ''}`} required />
+                  <input 
+                    type="text" 
+                    value={formData.productName} 
+                    onChange={e => setFormData({ ...formData, productName: e.target.value })} 
+                    className={`w-full p-3 border rounded-lg ${formErrors.productName ? 'border-red-500' : ''}`} 
+                    required 
+                  />
                   {formErrors.productName && <p className="text-red-500 text-sm mt-1">{formErrors.productName}</p>}
                 </div>
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Product Code *</label>
-                  <input type="text" value={formData.productCode} onChange={e => setFormData({ ...formData, productCode: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.productCode ? 'border-red-500' : ''}`} required />
+                  <input 
+                    type="text" 
+                    value={formData.productCode} 
+                    onChange={e => setFormData({ ...formData, productCode: e.target.value })} 
+                    className={`w-full p-3 border rounded-lg ${formErrors.productCode ? 'border-red-500' : ''}`} 
+                    required 
+                  />
                 </div>
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Location</label>
-                  <input type="text" placeholder="e.g., Warehouse A, Shelf 12" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} className="w-full p-3 border rounded-lg" />
+                  <input 
+                    type="text" 
+                    placeholder="e.g., Warehouse A, Shelf 12" 
+                    value={formData.location} 
+                    onChange={e => setFormData({ ...formData, location: e.target.value })} 
+                    className="w-full p-3 border rounded-lg" 
+                  />
                 </div>
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Price (₹) *</label>
-                  <input type="number" step="0.01" min="0" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.price ? 'border-red-500' : ''}`} required />
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    min="0" 
+                    value={formData.price} 
+                    onChange={e => setFormData({ ...formData, price: e.target.value })} 
+                    className={`w-full p-3 border rounded-lg ${formErrors.price ? 'border-red-500' : ''}`} 
+                    required 
+                  />
                 </div>
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">{modalMode === 'create' ? 'Initial Stock' : 'Stock Quantity'}</label>
-                  <input type="number" step="0.01" min="0" value={formData.stockQuantity} onChange={e => setFormData({ ...formData, stockQuantity: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.stockQuantity ? 'border-red-500' : ''}`} required={modalMode === 'create'} />
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    min="0" 
+                    value={formData.stockQuantity} 
+                    onChange={e => setFormData({ ...formData, stockQuantity: e.target.value })} 
+                    className={`w-full p-3 border rounded-lg ${formErrors.stockQuantity ? 'border-red-500' : ''}`} 
+                    required={modalMode === 'create'} 
+                  />
                 </div>
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Qty Required</label>
-                  <input type="number" min="0" value={formData.qtyRequired} onChange={e => setFormData({ ...formData, qtyRequired: e.target.value })} className="w-full p-3 border rounded-lg" />
+                  <input 
+                    type="number" 
+                    min="0" 
+                    value={formData.qtyRequired} 
+                    onChange={e => setFormData({ ...formData, qtyRequired: e.target.value })} 
+                    className="w-full p-3 border rounded-lg" 
+                  />
                 </div>
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Description</label>
-                  <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full p-3 border rounded-lg" rows="2" />
+                  <textarea 
+                    value={formData.description} 
+                    onChange={e => setFormData({ ...formData, description: e.target.value })} 
+                    className="w-full p-3 border rounded-lg" 
+                    rows="2" 
+                  />
                 </div>
                 <div className="flex justify-end gap-3 mt-6">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Cancel</button>
+                  <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+                    Cancel
+                  </button>
                   <button type="submit" className="px-5 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold">
                     {modalMode === 'create' ? 'Create' : 'Update'}
                   </button>
@@ -710,37 +875,41 @@ function StockPage({ socket }) {
           </div>
         )}
 
-        {/* Description & QR Modals */}
+        {/* Description Modal */}
         {showDescriptionModal && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
             <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative">
-              <button onClick={() => setShowDescriptionModal(false)} className="absolute top-4 right-4"><XCircle size={24} /></button>
+              <button onClick={() => setShowDescriptionModal(false)} className="absolute top-4 right-4 hover:text-gray-700">
+                <XCircle size={24} />
+              </button>
               <h2 className="text-2xl font-bold mb-4">Description</h2>
               <p className="text-gray-700 whitespace-pre-wrap">{selectedDescription || 'None'}</p>
             </div>
           </div>
         )}
 
-        {showBarcodeModal && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative">
-              <button onClick={() => setShowBarcodeModal(false)} className="absolute top-4 right-4"><XCircle size={24} /></button>
-              <h2 className="text-2xl font-bold mb-4">QR Code: {selectedProductName}</h2>
-              <div className="space-y-2 text-sm text-gray-700 mb-4">
-                <p><strong>Code:</strong> {selectedBarcode}</p>
-                <p><strong>Location:</strong> {stockItems.find(i => i.productCode === selectedBarcode)?.location || 'Not set'}</p>
-              </div>
-              <canvas id="qrcode-canvas" className="w-full max-w-[200px] mx-auto mb-4"></canvas>
-              <button onClick={() => {
-                const canvas = document.getElementById('qrcode-canvas');
-                const a = document.createElement('a');
-                a.href = canvas.toDataURL('image/png');
-                a.download = `QR_${selectedBarcode}.png`;
-                a.click();
-                toast.success('QR downloaded!');
-              }} className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto">
-                <Download className="mr-2" /> Download
+        {/* Image Modal */}
+        {showImageModal && selectedImage && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowImageModal(false)}
+          >
+            <div className="relative max-w-7xl max-h-full">
+              <button 
+                onClick={() => setShowImageModal(false)} 
+                className="absolute -top-12 right-0 text-white hover:text-gray-300 transition"
+              >
+                <XCircle size={32} />
               </button>
+              <img 
+                src={selectedImage.url} 
+                alt={selectedImage.name} 
+                className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div className="text-white text-center mt-4 text-lg font-medium">
+                {selectedImage.name}
+              </div>
             </div>
           </div>
         )}
