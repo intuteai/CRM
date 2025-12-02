@@ -14,7 +14,7 @@ function SalesDashboard({ socket }) {
         <Section title="Sales & Customer Management">
           <DashboardCard to="/orders" icon={<Truck />} title="Orders" desc="Track and process orders" />
           <DashboardCard to="/customer-invoices" icon={<FileText />} title="Customer Invoices" desc="View customer invoices" />
-          <DashboardCard to="/enquiries" icon={<Mail />} title="Enquiries" desc="Manage enquiries" />
+          <DashboardCard to="/sales/enquiries" icon={<Mail />} title="Enquiries" desc="Manage enquiries" />
           <DashboardCard to="/queries" icon={<MessageSquare />} title="Queries" desc="Manage customer inquiries" />
         </Section>
 

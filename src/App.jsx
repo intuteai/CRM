@@ -58,12 +58,12 @@ import CreateMotorProcess from "./components/CreateMotorProcess";
 import CreateNonMotorProcess from "./components/CreateNonMotorProcess";
 import HRDashboard from "./components/HRDashboard";
 import AttendanceSummary from "./components/AttendanceSummary";
-
-// ADDED: ActivitiesPage & HRPayslipForm
 import ActivitiesPage from "./components/ActivitiesPage";
 import HRPayslipForm from "./components/HRPayslipForm";
-
+import SalesEnquiryPage from "./components/SalesEnquiryPage";
+import DesignEnquiryPage from "./components/DesignEnquiryPage";
 import "./styles.css";
+
 
 const ROLES = {
   ADMIN: "admin",
@@ -116,13 +116,14 @@ const allowedPathsByRole = {
     "/stock",
     "/price-list",
     "/customer-invoices",
-    "/enquiries",
+    "/sales/enquiries",
     "/dispatch-tracking",
     "/edit-profile",
   ],
   [ROLES.DESIGN]: [
     "/design-dashboard",
     "/queries",
+    "/design/enquiries",
     "/pdi",
     "/part-drawings/finished",
     "/part-drawings/raw",
@@ -182,8 +183,12 @@ const allowedPathsByRole = {
 };
 
 function App() {
-  const [userRole, setUserRole] = useState(localStorage.getItem("role") || null);
-  const [userName, setUserName] = useState(localStorage.getItem("name") || "User");
+  const [userRole, setUserRole] = useState(
+    localStorage.getItem("role") || null
+  );
+  const [userName, setUserName] = useState(
+    localStorage.getItem("name") || "User"
+  );
   const [token, setToken] = useState(localStorage.getItem("token") || null);
   const [showLogin, setShowLogin] = useState(!localStorage.getItem("token"));
   const [socket, setSocket] = useState(null);
@@ -379,7 +384,7 @@ function App() {
         <Route
           path="/activities"
           element={
-            (userRole === "employee" || userRole === "hr") ? (
+            userRole === "employee" || userRole === "hr" ? (
               <ErrorBoundary>
                 <ActivitiesPage socket={socket} />
               </ErrorBoundary>
@@ -470,7 +475,10 @@ function App() {
             )
           }
         />
-        <Route path="/account-dashboard" element={<Navigate to="/accounts-dashboard" replace />} />
+        <Route
+          path="/account-dashboard"
+          element={<Navigate to="/accounts-dashboard" replace />}
+        />
 
         <Route
           path="/customer-dashboard"
@@ -695,9 +703,33 @@ function App() {
         <Route
           path="/enquiries"
           element={
-            ["admin", "sales"].includes(userRole) ? (
+            ["admin"].includes(userRole) ? (
               <ErrorBoundary>
                 <EnquiryPage socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/sales/enquiries"
+          element={
+            ["sales"].includes(userRole) ? (
+              <ErrorBoundary>
+                <SalesEnquiryPage socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
+          path="/design/enquiries"
+          element={
+            ["design"].includes(userRole) ? (
+              <ErrorBoundary>
+                <DesignEnquiryPage socket={socket} />
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />
@@ -950,7 +982,8 @@ function App() {
                     Invalid Role
                   </h1>
                   <p className="text-gray-600 mb-6">
-                    Your user role ({userRole}) is not recognized. Please log out and try again.
+                    Your user role ({userRole}) is not recognized. Please log
+                    out and try again.
                   </p>
                   <button
                     onClick={handleLogout}

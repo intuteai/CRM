@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import {
-  MessageSquare, PenTool, FileText, BarChart, CheckSquare
+  MessageSquare, PenTool, FileText, BarChart, CheckSquare, Mail
 } from 'lucide-react';
 
 function DesignDashboard({ socket }) {
@@ -15,6 +15,7 @@ function DesignDashboard({ socket }) {
           <DashboardCard to="/queries" icon={<MessageSquare />} title="Queries" desc="Manage customer and internal queries" />
           <DashboardCard to="/part-drawings/raw" icon={<PenTool />} title="Raw Part Drawings" desc="Access raw material drawings" />
           <DashboardCard to="/part-drawings/finished" icon={<PenTool />} title="Finished Part Drawings" desc="Access finished good drawings" />
+          <DashboardCard to="/design/enquiries" icon={<Mail />} title="Enquiries" desc="Manage enquiries" />
           <DashboardCard to="/pdi" icon={<CheckSquare />} title="PDI Reports" desc="Pre-dispatch inspection details" />
           <DashboardCard to="/bom" icon={<BarChart />} title="Unpriced BOM" desc="Bill of Materials (view only)" />
         </Section>
