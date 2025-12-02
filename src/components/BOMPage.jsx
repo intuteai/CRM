@@ -84,9 +84,10 @@ function BOMPage({ socket: providedSocket }) {
     setSelectedIndex(-1);
 
     if (query) {
+      const q = query.toString().toLowerCase();
       const filtered = products.filter(p =>
-        p.productName.toLowerCase().includes(query.toLowerCase()) ||
-        String(p.productId).includes(query.toLowerCase())
+        (p.productName || '').toString().toLowerCase().includes(q) ||
+        String(p.productId || '').includes(q)
       );
       setFilteredProducts(filtered.length > 0 ? filtered : [{ productId: null, productName: 'No matches found' }]);
     } else {
@@ -141,8 +142,9 @@ function BOMPage({ socket: providedSocket }) {
     setSelectedMaterialIndices(prev => ({ ...prev, [index]: -1 }));
 
     if (query) {
+      const q = query.toString().toLowerCase();
       const filtered = materials.filter(m =>
-        m.productName.toLowerCase().includes(query.toLowerCase())
+        (m.materialName || '').toString().toLowerCase().includes(q)
       );
       console.log(`Filtering materials for query "${query}":`, filtered); // Debug log
       setFilteredMaterials(prev => ({
@@ -215,8 +217,29 @@ function BOMPage({ socket: providedSocket }) {
         throw new Error('Invalid data format: Expected an array in response.data');
       }
 
-      setBoms(bomsData);
-      setTotalItems(responseData.total || bomsData.length || 0);
+      // Normalize BOMs: ensure materials is always an array and fields exist
+      const normalizedBoms = bomsData.map(b => ({
+        ...b,
+        bomId: b.bomId ?? b.bom_id ?? b.id ?? null,
+        productId: b.productId ?? b.product_id ?? null,
+        productName: b.productName ?? b.product_name ?? '',
+        createdAt: b.createdAt ?? b.created_at ?? b.created_date ?? null,
+        updatedAt: b.updatedAt ?? b.updated_at ?? b.updated_date ?? null,
+        materials: Array.isArray(b.materials)
+          ? b.materials.map(m => ({
+              ...m,
+              bomMaterialId: m.bomMaterialId ?? m.bom_material_id ?? m.id ?? null,
+              materialId: m.materialId ?? m.product_id ?? m.material_id ?? null,
+              materialName: m.materialName ?? m.product_name ?? m.material_name ?? '',
+              quantityPerUnit: m.quantityPerUnit ?? m.quantity_per_unit ?? m.qty ?? '',
+              unitPrice: m.unitPrice ?? m.unit_price ?? m.price ?? '',
+              totalValue: m.totalValue ?? m.total_value ?? '',
+            }))
+          : [],
+      }));
+
+      setBoms(normalizedBoms);
+      setTotalItems(responseData.total ?? normalizedBoms.length ?? 0);
     } catch (err) {
       console.error('Error fetching BOMs:', err);
       const errorMessage = err.message || 'Network error. Please try again later.';
@@ -242,8 +265,8 @@ function BOMPage({ socket: providedSocket }) {
       const productData = await productResponse.json();
       const normalizedProducts = Array.isArray(productData.data || productData)
         ? (productData.data || productData).map(p => ({
-            productId: p.productId || p.product_id,
-            productName: p.productName || p.product_name || 'Unnamed Product'
+            productId: p.productId ?? p.product_id ?? p.id ?? null,
+            productName: p.productName ?? p.product_name ?? p.name ?? 'Unnamed Product'
           }))
         : [];
       setProducts(normalizedProducts);
@@ -259,8 +282,8 @@ function BOMPage({ socket: providedSocket }) {
       console.log('Raw material data from /api/stock:', materialData); // Debug log
       const normalizedMaterials = Array.isArray(materialData.data || materialData)
         ? (materialData.data || materialData).map(m => ({
-            materialId: m.product_id || m.productId,
-            materialName: m.product_name || m.productName || 'Unnamed Material'
+            materialId: m.product_id ?? m.productId ?? m.id ?? null,
+            materialName: m.product_name ?? m.productName ?? m.name ?? 'Unnamed Material'
           }))
         : [];
       console.log('Normalized materials:', normalizedMaterials); // Debug log
@@ -297,19 +320,24 @@ function BOMPage({ socket: providedSocket }) {
   const filteredBoms = useMemo(() => {
     if (!Array.isArray(boms)) return [];
 
+    const normalizedSearch = (searchTerm || '').toString().toLowerCase();
+
     return boms.filter((item) => {
       if (!item) return false;
 
       const searchFields = [
-        String(item.bomId || ''),
-        String(item.productId || ''),
-        item.productName || '',
-        ...(item.materials || []).map((m) => String(m.materialId || '')),
-        ...(item.materials || []).map((m) => m.materialName || ''),
+        String(item.bomId ?? ''),
+        String(item.productId ?? ''),
+        String(item.productName ?? ''),
+        ...((item.materials || []).map((m) => String(m.materialId ?? ''))),
+        ...((item.materials || []).map((m) => String(m.materialName ?? ''))),
       ];
 
+      // Debug: uncomment if needed
+      // console.log('searchFields', searchFields);
+
       return searchFields.some((field) =>
-        field.toLowerCase().includes(searchTerm.toLowerCase())
+        (field ?? '').toString().toLowerCase().includes(normalizedSearch)
       );
     });
   }, [boms, searchTerm]);
@@ -323,10 +351,13 @@ function BOMPage({ socket: providedSocket }) {
       const valueA = a[sortConfig.key] ?? '';
       const valueB = b[sortConfig.key] ?? '';
 
-      if (valueA < valueB) {
+      const aStr = String(valueA);
+      const bStr = String(valueB);
+
+      if (aStr < bStr) {
         return sortConfig.direction === 'asc' ? -1 : 1;
       }
-      if (valueA > valueB) {
+      if (aStr > bStr) {
         return sortConfig.direction === 'asc' ? 1 : -1;
       }
       return 0;
@@ -784,9 +815,7 @@ function BOMPage({ socket: providedSocket }) {
                 ].map(({ key, label }) => (
                   <th
                     key={key || label}
-                    className={`py-5 px-3 text-gray-800 text-base font-semibold ${
-                      key && key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''
-                    } transition-all duration-200`}
+                    className={`py-5 px-3 text-gray-800 text-base font-semibold ${key && key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''} transition-all duration-200`}
                     onClick={() => key && key !== 'actions' && handleSort(key)}
                     aria-sort={
                       sortConfig.key === key
@@ -802,9 +831,7 @@ function BOMPage({ socket: providedSocket }) {
                       {key && key !== 'actions' && (
                         <ArrowDownUp
                           size={16}
-                          className={`ml-2 text-gray-600 ${
-                            sortConfig.key === key ? 'text-gray-900' : 'opacity-50'
-                          }`}
+                          className={`ml-2 text-gray-600 ${sortConfig.key === key ? 'text-gray-900' : 'opacity-50'}`}
                           aria-hidden="true"
                         />
                       )}
@@ -815,11 +842,8 @@ function BOMPage({ socket: providedSocket }) {
             </thead>
             <tbody>
               {sortedBoms.map((bom) => (
-                <React.Fragment key={bom.bomId}>
-                  <tr
-                    className="border-t hover:bg-amber-50 transition-all duration-200"
-                    role="row"
-                  >
+                <React.Fragment key={bom.bomId ?? Math.random()}>
+                  <tr className="border-t hover:bg-amber-50 transition-all duration-200" role="row">
                     <td className="py-4 px-3">
                       <button
                         onClick={() => toggleRow(bom.bomId)}
@@ -854,8 +878,8 @@ function BOMPage({ socket: providedSocket }) {
                             </tr>
                           </thead>
                           <tbody>
-                            {bom.materials.map((material) => (
-                              <tr key={material.bomMaterialId} className="border-t">
+                            {(bom.materials || []).map((material, idx) => (
+                              <tr key={material.bomMaterialId ?? material.materialId ?? idx} className="border-t">
                                 <td className="py-3 px-3 text-gray-600 text-sm">{material.materialId}</td>
                                 <td className="py-3 px-3 text-gray-600 text-sm">{material.materialName || 'N/A'}</td>
                                 <td className="py-3 px-3 text-gray-600 text-sm">{material.quantityPerUnit}</td>
@@ -900,10 +924,7 @@ function BOMPage({ socket: providedSocket }) {
           )}
 
           {sortedBoms.length === 0 && (
-            <div
-              className="text-center py-12 text-gray-500 flex flex-col items-center"
-              role="alert"
-            >
+            <div className="text-center py-12 text-gray-500 flex flex-col items-center" role="alert">
               <Search className="mb-4 text-gray-400" size={48} />
               <p className="text-lg">No BOMs found matching your search.</p>
             </div>
@@ -912,11 +933,7 @@ function BOMPage({ socket: providedSocket }) {
       </div>
 
       {showModal && (
-        <div
-          className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50"
-          role="dialog"
-          aria-labelledby="bom-modal-title"
-        >
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50" role="dialog" aria-labelledby="bom-modal-title">
           <div className="bg-white p-8 rounded-2xl shadow-2xl w-[600px] relative max-h-[80vh] overflow-y-auto">
             <button
               onClick={() => setShowModal(false)}
@@ -925,10 +942,7 @@ function BOMPage({ socket: providedSocket }) {
             >
               <XCircle size={24} />
             </button>
-            <h2
-              id="bom-modal-title"
-              className="text-2xl font-bold text-gray-800 mb-6"
-            >
+            <h2 id="bom-modal-title" className="text-2xl font-bold text-gray-800 mb-6">
               {modalMode === 'create' ? 'Create BOM' : `Edit BOM #${selectedBom?.bomId}`}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -950,9 +964,7 @@ function BOMPage({ socket: providedSocket }) {
                         key={product.productId || `no-match-${index}`}
                         onClick={() => product.productId !== null && handleProductSelect(product)}
                         onMouseEnter={() => setSelectedIndex(index)}
-                        className={`px-5 py-3 cursor-pointer hover:bg-amber-100 transition-colors duration-300 flex items-center justify-between ${
-                          index === selectedIndex ? 'bg-amber-200 text-amber-900 font-semibold' : 'text-gray-800'
-                        } ${product.productId === null ? 'cursor-default bg-amber-50 text-gray-500' : ''}`}
+                        className={`px-5 py-3 cursor-pointer hover:bg-amber-100 transition-colors duration-300 flex items-center justify-between ${index === selectedIndex ? 'bg-amber-200 text-amber-900 font-semibold' : 'text-gray-800'} ${product.productId === null ? 'cursor-default bg-amber-50 text-gray-500' : ''}`}
                       >
                         <span className="truncate">{product.productName}</span>
                         {product.productId !== null && <Search size={16} className="text-amber-500 opacity-50" />}
@@ -989,9 +1001,7 @@ function BOMPage({ socket: providedSocket }) {
                               key={material.materialId || `no-match-${index}-${matIndex}`}
                               onClick={() => material.materialId !== null && handleMaterialSelect(index, material)}
                               onMouseEnter={() => setSelectedMaterialIndices(prev => ({ ...prev, [index]: matIndex }))}
-                              className={`px-5 py-3 cursor-pointer hover:bg-amber-100 transition-colors duration-300 flex items-center justify-between ${
-                                matIndex === selectedMaterialIndices[index] ? 'bg-amber-200 text-amber-900 font-semibold' : 'text-gray-800'
-                              } ${material.materialId === null ? 'cursor-default bg-amber-50 text-gray-500' : ''}`}
+                              className={`px-5 py-3 cursor-pointer hover:bg-amber-100 transition-colors duration-300 flex items-center justify-between ${matIndex === selectedMaterialIndices[index] ? 'bg-amber-200 text-amber-900 font-semibold' : 'text-gray-800'} ${material.materialId === null ? 'cursor-default bg-amber-50 text-gray-500' : ''}`}
                             >
                               <span className="truncate">{material.materialName}</span>
                               {material.materialId !== null && <Search size={16} className="text-amber-500 opacity-50" />}

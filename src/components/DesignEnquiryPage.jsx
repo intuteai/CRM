@@ -83,7 +83,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
   const [isLoading, setIsLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({
     key: "enquiry_id",
-    direction: "ascending",
+    // default to descending as requested
+    direction: "descending",
   });
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
@@ -126,6 +127,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
     source: "Website",
     tagsInput: "",
     due_date: "",
+    // if you create, you may include application here if needed
   });
   const [errors, setErrors] = useState({});
 
@@ -244,9 +246,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         const enqData = await enqRes.json();
 
         // Optional frontend guard: design can only see its own assigned enquiries
+        const roleName = String(currentUser?.role_name || "").toLowerCase();
         if (
-          currentUser &&
-          currentUser.role_name === "Design" &&
+          roleName === "design" &&
           enqData.assigned_to != null &&
           Number(enqData.assigned_to) !== Number(currentUser.user_id)
         ) {
@@ -325,7 +327,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         stage,
         due_date,
         assigned_to_name,
-        assigned_to, // make sure backend sends this
+        assigned_to, // ensure backend sends assigned_to
+        application,
       } = payload;
 
       const effectiveLead = lead || priority || "lead";
@@ -358,10 +361,10 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           due_date,
           assigned_to_name,
           assigned_to,
+          application, // include if backend sends
         };
 
         if (idx === -1) {
-          // For Design, ideally backend already sends only relevant enquiries
           return [baseData, ...prev];
         }
 
@@ -396,14 +399,14 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           due_date,
           assigned_to_name,
           assigned_to,
+          application,
         };
       });
     });
 
     socket.on("enquiryActivity", ({ enquiryId, activity }) => {
       setDetailActivities((prev) => {
-        if (!detailEnquiry || detailEnquiry.enquiry_id !== enquiryId)
-          return prev;
+        if (!detailEnquiry || detailEnquiry.enquiry_id !== enquiryId) return prev;
         return [...prev, activity];
       });
     });
@@ -415,7 +418,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
       socket.off("enquiryActivity");
       if (!providedSocket) socket.disconnect();
     };
-  }, [fetchEnquiries, socket, providedSocket, detailEnquiry]);
+  }, [fetchEnquiries, socket, providedSocket, detailEnquiry, currentUser]);
 
   // Sorting
   const handleSort = useCallback((key) => {
@@ -693,9 +696,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         )
       );
       setDetailEnquiry((prev) =>
-        prev && prev.enquiry_id === updated.enquiry_id
-          ? { ...prev, ...updated }
-          : prev
+        prev && prev.enquiry_id === updated.enquiry_id ? { ...prev, ...updated } : prev
       );
 
       toast.success(
@@ -717,12 +718,17 @@ function DesignEnquiryPage({ socket: providedSocket }) {
 
     let visible = enquiries;
 
-    if (currentUser && currentUser.role_name === "Design") {
+    // More robust role check: case-insensitive and tolerant of small differences
+    const roleName = String(currentUser?.role_name || "").toLowerCase();
+    if (roleName.includes("design")) {
       if (currentUser.user_id != null) {
         visible = enquiries.filter((item) => {
           if (item.assigned_to == null) return false;
           return Number(item.assigned_to) === Number(currentUser.user_id);
         });
+      } else {
+        // if user_id missing, hide all to be safe
+        visible = [];
       }
     }
 
@@ -735,6 +741,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         "phone_no",
         "items_required",
         "status",
+        "application", // include application in search
       ].some((key) =>
         String(item[key] || "")
           .toLowerCase()
@@ -762,14 +769,35 @@ function DesignEnquiryPage({ socket: providedSocket }) {
     });
   }, [enquiries, searchTerm, leadFilter, sourceFilter, tagFilter, currentUser]);
 
+  // Sorting: improved comparator that detects numeric ID and dates
   const sortedEnquiries = useMemo(() => {
     const sortableEnquiries = [...filteredEnquiries];
     if (sortConfig.key && sortConfig.key !== "actions") {
+      const key = sortConfig.key;
       sortableEnquiries.sort((a, b) => {
-        let aValue = a[sortConfig.key] ?? "";
-        let bValue = b[sortConfig.key] ?? "";
-        aValue = String(aValue).toLowerCase();
-        bValue = String(bValue).toLowerCase();
+        // handle null/undefined
+        const aRaw = a[key];
+        const bRaw = b[key];
+
+        // numeric compare for enquiry_id if both numeric
+        if (key === "enquiry_id") {
+          const aNum = Number(aRaw);
+          const bNum = Number(bRaw);
+          if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
+            return sortConfig.direction === "ascending" ? aNum - bNum : bNum - aNum;
+          }
+        }
+
+        // date compare for due_date, last_discussion, next_interaction
+        if (["due_date", "last_discussion", "next_interaction"].includes(key)) {
+          const aDate = aRaw ? new Date(aRaw).getTime() : 0;
+          const bDate = bRaw ? new Date(bRaw).getTime() : 0;
+          return sortConfig.direction === "ascending" ? aDate - bDate : bDate - aDate;
+        }
+
+        // fallback string compare
+        const aValue = String(aRaw ?? "").toLowerCase();
+        const bValue = String(bRaw ?? "").toLowerCase();
         return sortConfig.direction === "ascending"
           ? aValue.localeCompare(bValue)
           : bValue.localeCompare(aValue);
@@ -943,7 +971,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           </div>
 
           {/* Filters */}
-          <div className="flex flex-col.sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <select
               value={leadFilter}
               onChange={(e) => setLeadFilter(e.target.value)}
@@ -993,6 +1021,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                 {[
                   { label: "Enquiry ID", key: "enquiry_id" },
                   { label: "Company Name", key: "company_name" },
+                  // new Application column added
+                  { label: "Application", key: "application" },
                   { label: "Items Required", key: "items_required" },
                   { label: "Lead Status", key: "lead" },
                   { label: "Source", key: "source" },
@@ -1009,9 +1039,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                     key={key}
                     onClick={() => key !== "actions" && handleSort(key)}
                     className={`px-3 md:px-4 py-3 text-xs md:text-sm font-bold ${
-                      key !== "actions"
-                        ? "cursor-pointer hover:bg-amber-400"
-                        : ""
+                      key !== "actions" ? "cursor-pointer hover:bg-amber-400" : ""
                     } transition-all.duration-300 whitespace-nowrap border-b border-amber-200 shadow-sm`}
                   >
                     <div className="flex justify-between items-center">
@@ -1059,14 +1087,12 @@ function DesignEnquiryPage({ socket: providedSocket }) {
 
                 return (
                   <tr
-                    key={enquiry.enquiry_id}
+                    key={enquiry.enquiry_id + "-" + index}
                     className={`bg-white hover:bg-amber-50 transition-all duration-300 hover:shadow-md transform hover:-translate-y-1 ${
                       isOverdue ? "border-l-4 border-red-400" : ""
                     }`}
                     style={{
-                      animation: `tableRowFade 0.4s ease-in ${
-                        index * 0.05
-                      }s both`,
+                      animation: `tableRowFade 0.4s ease-in ${index * 0.05}s both`,
                     }}
                     onDoubleClick={() => fetchEnquiryDetail(enquiry.enquiry_id)}
                   >
@@ -1076,6 +1102,12 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                     <td className="px-6 md:px-8 py-4 text-gray-600">
                       {enquiry.company_name}
                     </td>
+
+                    {/* Application column */}
+                    <td className="px-6 md:px-8 py-4 text-gray-600">
+                      {enquiry.application || "N/A"}
+                    </td>
+
                     <td className="px-6 md:px-8 py-4 text-gray-500 text-xs md:text-sm">
                       <div className="flex items-center gap-2">
                         <span className="line-clamp-1">{shortItems}</span>
@@ -1243,7 +1275,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
               {/* MARK DONE - only show if assigned to current Design user */}
               {Number(actionsMenuState.enquiry.assigned_to) ===
                 Number(currentUser.user_id) &&
-                currentUser.role_name === "Design" && (
+                String(currentUser.role_name || "").toLowerCase().includes("design") && (
                   <button
                     onClick={() => {
                       setActionsMenuState((prev) => ({
@@ -1465,9 +1497,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                           >
                             {options.map((option) => (
                               <option key={option} value={option}>
-                                {key === "lead"
-                                  ? formatLeadLabel(option)
-                                  : option}
+                                {key === "lead" ? formatLeadLabel(option) : option}
                               </option>
                             ))}
                           </select>
@@ -1508,7 +1538,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                     type="submit"
                     className="relative px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-semibold shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group hover:from-green-600 hover:to-green-700 transform hover:scale-105"
                   >
-                    <span className="relative z-10 flex.items-center gap-2">
+                    <span className="relative z-10 flex items-center gap-2">
                       <svg
                         className="w-5 h-5"
                         fill="none"
@@ -1561,8 +1591,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                         {detailEnquiry.company_name}
                       </h2>
                       <p className="text-xs text-gray-500 mt-1">
-                        Contact:{" "}
-                        {detailEnquiry.contact_person || "Not specified"} •
+                        Contact: {detailEnquiry.contact_person || "Not specified"} •
                         Phone: {detailEnquiry.phone_no || "Not specified"}
                       </p>
                     </div>
@@ -1607,10 +1636,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                         {detailEnquiry.status}
                       </p>
                       <p className="text-[11px] text-gray-500 mt-1">
-                        Due:{" "}
-                        {detailEnquiry.due_date
-                          ? formatDate(detailEnquiry.due_date)
-                          : "Not set"}
+                        Due: {detailEnquiry.due_date ? formatDate(detailEnquiry.due_date) : "Not set"}
                       </p>
                     </div>
                   </div>
@@ -1621,6 +1647,16 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                     </h3>
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">
                       {detailEnquiry.items_required || "No items specified."}
+                    </p>
+                  </div>
+
+                  {/* show application in detail */}
+                  <div className="mb-4 rounded-2xl border border-amber-100 bg-white/80 px-3 py-3 shadow-sm">
+                    <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                      Application
+                    </h3>
+                    <p className="text-sm text-gray-700">
+                      {detailEnquiry.application || "N/A"}
                     </p>
                   </div>
 
@@ -1648,9 +1684,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                     </h3>
                     <div className="space-y-3">
                       {detailActivities.length === 0 && (
-                        <p className="text-xs text-gray-400">
-                          No activity yet.
-                        </p>
+                        <p className="text-xs text-gray-400">No activity yet.</p>
                       )}
                       {detailActivities.map((act) => {
                         const isAssignment = act.activity_type === "assignment";
@@ -1676,21 +1710,18 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                               <span className="text-[10px] text-gray-400 flex items-center gap-1">
                                 {formatDate(act.created_at)}{" "}
                                 {act.read_by_me ||
-                                (act.read_receipts &&
-                                  act.read_receipts.length > 0) ? (
+                                (act.read_receipts && act.read_receipts.length > 0) ? (
                                   <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-500 text-white text-[9px]">
                                     ✓
                                   </span>
                                 ) : (
-                                  <span className="inline-flex.items-center justify-center w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[9px]">
+                                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[9px]">
                                     ✓
                                   </span>
                                 )}
                               </span>
                             </div>
-                            <p className="text-gray-700 whitespace-pre-wrap">
-                              {act.message}
-                            </p>
+                            <p className="text-gray-700 whitespace-pre-wrap">{act.message}</p>
                             {act.expected_by && (
                               <p className="text-[10px] text-gray-500 mt-1">
                                 Expected by: {formatDate(act.expected_by)}
@@ -1704,22 +1735,14 @@ function DesignEnquiryPage({ socket: providedSocket }) {
 
                   {/* Comment composer + Mark Done */}
                   <div className="mt-4 border-t pt-3">
-                    <h3 className="text-sm font-semibold text-gray-800 mb-2">
-                      Add Comment
-                    </h3>
+                    <h3 className="text-sm font-semibold text-gray-800 mb-2">Add Comment</h3>
 
                     <div className="flex flex-wrap gap-2 mb-2">
                       <button
                         type="button"
                         onClick={() => {
-                          const name =
-                            detailEnquiry.company_name || "Sir/Madam";
-                          const text = `Dear ${name},
-
-Thank you for your positive response and confirmation to proceed with the order.
-
-Warm regards,
-[Your Name]`;
+                          const name = detailEnquiry.company_name || "Sir/Madam";
+                          const text = `Dear ${name},\n\nThank you for your positive response and confirmation to proceed with the order.\n\nWarm regards,\n[Your Name]`;
                           setCommentText(text);
                         }}
                         className="px-3 py-1.5 text-[11px] rounded-full border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 font-semibold"
@@ -1730,14 +1753,8 @@ Warm regards,
                       <button
                         type="button"
                         onClick={() => {
-                          const name =
-                            detailEnquiry.company_name || "Sir/Madam";
-                          const text = `Dear ${name},
-
-We understand you will not be proceeding further at the moment.
-
-Warm regards,
-[Your Name]`;
+                          const name = detailEnquiry.company_name || "Sir/Madam";
+                          const text = `Dear ${name},\n\nWe understand you will not be proceeding further at the moment.\n\nWarm regards,\n[Your Name]`;
                           setCommentText(text);
                         }}
                         className="px-3 py-1.5 text-[11px] rounded-full border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 font-semibold"
@@ -1752,9 +1769,7 @@ Warm regards,
                         onChange={(e) => {
                           const id = e.target.value;
                           setSelectedTemplateId(id);
-                          const tmpl = commentTemplates.find(
-                            (t) => String(t.id) === id
-                          );
+                          const tmpl = commentTemplates.find((t) => String(t.id) === id);
                           if (tmpl) {
                             setCommentText(tmpl.content);
                           }
@@ -1778,14 +1793,11 @@ Warm regards,
                       />
                     </div>
 
-                    <div className="flex justify-between.items-center gap-3">
-                      {Number(detailEnquiry.assigned_to) ===
-                        Number(currentUser.user_id) &&
-                        currentUser.role_name === "Design" && (
+                    <div className="flex justify-between items-center gap-3">
+                      {Number(detailEnquiry.assigned_to) === Number(currentUser.user_id) &&
+                        String(currentUser.role_name || "").toLowerCase().includes("design") && (
                           <button
-                            onClick={() =>
-                              handleMarkDone(detailEnquiry.enquiry_id)
-                            }
+                            onClick={() => handleMarkDone(detailEnquiry.enquiry_id)}
                             className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700"
                           >
                             ✅ Mark Done
@@ -1822,18 +1834,13 @@ Warm regards,
                                 throw new Error(txt || "Failed to add comment");
                               }
                               const activity = await res.json();
-                              setDetailActivities((prev) => [
-                                ...prev,
-                                activity,
-                              ]);
+                              setDetailActivities((prev) => [...prev, activity]);
                               setCommentText("");
                               setSelectedTemplateId("");
                               toast.success("Comment added");
                             } catch (err) {
                               console.error("Add comment error:", err);
-                              toast.error(
-                                err.message || "Failed to add comment"
-                              );
+                              toast.error(err.message || "Failed to add comment");
                             }
                           }}
                           className="px-4 py-2 bg-amber-500 text-white rounded-lg text-xs font-semibold hover:bg-amber-600"
@@ -1849,6 +1856,7 @@ Warm regards,
           </div>
         )}
       </div>
+
       {/* ITEMS REQUIRED FULL VIEW MODAL */}
       {itemsModalOpen && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-40 flex items-center justify-center">
@@ -1860,9 +1868,7 @@ Warm regards,
               <X size={18} />
             </button>
             <div className="px-5 pt-5 pb-3 border-b border-gray-200">
-              <h3 className="text-lg font-bold text-gray-800">
-                Items Required
-              </h3>
+              <h3 className="text-lg font-bold text-gray-800">Items Required</h3>
               {itemsModalTitle && (
                 <p className="text-xs text-gray-500 mt-1">{itemsModalTitle}</p>
               )}
