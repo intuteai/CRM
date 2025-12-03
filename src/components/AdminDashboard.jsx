@@ -60,6 +60,8 @@ function AdminDashboard({ socket }) {
           <DashboardCard to="/customer-list" icon={<Users />} title="Customers" desc="View customer details" />
           <DashboardCard to="/enquiries" icon={<Mail />} title="Enquiries" desc="Manage enquiries" />
           <DashboardCard to="/queries" icon={<MessageSquare />} title="Queries" desc="Manage customer inquiries" />
+          {/* NEW: Quotations card */}
+          <DashboardCard to="/quotation" icon={<FileText />} title="Quotations" desc="Create and manage quotations" />
         </Section>
 
         {/* Inventory & Materials */}

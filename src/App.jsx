@@ -62,8 +62,9 @@ import ActivitiesPage from "./components/ActivitiesPage";
 import HRPayslipForm from "./components/HRPayslipForm";
 import SalesEnquiryPage from "./components/SalesEnquiryPage";
 import DesignEnquiryPage from "./components/DesignEnquiryPage";
+import QuotationForm from "./components/QuotationForm"; // admin quotation page
+import SalesQuotationForm from "./components/SalesQuotationForm"; // sales quotation page
 import "./styles.css";
-
 
 const ROLES = {
   ADMIN: "admin",
@@ -102,6 +103,7 @@ const allowedPathsByRole = {
     "/select-component/:orderId/:action",
     "/processes/:orderId",
     "/processes/non-motor/:orderId",
+    "/quotation", // admin quotation page
   ],
   [ROLES.CUSTOMER]: [
     "/customer-dashboard",
@@ -119,6 +121,7 @@ const allowedPathsByRole = {
     "/sales/enquiries",
     "/dispatch-tracking",
     "/edit-profile",
+    "/sales/quotations", // sales quotation page
   ],
   [ROLES.DESIGN]: [
     "/design-dashboard",
@@ -403,6 +406,22 @@ function App() {
             </ErrorBoundary>
           }
         />
+
+        {/* NEW: Quotation route (admin only) */}
+        <Route
+          path="/quotation"
+          element={
+            userRole === "admin" ? (
+              <ErrorBoundary>
+                <QuotationForm />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        {/* Sales Dashboard */}
         <Route
           path="/sales-dashboard"
           element={
@@ -415,6 +434,21 @@ function App() {
             )
           }
         />
+
+        {/* NEW: Sales Quotations route (sales only) */}
+        <Route
+          path="/sales/quotations"
+          element={
+            userRole === "sales" ? (
+              <ErrorBoundary>
+                <SalesQuotationForm socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
         <Route
           path="/design-dashboard"
           element={
@@ -903,7 +937,7 @@ function App() {
           element={
             userRole === "production" ? (
               <ErrorBoundary>
-                <ProductionBOMPage socket={socket} />
+                <ProductionBOMPage socket={socket} userRole={userRole} />
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />
