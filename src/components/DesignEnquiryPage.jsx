@@ -13,6 +13,10 @@ import "react-toastify/dist/ReactToastify.css";
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 const API_URL = `${BASE_URL}/api/enquiry`;
+// Default SALES user id (backend uses DEFAULT_SALES_USER_ID or 7)
+const SALES_USER_ID = import.meta.env.VITE_DEFAULT_SALES_USER_ID
+  ? parseInt(import.meta.env.VITE_DEFAULT_SALES_USER_ID, 10)
+  : 7;
 
 // Fallback date formatter
 const formatDate = (dateString) => {
@@ -127,7 +131,6 @@ function DesignEnquiryPage({ socket: providedSocket }) {
     source: "Website",
     tagsInput: "",
     due_date: "",
-    // if you create, you may include application here if needed
   });
   const [errors, setErrors] = useState({});
 
@@ -327,7 +330,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         stage,
         due_date,
         assigned_to_name,
-        assigned_to, // ensure backend sends assigned_to
+        assigned_to,
         application,
       } = payload;
 
@@ -663,6 +666,35 @@ function DesignEnquiryPage({ socket: providedSocket }) {
     } catch (err) {
       console.error("Follow toggle error:", err);
       toast.error(err.message || "Failed to update follow state");
+    }
+  };
+
+  // ASSIGN TO SALES (simple action - assigns to default SALES_USER_ID)
+  const assignToSales = async (enquiryId) => {
+    if (!window.confirm(`Assign enquiry #${enquiryId} to Sales (user ${SALES_USER_ID})?`)) return;
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/${enquiryId}/assign`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ assigned_to: SALES_USER_ID, due_date: null, message: "Assigned to Sales via UI" }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || "Failed to assign to Sales");
+      }
+      const updated = await res.json();
+      // update locally
+      setEnquiries((prev) => prev.map((e) => (e.enquiry_id === updated.enquiry_id ? { ...e, ...updated } : e)));
+      setDetailEnquiry((prev) => (prev && prev.enquiry_id === updated.enquiry_id ? { ...prev, ...updated } : prev));
+      toast.success(`Enquiry #${enquiryId} assigned to Sales`);
+      fetchEnquiries(true);
+    } catch (err) {
+      console.error("Assign to Sales error:", err);
+      toast.error(err.message || "Failed to assign to Sales");
     }
   };
 
@@ -1021,6 +1053,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                 {[
                   { label: "Enquiry ID", key: "enquiry_id" },
                   { label: "Company Name", key: "company_name" },
+                  // new Email column
+                  { label: "Email", key: "mail_id" },
                   // new Application column added
                   { label: "Application", key: "application" },
                   { label: "Items Required", key: "items_required" },
@@ -1101,6 +1135,11 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                     </td>
                     <td className="px-6 md:px-8 py-4 text-gray-600">
                       {enquiry.company_name}
+                    </td>
+
+                    {/* Email column (plain text, not clickable) */}
+                    <td className="px-6 md:px-8 py-4 text-gray-600">
+                      {enquiry.mail_id || "N/A"}
                     </td>
 
                     {/* Application column */}
@@ -1238,7 +1277,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
             }
           >
             <div
-              className="absolute z-50 w-48 bg-white border border-gray-200 rounded-xl shadow-2xl py-1 pointer-events-auto"
+              className="absolute z-50 w-52 bg-white border border-gray-200 rounded-xl shadow-2xl py-1 pointer-events-auto"
               style={{
                 left: actionsMenuState.x,
                 top: actionsMenuState.y,
@@ -1271,6 +1310,19 @@ function DesignEnquiryPage({ socket: providedSocket }) {
               >
                 👁️ View
               </button>
+
+              {/* Assign to Sales - visible to non-design/admin-like roles (you can tweak the condition) */}
+              {!(String(currentUser.role_name || "").toLowerCase().includes("design")) && (
+                <button
+                  onClick={() => {
+                    setActionsMenuState((prev) => ({ ...prev, isOpen: false }));
+                    assignToSales(actionsMenuState.enquiry.enquiry_id);
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-amber-50 flex items-center gap-2"
+                >
+                  📤 Assign to Sales
+                </button>
+              )}
 
               {/* MARK DONE - only show if assigned to current Design user */}
               {Number(actionsMenuState.enquiry.assigned_to) ===
@@ -1592,7 +1644,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                       </h2>
                       <p className="text-xs text-gray-500 mt-1">
                         Contact: {detailEnquiry.contact_person || "Not specified"} •
-                        Phone: {detailEnquiry.phone_no || "Not specified"}
+                        Phone: {detailEnquiry.phone_no || "Not specified"} •
+                        Email: {detailEnquiry.mail_id || "Not specified"}
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
@@ -1607,6 +1660,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                       </span>
                       <span className="text-[11px] text-gray-500">
                         Source: {detailEnquiry.source || "Website"}
+                      </span>
+                      <span className="text-[11px] text-gray-500">
+                        Application: {detailEnquiry.application || "N/A"}
                       </span>
                     </div>
                   </div>

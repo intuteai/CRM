@@ -882,6 +882,7 @@ function SalesEnquiryPage({ socket: providedSocket }) {
                   { label: "Source", key: "source" },
                   { label: "Application", key: "application" }, // <-- new column
                   { label: "Contact Person", key: "contact_person" },
+                  { label: "Email", key: "mail_id" }, // <-- ADDED Email header
                   { label: "Phone", key: "phone_no" },
                   { label: "Status", key: "status" },
                   { label: "Due Date", key: "due_date" },
@@ -894,9 +895,14 @@ function SalesEnquiryPage({ socket: providedSocket }) {
                     key={key}
                     onClick={() => key !== "actions" && handleSort(key)}
                     className={`px-3 md:px-4 py-3 text-xs md:text-sm font-bold ${key !== "actions" ? "cursor-pointer hover:bg-amber-400" : ""} transition-all duration-300 whitespace-nowrap border-b border-amber-200 shadow-sm`}
+                    title={key === "mail_id" ? "Email (visible, not clickable)" : label}
                   >
                     <div className="flex justify-between items-center">
-                      {label}
+                      {key === "mail_id" ? (
+                        <span className="max-w-[140px] truncate block">{label}</span>
+                      ) : (
+                        <span>{label}</span>
+                      )}
                       {key !== "actions" && (
                         <ArrowDownUp
                           size={16}
@@ -950,6 +956,21 @@ function SalesEnquiryPage({ socket: providedSocket }) {
                     <td className="px-6 md:px-8 py-4 text-gray-600">{enquiry.source || "Website"}</td>
                     <td className="px-6 md:px-8 py-4 text-gray-600">{enquiry.application || "N/A"}</td> {/* application column */}
                     <td className="px-6 md:px-8 py-4 text-gray-600">{enquiry.contact_person || "N/A"}</td>
+
+                    {/* EMAIL CELL (plain text, truncated) */}
+                    <td className="px-6 md:px-8 py-4 text-gray-600 max-w-[180px]">
+                      {enquiry.mail_id ? (
+                        <span
+                          className="text-amber-700 truncate block max-w-[160px]"
+                          title={enquiry.mail_id}
+                        >
+                          {enquiry.mail_id}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">N/A</span>
+                      )}
+                    </td>
+
                     <td className="px-6 md:px-8 py-4 text-gray-600">{enquiry.phone_no || "N/A"}</td>
                     <td className={`px-6 md:px-8 py-4 text-gray-600 font-semibold ${enquiry.status === "Closed" ? "text-green-600" : enquiry.status === "In Progress" ? "text-yellow-600" : enquiry.status === "Pending" ? "text-gray-600" : "text-red-600"}`}>
                       {enquiry.status}
@@ -1151,7 +1172,7 @@ function SalesEnquiryPage({ socket: providedSocket }) {
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-600 border border-gray-200">#{detailEnquiry.enquiry_id}</span>
                       </div>
                       <h2 className="text-xl font-extrabold text-gray-800">{detailEnquiry.company_name}</h2>
-                      <p className="text-xs text-gray-500 mt-1">Contact: {detailEnquiry.contact_person || "Not specified"} • Phone: {detailEnquiry.phone_no || "Not specified"}</p>
+                      <p className="text-xs text-gray-500 mt-1">Contact: {detailEnquiry.contact_person || "Not specified"} • Phone: {detailEnquiry.phone_no || "Not specified"} • Email: {detailEnquiry.mail_id ? <span className="text-amber-700 ml-1">{detailEnquiry.mail_id}</span> : <span className="text-gray-400 ml-1">Not specified</span>}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className={`px-3 py-1 rounded-full text-[11px] font-semibold border ${getLeadClasses(detailEnquiry.lead || detailEnquiry.priority)}`}>{formatLeadLabel(detailEnquiry.lead || detailEnquiry.priority)}</span>

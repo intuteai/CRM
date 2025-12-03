@@ -1068,6 +1068,7 @@ function EnquiryPage({ socket: providedSocket }) {
                   { label: "Lead Status", key: "lead" },
                   { label: "Source", key: "source" },
                   { label: "Contact Person", key: "contact_person" },
+                  { label: "Email", key: "mail_id" }, // <-- ADDED Email header
                   { label: "Phone", key: "phone_no" },
                   { label: "Status", key: "status" },
                   { label: "Due Date", key: "due_date" },
@@ -1084,9 +1085,18 @@ function EnquiryPage({ socket: providedSocket }) {
                         ? "cursor-pointer hover:bg-amber-400"
                         : ""
                     } transition-all duration-300 whitespace-nowrap border-b border-amber-200 shadow-sm`}
+                    title={key === "mail_id" ? "Email (not clickable)" : label} // tooltip
                   >
                     <div className="flex justify-between items-center">
-                      {label}
+                      <span
+                        className={
+                          key === "mail_id"
+                            ? "max-w-[140px] truncate block" // narrower styling for email
+                            : ""
+                        }
+                      >
+                        {label}
+                      </span>
                       {key !== "actions" && (
                         <ArrowDownUp
                           size={16}
@@ -1134,9 +1144,7 @@ function EnquiryPage({ socket: providedSocket }) {
                       isOverdue ? "border-l-4 border-red-400" : ""
                     }`}
                     style={{
-                      animation: `tableRowFade 0.4s.ease-in ${
-                        index * 0.05
-                      }s both`,
+                      animation: `tableRowFade 0.4s.ease-in ${index * 0.05}s both`,
                     }}
                     onDoubleClick={() => fetchEnquiryDetail(enquiry.enquiry_id)}
                   >
@@ -1198,6 +1206,21 @@ function EnquiryPage({ socket: providedSocket }) {
                     <td className="px-6 md:px-8 py-4 text-gray-600">
                       {enquiry.contact_person || "N/A"}
                     </td>
+
+                    {/* EMAIL CELL (plain text, truncated) */}
+                    <td className="px-6 md:px-8 py-4 text-gray-600 max-w-[180px]">
+                      {enquiry.mail_id ? (
+                        <span
+                          className="text-amber-700 truncate block max-w-[160px]"
+                          title={enquiry.mail_id}
+                        >
+                          {enquiry.mail_id}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">N/A</span>
+                      )}
+                    </td>
+
                     <td className="px-6 md:px-8 py-4 text-gray-600">
                       {enquiry.phone_no || "N/A"}
                     </td>
@@ -1711,7 +1734,15 @@ function EnquiryPage({ socket: providedSocket }) {
                       <p className="text-xs text-gray-500 mt-1">
                         Contact:{" "}
                         {detailEnquiry.contact_person || "Not specified"} •
-                        Phone: {detailEnquiry.phone_no || "Not specified"}
+                        Phone: {detailEnquiry.phone_no || "Not specified"} •
+                        Email:{" "}
+                        {detailEnquiry.mail_id ? (
+                          <span className="text-amber-700 ml-1">
+                            {detailEnquiry.mail_id}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 ml-1">Not specified</span>
+                        )}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         Application: <span className="font-medium">{detailEnquiry.application || "—"}</span>
@@ -1829,9 +1860,7 @@ function EnquiryPage({ socket: providedSocket }) {
                     </h3>
                     <div className="space-y-3">
                       {detailActivities.length === 0 && (
-                        <p className="text-xs text-gray-400">
-                          No activity yet.
-                        </p>
+                        <p className="text-xs text-gray-400">No activity yet.</p>
                       )}
                       {detailActivities.map((act) => {
                         const isAssignment = act.activity_type === "assignment";
