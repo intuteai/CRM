@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
@@ -64,6 +65,8 @@ import SalesEnquiryPage from "./components/SalesEnquiryPage";
 import DesignEnquiryPage from "./components/DesignEnquiryPage";
 import QuotationForm from "./components/QuotationForm"; // admin quotation page
 import SalesQuotationForm from "./components/SalesQuotationForm"; // sales quotation page
+import ProformaForm from "./components/ProformaForm"; // admin proforma page
+import SalesProformaForm from "./components/SalesProformaForm"; // sales proforma page (new)
 import "./styles.css";
 
 const ROLES = {
@@ -104,6 +107,7 @@ const allowedPathsByRole = {
     "/processes/:orderId",
     "/processes/non-motor/:orderId",
     "/quotation", // admin quotation page
+    "/proforma",  // admin proforma page
   ],
   [ROLES.CUSTOMER]: [
     "/customer-dashboard",
@@ -122,6 +126,7 @@ const allowedPathsByRole = {
     "/dispatch-tracking",
     "/edit-profile",
     "/sales/quotations", // sales quotation page
+    "/proforma",         // allow sales access to proforma
   ],
   [ROLES.DESIGN]: [
     "/design-dashboard",
@@ -414,6 +419,20 @@ function App() {
             userRole === "admin" ? (
               <ErrorBoundary>
                 <QuotationForm />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        {/* PROFORMA route - available to ADMIN and SALES */}
+        <Route
+          path="/proforma"
+          element={
+            userRole === "admin" || userRole === "sales" ? (
+              <ErrorBoundary>
+                {userRole === "sales" ? <SalesProformaForm /> : <ProformaForm />}
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />

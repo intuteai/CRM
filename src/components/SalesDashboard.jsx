@@ -40,6 +40,12 @@ function SalesDashboard({ socket }) {
             desc="Generate customer quotations"
           />
           <DashboardCard
+            to="/proforma"
+            icon={<FileText />}
+            title="Proforma Invoices"
+            desc="Create and manage proforma invoices"
+          />
+          <DashboardCard
             to="/sales/enquiries"
             icon={<Mail />}
             title="Enquiries"

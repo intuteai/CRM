@@ -62,6 +62,8 @@ function AdminDashboard({ socket }) {
           <DashboardCard to="/queries" icon={<MessageSquare />} title="Queries" desc="Manage customer inquiries" />
           {/* NEW: Quotations card */}
           <DashboardCard to="/quotation" icon={<FileText />} title="Quotations" desc="Create and manage quotations" />
+          {/* NEW: Proforma Invoices card */}
+          <DashboardCard to="/proforma" icon={<FileText />} title="Proforma Invoices" desc="Create and manage proforma invoices" />
         </Section>
 
         {/* Inventory & Materials */}
