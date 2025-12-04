@@ -16,6 +16,15 @@ const THEME = {
   border: '#e6f4ea',    // light green border for subtle cards
 };
 
+const DEFAULT_TERMS_KEY = 'quotation_default_terms_v1';
+
+const DEFAULT_TERMS_FALLBACK = [
+  "Validity – 10 days from the date of offer",
+  "Price Basis – Ex-Works Faridabad. Packing and forwarding extra.",
+  "Payment Terms – 100% advance with P.O. for initial orders; for regular orders, the payment terms will be as settled at the time of finalization.",
+  "Delivery – 4–6 weeks from the date of receipt of PO along with advance."
+];
+
 const todayIST = () => {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
@@ -52,17 +61,32 @@ export default function QuotationForm() {
   const [loading, setLoading] = useState(false);
   const abortRef = useRef(null);
 
+  // Load default terms from localStorage (if present) or fallback
+  const loadDefaultTerms = () => {
+    try {
+      const raw = localStorage.getItem(DEFAULT_TERMS_KEY);
+      if (!raw) return DEFAULT_TERMS_FALLBACK.slice();
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+      return DEFAULT_TERMS_FALLBACK.slice();
+    } catch (e) {
+      return DEFAULT_TERMS_FALLBACK.slice();
+    }
+  };
+
+  const [defaultTerms, setDefaultTerms] = useState(() => loadDefaultTerms());
+  const [manageTermsOpen, setManageTermsOpen] = useState(false);
+
   const [form, setForm] = useState({
     quotation_no: '2024-25/sales/AA/0001',
     date: todayIST(),
     to_address: '',
+    to_gst_number: '',
     kind_attn: '',
     subject_item: '',
     intro: 'We are pleased to quote you our best prices for the following items:',
-    items: [{ sno: 1, description: '', unit_price: 0, total_price: 0 }],
+    items: [{ sno: 1, description: '', hsn_code: '', qty: 1, unit_price: 0, total_price: 0 }],
     gst_percent: 18,
-    allowOverrideTerms: false,
-    terms: [],
   });
 
   useEffect(() => {
@@ -71,8 +95,25 @@ export default function QuotationForm() {
     };
   }, []);
 
+  // Save default terms to localStorage
+  const saveDefaultTerms = (terms) => {
+    try {
+      localStorage.setItem(DEFAULT_TERMS_KEY, JSON.stringify(terms));
+      setDefaultTerms(terms);
+      toast.success('Default Terms saved');
+    } catch (e) {
+      toast.error('Failed to save default terms');
+    }
+  };
+
+  // subtotal now uses total_price if provided, otherwise qty * unit_price
   const { subtotal, gstAmount, grandTotal } = useMemo(() => {
-    const subtotal = (form.items || []).reduce((s, it) => s + (Number(it.total_price || it.unit_price || 0)), 0);
+    const subtotal = (form.items || []).reduce((s, it) => {
+      const qty = Number(it.qty || 0);
+      const unit = Number(it.unit_price || 0);
+      const total = (it.total_price != null && Number(it.total_price) !== 0) ? Number(it.total_price) : qty * unit;
+      return s + total;
+    }, 0);
     const gstPercent = Number(form.gst_percent || 0);
     const gstAmount = +(subtotal * gstPercent / 100);
     const grandTotal = subtotal + gstAmount;
@@ -80,7 +121,13 @@ export default function QuotationForm() {
   }, [form.items, form.gst_percent]);
 
   const addItem = () => {
-    setForm(prev => ({ ...prev, items: [...prev.items, { sno: prev.items.length + 1, description: '', unit_price: 0, total_price: 0 }] }));
+    setForm(prev => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        { sno: prev.items.length + 1, description: '', hsn_code: '', qty: 1, unit_price: 0, total_price: 0 }
+      ]
+    }));
   };
   const removeItem = (i) => {
     setForm(prev => {
@@ -88,13 +135,32 @@ export default function QuotationForm() {
       return { ...prev, items };
     });
   };
+
+  // updateItem: when qty or unit_price change, recalc total_price = qty * unit_price
   const updateItem = (i, field, val) => {
     setForm(prev => {
       const items = prev.items.slice();
-      items[i] = { ...items[i], [field]: field === 'description' ? val : Number(val || 0) };
-      if (field === 'unit_price') {
-        items[i].total_price = Number(items[i].total_price) === 0 ? Number(val || 0) : items[i].total_price;
+      const item = { ...items[i] };
+
+      if (field === 'description' || field === 'hsn_code') {
+        item[field] = String(val);
+      } else if (field === 'qty') {
+        const qty = Number(val || 0);
+        item.qty = qty;
+        const unit = Number(item.unit_price || 0);
+        item.total_price = +(qty * unit);
+      } else if (field === 'unit_price') {
+        const unit = Number(val || 0);
+        item.unit_price = unit;
+        const qty = Number(item.qty || 0);
+        item.total_price = +(qty * unit);
+      } else if (field === 'total_price') {
+        item.total_price = Number(val || 0);
+      } else {
+        item[field] = val;
       }
+
+      items[i] = item;
       return { ...prev, items };
     });
   };
@@ -113,22 +179,28 @@ export default function QuotationForm() {
     abortRef.current = controller;
 
     try {
+      // Always send the defaultTerms as the Terms & Conditions (single source)
+      const termsToSend = defaultTerms;
+
       const payload = {
         quotation_no: form.quotation_no,
         date: form.date,
         to_address: form.to_address,
+        to_gst_number: form.to_gst_number?.trim() || '',
         kind_attn: form.kind_attn,
         subject_item: form.subject_item,
         intro: form.intro,
         items: form.items.map((it, idx) => ({
           sno: it.sno ?? (idx + 1),
           description: it.description || '—',
+          hsn_code: it.hsn_code || '',
+          qty: Number(it.qty || 0),
           unit_price: Number(it.unit_price || 0),
-          total_price: Number(it.total_price || it.unit_price || 0),
+          total_price: Number(it.total_price != null && Number(it.total_price) !== 0 ? it.total_price : (Number(it.qty || 0) * Number(it.unit_price || 0))),
         })),
         gst_percent: Number(form.gst_percent || 18),
-        allowOverrideTerms: !!form.allowOverrideTerms,
-        terms: form.allowOverrideTerms ? form.terms : undefined,
+        // no per-quotation override: we always send termsToSend
+        terms: termsToSend,
       };
 
       const response = await axios.post(`${API_URL}/api/quotation/generate`, payload, {
@@ -174,6 +246,25 @@ export default function QuotationForm() {
   const primaryBg = { backgroundColor: THEME.primary };
   const cardBorder = { borderColor: THEME.border };
 
+  /* ---------- Terms Manager helpers ---------- */
+  const openManageTerms = () => setManageTermsOpen(true);
+  const closeManageTerms = () => setManageTermsOpen(false);
+
+  // local state used inside Manage Terms modal so edits aren't auto-saved until "Save" clicked
+  const [manageTermsDraft, setManageTermsDraft] = useState(() => defaultTerms.slice());
+  useEffect(() => { setManageTermsDraft(defaultTerms.slice()); }, [manageTermsOpen]); // refresh when modal opens
+
+  const addDefaultTerm = () => setManageTermsDraft(prev => ([...prev, '']));
+  const updateDefaultTermAt = (idx, text) => setManageTermsDraft(prev => prev.map((t, i) => i === idx ? text : t));
+  const removeDefaultTermAt = (idx) => setManageTermsDraft(prev => prev.filter((_, i) => i !== idx));
+  const saveManagedTerms = () => {
+    const clean = manageTermsDraft.map(t => String(t || '').trim()).filter(Boolean);
+    if (clean.length === 0) { toast.error('Please keep at least one term.'); return; }
+    saveDefaultTerms(clean);
+    closeManageTerms();
+  };
+
+  /* ---------- Render ---------- */
   return (
     <div className="p-6">
       <ToastContainer position="top-right" />
@@ -208,6 +299,12 @@ export default function QuotationForm() {
             <div>
               <div className="text-xs" style={{ color: THEME.muted }}>Grand Total</div>
               <div className="font-medium" style={primaryStyle}>₹ {formatINR(grandTotal)}</div>
+            </div>
+
+            {/* show GST under summary if present */}
+            <div>
+              <div className="text-xs" style={{ color: THEME.muted }}>To - GST No</div>
+              <div className="font-medium">{form.to_gst_number || '—'}</div>
             </div>
           </div>
         </div>
@@ -251,6 +348,17 @@ export default function QuotationForm() {
                 <textarea className="w-full border rounded px-3 py-2" rows={3}
                   placeholder="M/s. ABC Industries, Plot 12, ..."
                   value={form.to_address} onChange={e => setForm(prev => ({ ...prev, to_address: e.target.value }))} />
+
+                {/* GST number input for recipient */}
+                <div className="mt-2">
+                  <label className="text-sm" style={{ color: THEME.muted }}>GST No (Recipient)</label>
+                  <input
+                    className="w-64 border rounded px-3 py-2"
+                    placeholder="12ABCDE3456F7Z8"
+                    value={form.to_gst_number}
+                    onChange={e => setForm(prev => ({ ...prev, to_gst_number: String(e.target.value).trim() }))}
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-sm" style={{ color: THEME.muted }}>Kind Attn</label>
@@ -276,6 +384,8 @@ export default function QuotationForm() {
                     <tr className="text-left" style={{ color: THEME.muted }}>
                       <th className="pr-4 pb-2">S. No.</th>
                       <th className="pr-4 pb-2">Description</th>
+                      <th className="pr-4 pb-2">HSN Code</th>
+                      <th className="pr-4 pb-2">Qty</th>
                       <th className="pr-4 pb-2">Unit Price (INR)</th>
                       <th className="pr-4 pb-2">Total Price (INR)</th>
                       <th className="pr-4 pb-2"></th>
@@ -289,6 +399,14 @@ export default function QuotationForm() {
                           <textarea rows={2} className="w-full border rounded px-2 py-1"
                             value={it.description}
                             onChange={e => updateItem(idx, 'description', e.target.value)} />
+                        </td>
+                        <td className="py-2">
+                          <input className="w-28 border rounded px-2 py-1" value={it.hsn_code}
+                            onChange={e => updateItem(idx, 'hsn_code', e.target.value)} />
+                        </td>
+                        <td className="py-2">
+                          <input type="number" min="0" step="1" className="w-20 border rounded px-2 py-1"
+                            value={it.qty} onChange={e => updateItem(idx, 'qty', e.target.value)} />
                         </td>
                         <td className="py-2">
                           <input type="number" step="0.01" className="w-36 border rounded px-2 py-1"
@@ -328,22 +446,16 @@ export default function QuotationForm() {
               </div>
             </div>
 
-            {/* Terms toggle */}
+            {/* Manage Default Terms button */}
             <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={form.allowOverrideTerms}
-                  onChange={e => setForm(prev => ({ ...prev, allowOverrideTerms: e.target.checked }))} />
-                <span className="text-sm">Allow editing Terms & Conditions</span>
-              </label>
-            </div>
-            {form.allowOverrideTerms && (
               <div>
-                <label className="text-sm" style={{ color: THEME.muted }}>Terms (one per line)</label>
-                <textarea rows={4} className="w-full border rounded px-3 py-2"
-                  value={form.terms.join('\n')}
-                  onChange={e => setForm(prev => ({ ...prev, terms: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) }))} />
+                <div className="text-sm" style={{ color: THEME.muted }}>Terms & Conditions</div>
+                <div className="text-xs text-gray-500">Using default terms from Manage Default Terms (editable in settings)</div>
               </div>
-            )}
+              <button type="button" onClick={openManageTerms} className="px-3 py-1 border rounded text-sm ml-2">
+                Manage Default Terms
+              </button>
+            </div>
 
             {/* actions */}
             <div className="flex justify-end gap-3">
@@ -356,6 +468,47 @@ export default function QuotationForm() {
               </button>
             </div>
           </form>
+        </Modal>
+
+        {/* Manage Default Terms Modal */}
+        <Modal
+          isOpen={manageTermsOpen}
+          onRequestClose={closeManageTerms}
+          className="max-w-3xl mx-auto mt-10 bg-white rounded-xl p-6 outline-none shadow-xl"
+          overlayClassName="fixed inset-0 bg-black bg-opacity-40 flex items-start justify-center z-50 overflow-y-auto"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="font-semibold" style={primaryStyle}>Manage Default Terms & Conditions</h4>
+            <div className="flex gap-2">
+              <button onClick={closeManageTerms} className="px-3 py-1 border rounded">Close</button>
+              <button onClick={saveManagedTerms} className="px-3 py-1 bg-green-600 text-white rounded">Save</button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-sm text-gray-600">Edit the default terms that will be used for all quotations. Changes are saved to your browser (localStorage).</div>
+
+            {manageTermsDraft.map((t, i) => (
+              <div key={i} className="flex gap-2 items-start">
+                <textarea
+                  rows={2}
+                  className="flex-1 border rounded px-2 py-1"
+                  value={t}
+                  onChange={(e) => updateDefaultTermAt(i, e.target.value)}
+                />
+                <button onClick={() => removeDefaultTermAt(i)} className="px-2 py-1 text-red-600 border rounded h-10">Remove</button>
+              </div>
+            ))}
+
+            <div className="flex gap-2">
+              <button onClick={addDefaultTerm} className="px-3 py-1 border rounded flex items-center gap-2">
+                <Plus className="w-4 h-4" /> Add Term
+              </button>
+              <button onClick={() => { setManageTermsDraft(DEFAULT_TERMS_FALLBACK.slice()); toast.info('Reset to original default terms'); }} className="px-3 py-1 border rounded">
+                Reset to original
+              </button>
+            </div>
+          </div>
         </Modal>
 
         {/* Preview Modal - simple HTML view */}
@@ -381,6 +534,9 @@ export default function QuotationForm() {
             <div className="mb-4">
               <div><strong>To,</strong></div>
               <div className="whitespace-pre-line">{form.to_address || '……………………………'}</div>
+              <div className="mt-2 text-sm">
+                <strong>GST No:</strong> {form.to_gst_number || '—'}
+              </div>
             </div>
 
             <div className="text-center mb-4">
@@ -396,6 +552,8 @@ export default function QuotationForm() {
                   <tr>
                     <th className="pb-2">S. No.</th>
                     <th className="pb-2">Description</th>
+                    <th className="pb-2">HSN</th>
+                    <th className="pb-2 text-right">Qty</th>
                     <th className="pb-2 text-right">Unit Price (INR)</th>
                     <th className="pb-2 text-right">Total Price (INR)</th>
                   </tr>
@@ -405,8 +563,10 @@ export default function QuotationForm() {
                     <tr key={i}>
                       <td className="py-2 align-top">{i + 1}</td>
                       <td className="py-2 align-top">{it.description || '………………'}</td>
+                      <td className="py-2 align-top">{it.hsn_code || '—'}</td>
+                      <td className="py-2 text-right align-top">{Number(it.qty || 0)}</td>
                       <td className="py-2 text-right align-top">₹ {formatINR(it.unit_price)}</td>
-                      <td className="py-2 text-right align-top">₹ {formatINR(it.total_price || it.unit_price)}</td>
+                      <td className="py-2 text-right align-top">₹ {formatINR((it.total_price != null && Number(it.total_price) !== 0) ? it.total_price : (Number(it.qty || 0) * Number(it.unit_price || 0)))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -433,14 +593,7 @@ export default function QuotationForm() {
             <div className="mt-6">
               <strong>Terms & Conditions:</strong>
               <ol className="ml-4 list-decimal mt-2 space-y-1 text-sm" style={{ color: THEME.muted }}>
-                {!form.allowOverrideTerms ? (
-                  <>
-                    <li>Validity – 10 days from the date of offer</li>
-                    <li>Price Basis – Ex-Works Faridabad. Packing and forwarding extra.</li>
-                    <li>Payment Terms – 100% advance with P.O. for initial orders; for regular orders, the payment terms will be as settled at the time of finalization.</li>
-                    <li>Delivery – 4–6 weeks from the date of receipt of PO along with advance.</li>
-                  </>
-                ) : form.terms.length ? form.terms.map((t, i) => <li key={i}>{t}</li>) : <li>—</li>}
+                {defaultTerms.map((t, i) => <li key={i}>{t}</li>)}
               </ol>
             </div>
 
