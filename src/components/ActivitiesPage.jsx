@@ -186,7 +186,8 @@ function ActivitiesPage({ socket }) {
     (a) => {
       if (!a) return false;
       if (statusFilter !== "all" && a.status !== statusFilter) return false;
-      if (priorityFilter !== "all" && a.priority !== priorityFilter) return false;
+      if (priorityFilter !== "all" && a.priority !== priorityFilter)
+        return false;
       if (assigneeFilter !== "all") {
         const hasAssignee = a.assignees?.some(
           (u) => String(u.user_id) === String(assigneeFilter)
@@ -241,7 +242,8 @@ function ActivitiesPage({ socket }) {
           signal: controller.signal,
         });
 
-        if (currentFetchId !== fetchIdRef.current || !mountedRef.current) return;
+        if (currentFetchId !== fetchIdRef.current || !mountedRef.current)
+          return;
 
         const newData = res.data?.data || [];
         setActivities((prev) => {
@@ -437,6 +439,49 @@ function ActivitiesPage({ socket }) {
     setIsEditOpen(true);
   };
 
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+  //   const token = localStorage.getItem("token");
+  //   if (!token) {
+  //     toast.error("Please log in again");
+  //     return;
+  //   }
+
+  //   const payload = {
+  //     ...form,
+  //     assignee_ids: form.assignee_ids.filter((id) => id),
+  //     due_date: toYMD(form.due_date),
+  //     comments: form.comments?.trim() || "",
+  //   };
+
+  //   if (payload.assignee_ids.length === 0) {
+  //     toast.error("Select at least one assignee");
+  //     return;
+  //   }
+
+  //   const url = editingActivity
+  //     ? `${API_URL}/api/activities/${editingActivity.id}`
+  //     : `${API_URL}/api/activities`;
+
+  //   try {
+  //     if (editingActivity) {
+  //       await axios.put(url, payload, {
+  //         headers: { Authorization: `Bearer ${token}` },
+  //       });
+  //     } else {
+  //       await axios.post(url, payload, {
+  //         headers: { Authorization: `Bearer ${token}` },
+  //       });
+  //     }
+  //     toast.success(editingActivity ? "Updated!" : "Created!");
+  //     setIsCreateOpen(false);
+  //     setIsEditOpen(false);
+  //     setEditingActivity(null);
+  //     // Will be handled by socket
+  //   } catch (err) {
+  //     toast.error(err.response?.data?.error || "Failed");
+  //   }
+  // };
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem("token");
@@ -457,25 +502,37 @@ function ActivitiesPage({ socket }) {
       return;
     }
 
-    const url = editingActivity
+    const isEdit = !!editingActivity;
+    const url = isEdit
       ? `${API_URL}/api/activities/${editingActivity.id}`
       : `${API_URL}/api/activities`;
 
     try {
-      if (editingActivity) {
-        await axios.put(url, payload, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } else {
-        await axios.post(url, payload, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      }
-      toast.success(editingActivity ? "Updated!" : "Created!");
+      const res = isEdit
+        ? await axios.put(url, payload, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        : await axios.post(url, payload, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+      const activityFromServer = res.data;
+
+      setActivities((prev) => {
+        if (isEdit) {
+          return prev.map((a) =>
+            a.id === activityFromServer.id ? activityFromServer : a
+          );
+        } else {
+          const list = [activityFromServer, ...prev];
+          return list.slice(0, MAX_CACHED_ACTIVITIES);
+        }
+      });
+
+      toast.success(isEdit ? "Updated!" : "Created!");
       setIsCreateOpen(false);
       setIsEditOpen(false);
       setEditingActivity(null);
-      // Will be handled by socket
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed");
     }
@@ -600,45 +657,84 @@ function ActivitiesPage({ socket }) {
             <table className="w-full">
               <thead className="bg-gradient-to-r from-amber-100 to-orange-50">
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200" onClick={() => requestSort("id")}>
+                  <th
+                    className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200"
+                    onClick={() => requestSort("id")}
+                  >
                     ID {getSortIcon("id")}
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200" onClick={() => requestSort("summary")}>
+                  <th
+                    className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200"
+                    onClick={() => requestSort("summary")}
+                  >
                     Summary {getSortIcon("summary")}
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200" onClick={() => requestSort("status")}>
+                  <th
+                    className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200"
+                    onClick={() => requestSort("status")}
+                  >
                     Status {getSortIcon("status")}
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200" onClick={() => requestSort("assignees")}>
-                    <div className="flex items-center gap-1"><Users className="w-4 h-4" /> Assignees</div>
+                  <th
+                    className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200"
+                    onClick={() => requestSort("assignees")}
+                  >
+                    <div className="flex items-center gap-1">
+                      <Users className="w-4 h-4" /> Assignees
+                    </div>
                     {getSortIcon("assignees")}
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200" onClick={() => requestSort("due_date")}>
-                    <div className="flex items-center gap-1"><Calendar className="w-4 h-4" /> Due</div>
+                  <th
+                    className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200"
+                    onClick={() => requestSort("due_date")}
+                  >
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4" /> Due
+                    </div>
                     {getSortIcon("due_date")}
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200" onClick={() => requestSort("priority")}>
-                    <div className="flex items-center gap-1"><Flag className="w-4 h-4" /> Priority</div>
+                  <th
+                    className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200"
+                    onClick={() => requestSort("priority")}
+                  >
+                    <div className="flex items-center gap-1">
+                      <Flag className="w-4 h-4" /> Priority
+                    </div>
                     {getSortIcon("priority")}
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200" onClick={() => requestSort("comments")}>
-                    <div className="flex items-center gap-1"><MessageSquare className="w-4 h-4" /> Comments</div>
+                  <th
+                    className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200"
+                    onClick={() => requestSort("comments")}
+                  >
+                    <div className="flex items-center gap-1">
+                      <MessageSquare className="w-4 h-4" /> Comments
+                    </div>
                     {getSortIcon("comments")}
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Actions</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {sortedActivities.length === 0 && !loading ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                    <td
+                      colSpan={8}
+                      className="px-6 py-12 text-center text-gray-500"
+                    >
                       No activities found
                     </td>
                   </tr>
                 ) : (
                   sortedActivities.map((a) => (
-                    <tr key={a.id} className="hover:bg-amber-50 transition-colors">
-                      <td className="px-6 py-4 text-sm font-mono text-gray-600">#{a.id}</td>
+                    <tr
+                      key={a.id}
+                      className="hover:bg-amber-50 transition-colors"
+                    >
+                      <td className="px-6 py-4 text-sm font-mono text-gray-600">
+                        #{a.id}
+                      </td>
                       <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
                         {a.summary ? (
                           <button
@@ -646,14 +742,18 @@ function ActivitiesPage({ socket }) {
                             className="text-left text-amber-700 hover:text-amber-900 underline truncate block w-full"
                             title="Click to view full summary"
                           >
-                            {a.summary.length > 60 ? `${a.summary.slice(0, 60)}…` : a.summary}
+                            {a.summary.length > 60
+                              ? `${a.summary.slice(0, 60)}…`
+                              : a.summary}
                           </button>
                         ) : (
                           <span className="text-gray-400 italic">—</span>
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[a.status]}`}>
+                        <span
+                          className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[a.status]}`}
+                        >
                           {a.status.replace("_", " ")}
                         </span>
                       </td>
@@ -661,7 +761,10 @@ function ActivitiesPage({ socket }) {
                         {a.assignees?.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {a.assignees.map((u) => (
-                              <span key={u.user_id} className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded">
+                              <span
+                                key={u.user_id}
+                                className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded"
+                              >
                                 {u.name}
                               </span>
                             ))}
@@ -674,7 +777,9 @@ function ActivitiesPage({ socket }) {
                         {a.due_date ? formatDisplayDate(a.due_date) : "-"}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${PRIORITY_COLORS[a.priority]}`}>
+                        <span
+                          className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${PRIORITY_COLORS[a.priority]}`}
+                        >
                           {a.priority}
                         </span>
                       </td>
@@ -682,10 +787,12 @@ function ActivitiesPage({ socket }) {
                         {a.comments ? (
                           <button
                             onClick={() => setCommentModal(a.comments)}
-                            className="text-left text-amber-700 hover:text-amber-900 underline truncate block w-full"
+                            className="text-left text-gray-800 hover:text-gray-900 truncate block w-full"
                             title="Click to view full comment"
                           >
-                            {a.comments.length > 60 ? `${a.comments.slice(0, 60)}…` : a.comments}
+                            {a.comments.length > 60
+                              ? `${a.comments.slice(0, 60)}…`
+                              : a.comments}
                           </button>
                         ) : (
                           <span className="text-gray-400 italic">—</span>
@@ -737,50 +844,97 @@ function ActivitiesPage({ socket }) {
       </div>
 
       {/* Modals remain exactly the same */}
-      <Modal isOpen={!!summaryModal} onRequestClose={() => setSummaryModal(null)} className="bg-white rounded-2xl p-6 max-w-2xl mx-auto mt-20 shadow-2xl outline-none max-h-screen overflow-y-auto" overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <Modal
+        isOpen={!!summaryModal}
+        onRequestClose={() => setSummaryModal(null)}
+        className="bg-white rounded-2xl p-6 max-w-2xl mx-auto mt-20 shadow-2xl outline-none max-h-screen overflow-y-auto"
+        overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      >
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-gray-800">Full Summary</h3>
-          <button onClick={() => setSummaryModal(null)} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
+          <button
+            onClick={() => setSummaryModal(null)}
+            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+          >
             <X className="w-5 h-5 text-gray-600" />
           </button>
         </div>
         <div className="bg-gray-50 p-4 rounded-xl">
-          <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans break-words">{summaryModal}</pre>
+          <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans break-words">
+            {summaryModal}
+          </pre>
         </div>
       </Modal>
 
-      <Modal isOpen={!!commentModal} onRequestClose={() => setCommentModal(null)} className="bg-white rounded-2xl p-6 max-w-2xl mx-auto mt-20 shadow-2xl outline-none max-h-screen overflow-y-auto" overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <Modal
+        isOpen={!!commentModal}
+        onRequestClose={() => setCommentModal(null)}
+        className="bg-white rounded-2xl p-6 max-w-2xl mx-auto mt-20 shadow-2xl outline-none max-h-screen overflow-y-auto"
+        overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      >
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-gray-800">Full Comment</h3>
-          <button onClick={() => setCommentModal(null)} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
+          <button
+            onClick={() => setCommentModal(null)}
+            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+          >
             <X className="w-5 h-5 text-gray-600" />
           </button>
         </div>
         <div className="bg-gray-50 p-4 rounded-xl">
-          <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans break-words">{commentModal}</pre>
+          <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans break-words">
+            {commentModal}
+          </pre>
         </div>
       </Modal>
 
-      <Modal isOpen={isCreateOpen || isEditOpen} onRequestClose={closeModal} className="bg-white rounded-2xl p-8 max-w-2xl mx-auto mt-20 shadow-2xl outline-none overflow-y-auto max-h-screen" overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <Modal
+        isOpen={isCreateOpen || isEditOpen}
+        onRequestClose={closeModal}
+        className="bg-white rounded-2xl p-8 max-w-2xl mx-auto mt-20 shadow-2xl outline-none overflow-y-auto max-h-screen"
+        overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      >
         {/* Create/Edit form - unchanged */}
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">{editingActivity ? "Edit Activity" : "New Activity"}</h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">
+          {editingActivity ? "Edit Activity" : "New Activity"}
+        </h2>
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Summary</label>
-            <input type="text" required className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 focus:outline-none" value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Summary
+            </label>
+            <input
+              type="text"
+              required
+              className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 focus:outline-none"
+              value={form.summary}
+              onChange={(e) => setForm({ ...form, summary: e.target.value })}
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Status
+              </label>
+              <select
+                className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+              >
                 <option value="todo">To Do</option>
                 <option value="in_progress">In Progress</option>
                 <option value="done">Done</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-              <select className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Priority
+              </label>
+              <select
+                className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+                value={form.priority}
+                onChange={(e) => setForm({ ...form, priority: e.target.value })}
+              >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
@@ -789,13 +943,20 @@ function ActivitiesPage({ socket }) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Assignees</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Assignees
+            </label>
             <div className="border border-amber-200 rounded-xl p-4 max-h-48 overflow-y-auto space-y-2">
               {assignees.length === 0 ? (
-                <p className="text-sm text-gray-500">No team members available</p>
+                <p className="text-sm text-gray-500">
+                  No team members available
+                </p>
               ) : (
                 assignees.map((u) => (
-                  <label key={u.user_id} className="flex items-center gap-3 p-2 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors">
+                  <label
+                    key={u.user_id}
+                    className="flex items-center gap-3 p-2 hover:bg-amber-50 rounded-lg cursor-pointer transition-colors"
+                  >
                     <input
                       type="checkbox"
                       className="w-4 h-4 text-amber-500 border-amber-300 rounded focus:ring-amber-300 focus:ring-2 cursor-pointer"
@@ -803,9 +964,17 @@ function ActivitiesPage({ socket }) {
                       onChange={(e) => {
                         const id = String(u.user_id);
                         if (e.target.checked) {
-                          setForm({ ...form, assignee_ids: [...form.assignee_ids, id] });
+                          setForm({
+                            ...form,
+                            assignee_ids: [...form.assignee_ids, id],
+                          });
                         } else {
-                          setForm({ ...form, assignee_ids: form.assignee_ids.filter((aid) => aid !== id) });
+                          setForm({
+                            ...form,
+                            assignee_ids: form.assignee_ids.filter(
+                              (aid) => aid !== id
+                            ),
+                          });
                         }
                       }}
                     />
@@ -816,17 +985,29 @@ function ActivitiesPage({ socket }) {
             </div>
             {form.assignee_ids.length > 0 && (
               <p className="text-xs text-amber-600 mt-2">
-                {form.assignee_ids.length} assignee{form.assignee_ids.length > 1 ? "s" : ""} selected
+                {form.assignee_ids.length} assignee
+                {form.assignee_ids.length > 1 ? "s" : ""} selected
               </p>
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
-            <input type="date" className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300" value={toYMD(form.due_date)} onChange={(e) => setForm({ ...form, due_date: toYMD(e.target.value) })} />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Due Date
+            </label>
+            <input
+              type="date"
+              className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+              value={toYMD(form.due_date)}
+              onChange={(e) =>
+                setForm({ ...form, due_date: toYMD(e.target.value) })
+              }
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              <div className="flex items-center gap-1"><MessageSquare className="w-4 h-4" /> Comments (optional)</div>
+              <div className="flex items-center gap-1">
+                <MessageSquare className="w-4 h-4" /> Comments (optional)
+              </div>
             </label>
             <textarea
               ref={textareaRef}
@@ -838,10 +1019,17 @@ function ActivitiesPage({ socket }) {
             />
           </div>
           <div className="flex justify-end gap-3 pt-4">
-            <button type="button" onClick={closeModal} className="px-6 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-all">
+            <button
+              type="button"
+              onClick={closeModal}
+              className="px-6 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-all"
+            >
               Cancel
             </button>
-            <button type="submit" className="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded-xl shadow-lg hover:shadow-xl transition-all">
+            <button
+              type="submit"
+              className="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded-xl shadow-lg hover:shadow-xl transition-all"
+            >
               {editingActivity ? "Update" : "Create"}
             </button>
           </div>
