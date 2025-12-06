@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import useProblems from '../hooks/useProblems';
+import useProblems from '../../hooks/useProblems';
 import { toast } from 'react-toastify';
-import { formatDate } from '../utils/helpers';
+import { formatDate } from '../../utils/helpers';
 import { RefreshCw, Search, AlertCircle, CheckCircle, XCircle, Filter } from 'lucide-react';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';

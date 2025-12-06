@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { formatDate as importedFormatDate } from '../utils/helpers';
+import { formatDate as importedFormatDate } from '../../utils/helpers';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle } from 'lucide-react';
@@ -8,40 +8,38 @@ import { io } from 'socket.io-client';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
-// Fallback formatDate function
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
-  
   if (typeof importedFormatDate === 'function') {
     return importedFormatDate(dateString);
   }
-  
   try {
     const date = new Date(dateString);
-    return date.toLocaleDateString();
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   } catch (error) {
     console.error('Error formatting date:', error);
     return dateString;
   }
 };
 
-function PdiPage({ socket: providedSocket }) {
-  const [pdiReports, setPdiReports] = useState([]);
+function DispatchTrackingPage({ socket: providedSocket }) {
+  const [dispatchRecords, setDispatchRecords] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [selectedReport, setSelectedReport] = useState(null);
+  const [selectedRecord, setSelectedRecord] = useState(null);
   const [formData, setFormData] = useState({
-    report_link: '',
-    inspection_date: '',
+    tracking_id: '',
+    docket_number: '',
+    dispatch_date: '',
+    delivery_date: '',
     status: 'Pending',
   });
-  const [sortConfig, setSortConfig] = useState({ key: 'report_id', direction: 'desc' });
-  const [cursor, setCursor] = useState(null);
-  const [cursorStack, setCursorStack] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ key: 'sr_no', direction: 'asc' });
+  const [offset, setOffset] = useState(0);
   const [limit] = useState(10);
   const tableRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -60,64 +58,28 @@ function PdiPage({ socket: providedSocket }) {
     [providedSocket]
   );
 
-  const fetchPdiReports = useCallback(async () => {
+  const fetchDispatchRecords = useCallback(async () => {
     if (isFetching.current) return;
-    
     isFetching.current = true;
     setIsLoading(true);
     setError(null);
-    
     try {
       const token = localStorage.getItem('token');
-      const url = cursor
-        ? `${BASE_URL}/api/pdi?limit=${limit}&cursor=${encodeURIComponent(cursor)}&force_refresh=true`
-        : `${BASE_URL}/api/pdi?limit=${limit}&force_refresh=true`;
-      
-      console.log('Fetching PDI reports from:', url);
-      
+      const url = `${BASE_URL}/api/dispatch-tracking?limit=${limit}&offset=${offset}&force_refresh=true`;
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
-
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(errorText || `Server responded with status: ${response.status}`);
       }
-
       const responseData = await response.json();
-      console.log('Fetched response:', responseData);
-      
-      if (!responseData.data || !Array.isArray(responseData.data)) {
+      if (!Array.isArray(responseData)) {
         throw new Error('Invalid data format');
       }
-      
-      if (responseData.data.length > 0 || cursor === null) {
-        setPdiReports(responseData.data);
-        setTotalItems(responseData.total || 0);
-        
-        if (responseData.cursor && responseData.cursor !== cursor) {
-          if (cursor !== null) {
-            setCursorStack(prev => [...prev, cursor]);
-          }
-          setCursor(responseData.cursor);
-        } else if (!responseData.cursor && responseData.data.length === 0) {
-          if (cursorStack.length > 0) {
-            // No-op: handled by prev/next navigation
-          } else {
-            setCursor(null);
-          }
-        }
-      } else if (responseData.data.length === 0 && cursor !== null) {
-        if (cursorStack.length > 0) {
-          const previousCursor = cursorStack[cursorStack.length - 1];
-          setCursorStack(prev => prev.slice(0, -1));
-          setCursor(previousCursor);
-        } else {
-          setCursor(null);
-        }
-      }
+      setDispatchRecords(responseData);
+      setTotalItems(responseData.length >= limit ? offset + responseData.length + 1 : offset + responseData.length);
     } catch (err) {
-      console.error('Error fetching PDI reports:', err);
       const errorMessage = err.message || 'Network error. Please try again later.';
       setError(errorMessage);
       toast.error(errorMessage, { autoClose: 3000 });
@@ -125,69 +87,61 @@ function PdiPage({ socket: providedSocket }) {
       setIsLoading(false);
       isFetching.current = false;
     }
-  }, [cursor, limit, cursorStack]);
+  }, [limit, offset]);
 
   useEffect(() => {
     if (!hasFetched.current) {
-      fetchPdiReports();
+      fetchDispatchRecords();
       hasFetched.current = true;
     }
-
     const handleConnect = () => {
-      console.log('Connected to Socket.IO in PdiPage');
       toast.success('Connected to real-time updates!', { autoClose: 2000 });
     };
-
     const handleConnectError = (err) => {
-      console.error('Socket connection error:', err);
       toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
     };
-
-    const handlePdiUpdate = ({ report_id, status, inspection_date, report_link }) => {
-      setPdiReports((prev) => {
+    const handleDispatchUpdate = ({ tracking_id, docket_number, dispatch_date, delivery_date, status }) => {
+      setDispatchRecords((prev) => {
         if (!Array.isArray(prev)) return prev || [];
-
         if (status === 'Deleted') {
-          toast.info(`PDI report #${report_id} deleted`, { autoClose: 2000 });
-          return prev.filter((report) => report.report_id !== report_id);
+          toast.info(`Dispatch record #${tracking_id} deleted`, { autoClose: 2000 });
+          return prev.filter((record) => record.tracking_id !== tracking_id);
         }
-
-        const reportIndex = prev.findIndex((report) => report.report_id === report_id);
-        if (reportIndex === -1) return prev;
-
-        const reportToUpdate = prev[reportIndex];
+        const recordIndex = prev.findIndex((record) => record.tracking_id === tracking_id);
+        if (recordIndex === -1) return prev;
+        const recordToUpdate = prev[recordIndex];
         if (
-          reportToUpdate.status === status &&
-          reportToUpdate.inspection_date === inspection_date &&
-          reportToUpdate.report_link === report_link
+          recordToUpdate.tracking_id === tracking_id &&
+          recordToUpdate.docket_number === docket_number &&
+          recordToUpdate.dispatch_date === dispatch_date &&
+          recordToUpdate.delivery_date === delivery_date &&
+          recordToUpdate.status === status
         ) {
           return prev;
         }
-
-        const updatedReports = [...prev];
-        updatedReports[reportIndex] = {
-          ...reportToUpdate,
+        const updatedRecords = [...prev];
+        updatedRecords[recordIndex] = {
+          ...recordToUpdate,
+          tracking_id,
+          docket_number,
+          dispatch_date,
+          delivery_date,
           status,
-          inspection_date,
-          report_link,
         };
-
-        toast.info(`PDI report #${report_id} updated`, { autoClose: 2000 });
-        return updatedReports;
+        toast.info(`Dispatch record #${tracking_id} updated`, { autoClose: 2000 });
+        return updatedRecords;
       });
     };
-
     socket.on('connect', handleConnect);
     socket.on('connect_error', handleConnectError);
-    socket.on('pdiUpdate', handlePdiUpdate);
-
+    socket.on('dispatchUpdate', handleDispatchUpdate);
     return () => {
       socket.off('connect', handleConnect);
       socket.off('connect_error', handleConnectError);
-      socket.off('pdiUpdate', handlePdiUpdate);
+      socket.off('dispatchUpdate', handleDispatchUpdate);
       if (!providedSocket) socket.disconnect();
     };
-  }, [fetchPdiReports, socket, providedSocket]);
+  }, [fetchDispatchRecords, socket, providedSocket]);
 
   const handleSort = useCallback((key) => {
     setSortConfig((prev) => ({
@@ -203,36 +157,29 @@ function PdiPage({ socket: providedSocket }) {
     }
   }, []);
 
-  const filteredPdiReports = useMemo(() => {
-    if (!Array.isArray(pdiReports)) return [];
-
-    return pdiReports.filter((item) => {
+  const filteredDispatchRecords = useMemo(() => {
+    if (!Array.isArray(dispatchRecords)) return [];
+    return dispatchRecords.filter((item) => {
       if (!item) return false;
-
       const searchFields = [
-        String(item.report_id || ''),
+        String(item.tracking_id || ''),
         String(item.sr_no || ''),
-        String(item.customer_id || ''),
         String(item.order_id || ''),
+        String(item.docket_number || ''),
         String(item.status || ''),
-        String(item.inspected_by || ''),
       ];
-
       return searchFields.some((field) =>
         field.toLowerCase().includes(searchTerm.toLowerCase())
       );
     });
-  }, [pdiReports, searchTerm]);
+  }, [dispatchRecords, searchTerm]);
 
-  const sortedPdiReports = useMemo(() => {
-    if (!filteredPdiReports.length) return [];
-
-    const sortableReports = [...filteredPdiReports];
-
-    return sortableReports.sort((a, b) => {
+  const sortedDispatchRecords = useMemo(() => {
+    if (!filteredDispatchRecords.length) return [];
+    const sortableRecords = [...filteredDispatchRecords];
+    return sortableRecords.sort((a, b) => {
       const valueA = a[sortConfig.key] ?? '';
       const valueB = b[sortConfig.key] ?? '';
-
       if (valueA < valueB) {
         return sortConfig.direction === 'asc' ? -1 : 1;
       }
@@ -241,16 +188,20 @@ function PdiPage({ socket: providedSocket }) {
       }
       return 0;
     });
-  }, [filteredPdiReports, sortConfig]);
+  }, [filteredDispatchRecords, sortConfig]);
 
-  const handleEdit = useCallback((report) => {
-    setSelectedReport(report);
+  const handleEdit = useCallback((record) => {
+    setSelectedRecord(record);
     setFormData({
-      report_link: report.report_link || '',
-      inspection_date: report.inspection_date
-        ? new Date(report.inspection_date).toISOString().split('T')[0]
+      tracking_id: record.tracking_id || '',
+      docket_number: record.docket_number || '',
+      dispatch_date: record.dispatch_date
+        ? new Date(record.dispatch_date).toISOString().split('T')[0]
         : '',
-      status: report.status || 'Pending',
+      delivery_date: record.delivery_date
+        ? new Date(record.delivery_date).toISOString().split('T')[0]
+        : '',
+      status: record.status || 'Pending',
     });
     setShowModal(true);
   }, []);
@@ -258,35 +209,34 @@ function PdiPage({ socket: providedSocket }) {
   const handleUpdate = useCallback(
     async (e) => {
       e.preventDefault();
-      if (!selectedReport) return;
+      if (!selectedRecord) return;
       setUploading(true);
-
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${BASE_URL}/api/pdi/${selectedReport.report_id}`, {
+        const response = await fetch(`${BASE_URL}/api/dispatch-tracking/${selectedRecord.tracking_id}`, {
           method: 'PUT',
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            report_link: formData.report_link,
-            inspection_date: formData.inspection_date,
+            tracking_id: formData.tracking_id,
+            docket_number: formData.docket_number || null,
+            dispatch_date: formData.dispatch_date || null,
+            delivery_date: formData.delivery_date || null,
             status: formData.status,
           }),
         });
-
         if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `Update failed with status: ${response.status}`);
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Update failed with status: ${response.status}`);
         }
-
-        const updatedReport = await response.json();
-        setPdiReports((prev) =>
-          prev.map((r) => (r.report_id === updatedReport.report_id ? updatedReport : r))
+        const updatedRecord = await response.json();
+        setDispatchRecords((prev) =>
+          prev.map((r) => (r.tracking_id === updatedRecord.tracking_id ? updatedRecord : r))
         );
         setShowModal(false);
-        toast.success(`PDI report #${updatedReport.report_id} updated successfully!`, {
+        toast.success(`Dispatch record #${updatedRecord.tracking_id} updated successfully!`, {
           autoClose: 2000,
         });
       } catch (err) {
@@ -296,14 +246,13 @@ function PdiPage({ socket: providedSocket }) {
         setUploading(false);
       }
     },
-    [selectedReport, formData]
+    [selectedRecord, formData]
   );
 
   const ActionsDropdown = useCallback(
-    ({ report, onEdit }) => {
+    ({ record, onEdit }) => {
       const [isOpen, setIsOpen] = useState(false);
       const dropdownRef = useRef(null);
-
       useEffect(() => {
         const handleClickOutside = (event) => {
           if (dropdownRef.current && !dropdownRef.current.contains(event.target))
@@ -312,13 +261,12 @@ function PdiPage({ socket: providedSocket }) {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
       }, []);
-
       return (
         <div ref={dropdownRef} className="relative">
           <button
             onClick={() => setIsOpen(!isOpen)}
             className="p-2 hover:bg-gray-100 rounded-full"
-            aria-label={`Actions for PDI report ${report.report_id}`}
+            aria-label={`Actions for dispatch record ${record.tracking_id}`}
           >
             <MoreVertical size={20} />
           </button>
@@ -326,7 +274,7 @@ function PdiPage({ socket: providedSocket }) {
             <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
               <button
                 onClick={() => {
-                  onEdit(report);
+                  onEdit(record);
                   setIsOpen(false);
                 }}
                 className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -342,41 +290,30 @@ function PdiPage({ socket: providedSocket }) {
   );
 
   const handlePrevPage = useCallback(() => {
-    if (cursorStack.length > 0) {
-      const previousCursor = cursorStack.pop();
-      setCursorStack([...cursorStack]);
-      setCursor(previousCursor);
-    } else {
-      setCursor(null);
+    if (offset > 0) {
+      setOffset((prev) => Math.max(0, prev - limit));
     }
-  }, [cursorStack]);
+  }, [offset, limit]);
 
   const handleNextPage = useCallback(() => {
-    if (pdiReports.length > 0 && !isLoading) {
-      const lastReport = pdiReports[pdiReports.length - 1];
-      if (lastReport && lastReport.inspection_date) {
-        if (cursor !== null) {
-          setCursorStack(prev => [...prev, cursor]);
-        }
-        setCursor(lastReport.inspection_date);
-      }
+    if (dispatchRecords.length >= limit) {
+      setOffset((prev) => prev + limit);
     }
-  }, [pdiReports, cursor, isLoading]);
+  }, [dispatchRecords, limit]);
 
   const handleRefresh = useCallback(() => {
-    setCursor(null);
-    setCursorStack([]);
+    setOffset(0);
     hasFetched.current = false;
-    fetchPdiReports();
-  }, [fetchPdiReports]);
+    fetchDispatchRecords();
+  }, [fetchDispatchRecords]);
 
-  if (isLoading && !pdiReports.length) {
+  if (isLoading && !dispatchRecords.length) {
     return (
       <div
         className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
         aria-live="polite"
       >
-        <div className="text-gray-600 text-xl animate-pulse">Loading PDI Reports...</div>
+        <div className="text-gray-600 text-xl animate-pulse">Loading Dispatch Records...</div>
       </div>
     );
   }
@@ -393,9 +330,8 @@ function PdiPage({ socket: providedSocket }) {
             onClick={() => {
               setError(null);
               hasFetched.current = false;
-              setCursor(null);
-              setCursorStack([]);
-              fetchPdiReports();
+              setOffset(0);
+              fetchDispatchRecords();
             }}
             className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
           >
@@ -406,7 +342,7 @@ function PdiPage({ socket: providedSocket }) {
     );
   }
 
-  if (pdiReports.length === 0 && !isLoading) {
+  if (dispatchRecords.length === 0 && !isLoading) {
     return (
       <div
         className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
@@ -414,9 +350,9 @@ function PdiPage({ socket: providedSocket }) {
       >
         <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
           <RefreshCw className="mx-auto mb-4 text-gray-400" size={48} />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">No PDI Reports Yet</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">No Dispatch Records Yet</h2>
           <p className="text-gray-600 mb-6">
-            Your database is empty. PDI reports will appear here once created!
+            Your database is empty. Dispatch records will appear here once available!
           </p>
         </div>
       </div>
@@ -426,19 +362,19 @@ function PdiPage({ socket: providedSocket }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-        PDI Reports
+        Dispatch Tracking
       </h1>
       <div className="max-w-7xl mx-auto">
         <div className="flex mb-8 gap-6 flex-wrap">
           <div className="relative flex-grow">
-            <label htmlFor="search-pdi" className="sr-only">
-              Search PDI Reports
+            <label htmlFor="search-dispatch" className="sr-only">
+              Search Dispatch Records
             </label>
             <input
-              id="search-pdi"
+              id="search-dispatch"
               ref={searchInputRef}
               type="text"
-              placeholder="Search by Report ID, Customer ID, Order ID, Status, or Inspected By..."
+              placeholder="Search by Tracking ID, Sr. No., Order ID, Docket Number, or Status..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -450,23 +386,21 @@ function PdiPage({ socket: providedSocket }) {
             onClick={handleRefresh}
             className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
             disabled={isLoading}
-            aria-label="Refresh PDI reports"
+            aria-label="Refresh dispatch records"
           >
-            {isLoading && pdiReports.length > 0 ? 'Refreshing...' : 'Refresh'}
+            {isLoading && dispatchRecords.length > 0 ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
-
-        {isLoading && pdiReports.length > 0 && (
+        {isLoading && dispatchRecords.length > 0 && (
           <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">
             Refreshing data...
           </div>
         )}
-
         <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
           <table
             className="w-full text-left border-collapse"
             role="grid"
-            aria-label="PDI Reports table"
+            aria-label="Dispatch Tracking table"
             ref={tableRef}
             tabIndex={0}
           >
@@ -477,13 +411,12 @@ function PdiPage({ socket: providedSocket }) {
               >
                 {[
                   { key: 'sr_no', label: 'Sr. No.' },
-                  { key: 'customer_id', label: 'Customer ID' },
+                  { key: 'tracking_id', label: 'Tracking ID' },
                   { key: 'order_id', label: 'Order ID' },
-                  { key: 'report_id', label: 'Report ID' },
+                  { key: 'docket_number', label: 'Docket Number' },
+                  { key: 'dispatch_date', label: 'Dispatch Date' },
+                  { key: 'delivery_date', label: 'Delivery Date' },
                   { key: 'status', label: 'Status' },
-                  { key: 'inspected_by', label: 'Inspected By' },
-                  { key: 'inspection_date', label: 'Inspection Date' },
-                  { key: 'report_link', label: 'PDI Report Link' },
                   { key: 'actions', label: 'Actions' },
                 ].map(({ key, label }) => (
                   <th
@@ -518,64 +451,49 @@ function PdiPage({ socket: providedSocket }) {
               </tr>
             </thead>
             <tbody>
-              {sortedPdiReports.map((report) => (
+              {sortedDispatchRecords.map((record) => (
                 <tr
-                  key={report.report_id}
+                  key={record.tracking_id}
                   className="border-t hover:bg-amber-50 transition-all duration-200"
                   role="row"
                 >
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.sr_no}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.customer_id || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.order_id || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.report_id}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{record.sr_no}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{record.tracking_id}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{record.order_id || 'N/A'}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{record.docket_number || 'N/A'}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">
+                    {record.dispatch_date ? formatDate(record.dispatch_date) : 'N/A'}
+                  </td>
+                  <td className="py-4 px-3 text-gray-600 text-base">
+                    {record.delivery_date ? formatDate(record.delivery_date) : 'N/A'}
+                  </td>
                   <td
                     className={`py-4 px-3 text-base ${
-                      report.status === 'Completed'
+                      record.status === 'Delivered'
                         ? 'text-green-600'
-                        : report.status === 'In Progress'
+                        : record.status === 'Shipped'
                         ? 'text-yellow-600'
-                        : report.status === 'Failed'
-                        ? 'text-red-600'
                         : 'text-gray-600'
                     }`}
                   >
-                    {report.status}
-                  </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.inspected_by || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    {report.inspection_date ? formatDate(report.inspection_date) : 'N/A'}
+                    {record.status}
                   </td>
                   <td className="py-4 px-3 text-gray-600 text-base">
-                    {report.report_link ? (
-                      <a
-                        href={report.report_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 underline"
-                      >
-                        View Report
-                      </a>
-                    ) : (
-                      'N/A'
-                    )}
-                  </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    <ActionsDropdown report={report} onEdit={handleEdit} />
+                    <ActionsDropdown record={record} onEdit={handleEdit} />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600">
-                Showing {sortedPdiReports.length} of {totalItems} PDI reports
+                Showing {sortedDispatchRecords.length} of {totalItems} dispatch records
               </div>
               <div className="flex space-x-2">
                 <button
                   onClick={handlePrevPage}
-                  disabled={cursorStack.length === 0 && cursor === null}
+                  disabled={offset === 0}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Previous page"
                 >
@@ -583,7 +501,7 @@ function PdiPage({ socket: providedSocket }) {
                 </button>
                 <button
                   onClick={handleNextPage}
-                  disabled={pdiReports.length < limit || isLoading}
+                  disabled={dispatchRecords.length < limit || isLoading}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Next page"
                 >
@@ -592,24 +510,22 @@ function PdiPage({ socket: providedSocket }) {
               </div>
             </div>
           )}
-
-          {sortedPdiReports.length === 0 && (
+          {sortedDispatchRecords.length === 0 && (
             <div
               className="text-center py-12 text-gray-500 flex flex-col items-center"
               role="alert"
             >
               <Search className="mb-4 text-gray-400" size={48} />
-              <p className="text-lg">No PDI reports found matching your search.</p>
+              <p className="text-lg">No dispatch records found matching your search.</p>
             </div>
           )}
         </div>
       </div>
-
-      {showModal && selectedReport && (
+      {showModal && selectedRecord && (
         <div
           className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50"
           role="dialog"
-          aria-labelledby="edit-pdi-title"
+          aria-labelledby="edit-dispatch-title"
         >
           <div className="bg-white p-8 rounded-2xl shadow-2xl w-[500px] relative">
             <button
@@ -620,35 +536,63 @@ function PdiPage({ socket: providedSocket }) {
               <XCircle size={24} />
             </button>
             <h2
-              id="edit-pdi-title"
+              id="edit-dispatch-title"
               className="text-2xl font-bold text-gray-800 mb-6"
             >
-              Edit PDI Report #{selectedReport.report_id}
+              Edit Dispatch Record #{selectedRecord.tracking_id}
             </h2>
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
-                  PDI Report Link
+                  Tracking ID
                 </label>
                 <input
-                  type="url"
-                  placeholder="Enter PDI report link"
-                  value={formData.report_link}
+                  type="text"
+                  placeholder="Enter Tracking ID"
+                  value={formData.tracking_id}
                   onChange={(e) =>
-                    setFormData({ ...formData, report_link: e.target.value })
+                    setFormData({ ...formData, tracking_id: e.target.value })
+                  }
+                  className="w-full p-3 border rounded-lg shadow-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  Docket Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter Docket Number"
+                  value={formData.docket_number}
+                  onChange={(e) =>
+                    setFormData({ ...formData, docket_number: e.target.value })
                   }
                   className="w-full p-3 border rounded-lg shadow-sm"
                 />
               </div>
               <div>
                 <label className="block text-gray-700 font-medium mb-2">
-                  Inspection Date
+                  Dispatch Date
                 </label>
                 <input
                   type="date"
-                  value={formData.inspection_date}
+                  value={formData.dispatch_date}
                   onChange={(e) =>
-                    setFormData({ ...formData, inspection_date: e.target.value })
+                    setFormData({ ...formData, dispatch_date: e.target.value })
+                  }
+                  className="w-full p-3 border rounded-lg shadow-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-2">
+                  Delivery Date
+                </label>
+                <input
+                  type="date"
+                  value={formData.delivery_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, delivery_date: e.target.value })
                   }
                   className="w-full p-3 border rounded-lg shadow-sm"
                 />
@@ -664,7 +608,7 @@ function PdiPage({ socket: providedSocket }) {
                   }
                   className="w-full p-3 border rounded-lg shadow-sm"
                 >
-                  {['Pending', 'In Progress', 'Completed', 'Failed'].map((status) => (
+                  {['Pending', 'Shipped', 'Delivered'].map((status) => (
                     <option key={status} value={status}>
                       {status}
                     </option>
@@ -682,7 +626,6 @@ function PdiPage({ socket: providedSocket }) {
           </div>
         </div>
       )}
-
       <ToastContainer
         position="top-right"
         autoClose={3000}
@@ -695,4 +638,4 @@ function PdiPage({ socket: providedSocket }) {
   );
 }
 
-export default PdiPage;
+export default DispatchTrackingPage;

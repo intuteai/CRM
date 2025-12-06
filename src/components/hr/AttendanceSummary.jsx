@@ -4,9 +4,6 @@ import { toast, ToastContainer } from 'react-toastify';
 import axios from 'axios';
 import { debounce } from 'lodash';
 
-// ──────────────────────────────────────────────────────────────
-// TIMEZONE-SAFE DATE HELPERS (IST - Asia/Kolkata)
-// ──────────────────────────────────────────────────────────────
 const todayIST = () => {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
@@ -53,7 +50,6 @@ const isoDate = (s) => {
   if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return 'all';
   return s;
 };
-// ──────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -69,7 +65,6 @@ function AttendanceSummary({ socket }) {
 
   const abortRef = useRef(null);
 
-  // ────── FETCH FIRST PAGE (used for real-time updates) ──────
   const fetchFirstPageQuietly = useCallback(async () => {
     if (loading) return;
 
@@ -106,11 +101,9 @@ function AttendanceSummary({ socket }) {
       setLastUpdate(new Date());
     } catch (err) {
       if (err.name === 'AbortError') return;
-      // Silent on background refresh
     }
   }, [search, dateFilter, loading]);
 
-  // ────── MAIN FETCH FUNCTION ──────
   const fetchData = useCallback(
     async (reset = false, currentCursor = null) => {
       if (loading) return;
@@ -158,7 +151,6 @@ function AttendanceSummary({ socket }) {
     [search, dateFilter, loading]
   );
 
-  // ────── INITIAL LOAD & FILTER CHANGES ──────
   useEffect(() => {
     setData([]);
     setCursor(null);
@@ -166,14 +158,12 @@ function AttendanceSummary({ socket }) {
     fetchData(true);
   }, [search, dateFilter]);
 
-  // ────── CLEANUP ON UNMOUNT ──────
   useEffect(() => {
     return () => {
       if (abortRef.current) abortRef.current.abort();
     };
   }, []);
 
-  // ────── REAL-TIME UPDATES (THE MAGIC FIX) ──────
   useEffect(() => {
     if (!socket) return;
 
@@ -187,11 +177,10 @@ function AttendanceSummary({ socket }) {
         autoClose: 2500,
       });
 
-      // Smart refresh: keep scrolled pages, just update top
       if (cursor === null) {
-        fetchData(true); // Only first page loaded → safe reset
+        fetchData(true); 
       } else {
-        fetchFirstPageQuietly(); // Already scrolled → update silently
+        fetchFirstPageQuietly(); 
       }
     };
 
@@ -199,7 +188,6 @@ function AttendanceSummary({ socket }) {
     return () => socket.off('attendanceMarked', handler);
   }, [socket, dateFilter, cursor, fetchData, fetchFirstPageQuietly]);
 
-  // ────── LOAD MORE ──────
   const loadMore = useCallback(() => {
     if (!loading && hasMore && cursor) {
       fetchData(false, cursor);
@@ -212,7 +200,6 @@ function AttendanceSummary({ socket }) {
     return () => debouncedLoadMore.cancel();
   }, [debouncedLoadMore]);
 
-  // ────── EXPORT CSV ──────
   const exportCSV = useCallback(() => {
     const headers = ['Date', 'Emp ID', 'Name', 'Email', 'Status', 'Mode', 'In', 'Out'];
     const rows = data.map((r) => [

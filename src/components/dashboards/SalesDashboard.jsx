@@ -52,7 +52,7 @@ function SalesDashboard({ socket }) {
             desc="Manage enquiries"
           />
           <DashboardCard
-            to="/queries"
+            to="/sales-queries"
             icon={<MessageSquare />}
             title="Queries"
             desc="Manage customer inquiries"
@@ -62,7 +62,7 @@ function SalesDashboard({ socket }) {
         {/* Inventory & Pricing */}
         <Section title="Inventory & Pricing">
           <DashboardCard
-            to="/inventory"
+            to="/inventory" 
             icon={<Package />}
             title="Inventory"
             desc="View finished goods inventory"

@@ -19,6 +19,7 @@
     "lodash.debounce": "^4.0.8",
     "lucide-react": "^0.477.0",
     "number-to-words": "^1.2.4",
+    "prettier": "^3.7.4",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

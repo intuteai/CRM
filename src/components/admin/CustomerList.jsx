@@ -332,8 +332,8 @@ function CustomerList() {
                     <td className="px-6 md:px-8 py-4 text-gray-600">{customer.gst || 'N/A'}</td>
                     <td className="px-6 md:px-8 py-4 text-gray-600">{customer.shipping_address || 'N/A'}</td>
                     <td className="px-6 md:px-8 py-4 text-gray-600">{customer.billing_address || 'N/A'}</td>
-                    <td className="px-6 md:px-8 py-4 text-gray-600 font-semibold text-amber-600">{customer.orders || 0}</td>
-                    <td className="px-6 md:px-8 py-4 text-gray-600 font-semibold text-amber-600">{customer.queries || 0}</td>
+                    <td className="px-6 md:px-8 py-4 text-gray-600 font-semibold">{customer.orders || 0}</td>
+                    <td className="px-6 md:px-8 py-4 text-gray-600 font-semibold">{customer.queries || 0}</td>
                   </tr>
                 ))}
               </tbody>

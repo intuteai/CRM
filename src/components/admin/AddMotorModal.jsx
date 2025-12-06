@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { toast } from "react-toastify";
 import { X } from "lucide-react";
 
-// Utility to get backend URL (copied from CreateMotorProcess for consistency)
 const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
 
 // Modal component (reused from CreateMotorProcess for consistency)

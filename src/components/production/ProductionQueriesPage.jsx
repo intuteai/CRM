@@ -1,29 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { formatDate } from '../utils/helpers';
-import { useQueries } from '../hooks/useQueries';
+import { formatDate } from '../../utils/helpers';
+import { useQueries } from '../../hooks/useQueries';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, X } from 'lucide-react';
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'; 
 
-function QueriesPage() {
+function ProductionQueriesPage() {
   const { queries, setQueries, isLoading: queriesLoading, error: queryError, fetchQueries, setError } = useQueries();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [showRespondForm, setShowRespondForm] = useState(false);
   const [respondingQuery, setRespondingQuery] = useState(null);
   const [responseText, setResponseText] = useState('');
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [pendingCloseId, setPendingCloseId] = useState(null); 
   const [isLoading, setIsLoading] = useState(false);
   const [expandedResponses, setExpandedResponses] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
   const tableRef = useRef(null);
 
-  useEffect(() => { 
-    const socket = io(BASE_URL, { 
+  useEffect(() => {
+    const socket = io(BASE_URL, {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
@@ -167,45 +165,6 @@ function QueriesPage() {
     }
   };
 
-  const initiateClose = (queryId) => {
-    setPendingCloseId(queryId);
-    setShowConfirmDialog(true);
-  };
-
-  const handleClose = async () => {
-    if (!pendingCloseId) return;
-    setShowConfirmDialog(false);
-    setQueries(prev => prev.map(q => q.queryId === pendingCloseId ? { ...q, status: 'Closed' } : q));
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${BASE_URL}/api/queries/${pendingCloseId}/close`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setQueries(prev => prev.map(q => q.queryId === data.queryId ? data : q));
-        setError(null);
-        toast.success('Query closed successfully!');
-      } else {
-        throw new Error(data.error || 'Failed to close query');
-      }
-    } catch (err) {
-      console.error('Error closing query:', err);
-      await fetchQueries();
-      toast.error(err.message || 'Network error');
-    } finally {
-      setPendingCloseId(null);
-      setIsLoading(false);
-    }
-  };
-
-  const cancelClose = () => {
-    setShowConfirmDialog(false);
-    setPendingCloseId(null);
-  };
-
   const toggleResponses = (queryId) => {
     setExpandedResponses(expandedResponses === queryId ? null : queryId);
   };
@@ -227,7 +186,7 @@ function QueriesPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6 md:p-10">
       <h1 className="text-4xl md:text-5xl font-extrabold text-gray-800 mb-12 text-center tracking-tight drop-shadow-md animate-fade-in">
-        Queries
+        Production Queries
       </h1>
 
       {queryError && (
@@ -374,24 +333,14 @@ function QueriesPage() {
                             <span className="absolute inset-0 bg-amber-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></span>
                           </button>
                           {query.status !== 'Closed' && (
-                            <>
-                              <button
-                                onClick={() => handleInProgress(query.queryId)}
-                                className="group relative px-4 py-2 bg-yellow-500 text-white rounded-xl font-semibold shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden disabled:opacity-50 transform hover:scale-105"
-                                disabled={query.status === 'In Progress' || isLoading}
-                              >
-                                <span className="relative z-10">In Progress</span>
-                                <span className="absolute inset-0 bg-yellow-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></span>
-                              </button>
-                              <button
-                                onClick={() => initiateClose(query.queryId)}
-                                className="group relative px-4 py-2 bg-gray-500 text-white rounded-xl font-semibold shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden disabled:opacity-50 transform hover:scale-105"
-                                disabled={isLoading}
-                              >
-                                <span className="relative z-10">Close</span>
-                                <span className="absolute inset-0 bg-gray-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></span>
-                              </button>
-                            </>
+                            <button
+                              onClick={() => handleInProgress(query.queryId)}
+                              className="group relative px-4 py-2 bg-yellow-500 text-white rounded-xl font-semibold shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden disabled:opacity-50 transform hover:scale-105"
+                              disabled={query.status === 'In Progress' || isLoading}
+                            >
+                              <span className="relative z-10">In Progress</span>
+                              <span className="absolute inset-0 bg-yellow-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></span>
+                            </button>
                           )}
                         </div>
                       </td>
@@ -480,44 +429,9 @@ function QueriesPage() {
         </div>
       )}
 
-      {showConfirmDialog && (
-        <div className="fixed inset-0 bg-gray-800 bg-opacity-60 flex items-center justify-center z-50 transition-opacity duration-500">
-          <div className="bg-gradient-to-br from-white to-amber-50 p-8 rounded-3xl shadow-2xl w-full max-w-md animate-form-pop relative">
-            <button
-              onClick={cancelClose}
-              className="absolute top-4 right-4 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all duration-300 shadow-md hover:shadow-lg transform hover:rotate-90"
-            >
-              <X size={20} />
-            </button>
-            <h2 className="text-3xl font-extrabold text-gray-800 mb-6 text-center bg-gradient-to-r from-amber-400 to-gray-500 bg-clip-text text-transparent">
-              Confirm Close
-            </h2>
-            <p className="text-gray-600 text-lg mb-6 text-center">Are you sure you want to close this query? This action cannot be undone.</p>
-            <div className="flex justify-end gap-4">
-              <button
-                onClick={cancelClose}
-                className="group relative px-6 py-3 bg-gradient-to-r from-gray-300 to-gray-400 text-gray-800 rounded-xl font-semibold shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden disabled:opacity-50 transform hover:scale-105"
-                disabled={isLoading}
-              >
-                <span className="relative z-10">Cancel</span>
-                <span className="absolute inset-0 bg-gray-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"></span>
-              </button>
-              <button
-                onClick={handleClose}
-                className="group relative px-6 py-3 bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-xl font-semibold shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden disabled:opacity-50 transform hover:scale-105"
-                disabled={isLoading}
-              >
-                <span className="relative z-10">{isLoading ? 'Closing...' : 'Close Query'}</span>
-                <span className="absolute inset-0 bg-gray-700 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-right"></span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );
 }
 
-export default QueriesPage;
+export default ProductionQueriesPage;

@@ -9,64 +9,85 @@ import {
   useNavigate,
 } from "react-router-dom";
 import io from "socket.io-client";
-import Navbar from "./components/Navbar";
-import AdminDashboard from "./components/AdminDashboard";
-import OrdersPage from "./components/OrdersPage";
-import QueriesPage from "./components/QueriesPage";
-import CustomerList from "./components/CustomerList";
-import CustomerDashboard from "./components/CustomerDashboard";
-import CustomerOrdersPage from "./components/CustomerOrdersPage";
-import CustomerQueriesPage from "./components/CustomerQueriesPage";
-import EditProfile from "./components/EditProfile";
-import InventoryPage from "./components/InventoryPage";
-import StockPage from "./components/StockPage";
-import StoreStockPage from "./components/StoreStockPage";
-import StoreInventoryPage from "./components/StoreInventoryPage";
-import PriceListPage from "./components/PriceListPage";
-import PdiPage from "./components/PdiPage";
-import CustomerInvoicesPage from "./components/CustomerInvoicesPage";
-import PartDrawingsSelector from "./components/PartDrawingsSelector";
-import PartDrawingsPage from "./components/PartDrawingsPage";
-import PartDrawingsRawPage from "./components/PartDrawingsRawPage";
-import EnquiryPage from "./components/EnquiryPage";
-import DispatchTrackingPage from "./components/DispatchTrackingPage";
-import PurchaseInvoicesPage from "./components/PurchaseInvoicesPage";
-import BOMPage from "./components/BOMPage";
-import StoreBOMPage from "./components/StoreBOMPage";
+
+// dashboards
+import AdminDashboard from "./components/dashboards/AdminDashboard";
+import SalesDashboard from "./components/dashboards/SalesDashboard";
+import ProductionDashboard from "./components/dashboards/ProductionDashboard";
+import DesignDashboard from "./components/dashboards/DesignDashboard";
+import StoreDashboard from "./components/dashboards/StoreDashboard";
+import AccountsDashboard from "./components/dashboards/AccountsDashboard";
+import CustomerDashboard from "./components/dashboards/CustomerDashboard";
+import DispatchDashboard from "./components/dashboards/DispatchDashboard";
+import EmployeeDashboard from "./components/dashboards/EmployeeDashboard";
+import HRDashboard from "./components/dashboards/HRDashboard";
+
+// admin
+import EnquiryPage from "./components/admin/EnquiryPage";
+import ProblemsPage from "./components/admin/ProblemsPage";
+import ProformaForm from "./components/admin/ProformaForm";
+import QueriesPage from "./components/admin/QueriesPage";
+import QuotationForm from "./components/admin/QuotationForm";
+import WorkOrderPage from "./components/admin/WorkOrderPage";
+import BOMPage from "./components/admin/BOMPage";
+import CustomerList from "./components/admin/CustomerList";
+import InventoryPage from "./components/admin/InventoryPage";
+import StockPage from "./components/admin/StockPage";
+import PriceListPage from "./components/admin/PriceListPage";
+import PdiPage from "./components/admin/PdiPage";
+import CustomerInvoicesPage from "./components/admin/CustomerInvoicesPage";
+import PartDrawingsSelector from "./components/admin/PartDrawingsSelector";
+import PartDrawingsPage from "./components/admin/PartDrawingsPage";
+import PartDrawingsRawPage from "./components/admin/PartDrawingsRawPage";
+import PurchaseInvoicesPage from "./components/admin/PurchaseInvoicesPage";
+import SelectOrderPage from "./components/admin/SelectOrderPage";
+import CreateMotorProcess from "./components/admin/CreateMotorProcess";
+import CreateNonMotorProcess from "./components/admin/CreateNonMotorProcess";
+
+// sales
+import SalesQueriesPage from "./components/sales/SalesQueriesPage";
+import SalesEnquiryPage from "./components/sales/SalesEnquiryPage";
+import SalesQuotationForm from "./components/sales/SalesQuotationForm"; 
+import SalesProformaForm from "./components/sales/SalesProformaForm"; 
+
+// design 
+import DesignEnquiryPage from "./components/design/DesignEnquiryPage";
+
+// production
+import ProductionQueriesPage from "./components/production/ProductionQueriesPage";
+import ProductionOrdersPage from "./components/production/ProductionOrdersPage";
+import ProductionStockPage from "./components/production/ProductionStockPage";
+import ProductionPartDrawingsRawPage from "./components/production/ProductionPartDrawingsRawPage";
+import ProductionPartDrawingsPage from "./components/production/ProductionPartDrawingsPage";
+import ProductionPDIPage from "./components/production/ProductionPDIPage";
+import ProductionBOMPage from "./components/production/ProductionBOMPage";
+
+// employees
+import AttendanceHistory from "./components/employees/AttendanceHistory";
+
+// hr
+import HRPayslipForm from "./components/hr/HRPayslipForm"; 
+import AttendanceSummary from "./components/hr/AttendanceSummary"; 
+
+// customers
+import CustomerOrdersPage from "./components/customers/CustomerOrdersPage";
+import CustomerQueriesPage from "./components/customers/CustomerQueriesPage";
+
+// stores
+import StoreStockPage from "./components/stores/StoreStockPage";
+import StoreInventoryPage from "./components/stores/StoreInventoryPage";
+import StoreBOMPage from "./components/stores/StoreBOMPage";
+
+// pages
+import ActivitiesPage from "./components/pages/ActivitiesPage";
+import OrdersPage from "./components/pages/OrdersPage";
+import EditProfile from "./components/pages/EditProfile";
+import DispatchTrackingPage from "./components/pages/DispatchTrackingPage";
+import LoginModal from "./components/pages/LoginModal";
+import Navbar from "./components/pages/Navbar"; 
+
 import ErrorBoundary from "./components/ErrorBoundary";
-import LoginModal from "./components/LoginModal";
 import logo from "/intute-ai_logo.jpeg";
-import SalesDashboard from "./components/SalesDashboard";
-import DesignDashboard from "./components/DesignDashboard";
-import ProductionDashboard from "./components/ProductionDashboard";
-import StoreDashboard from "./components/StoreDashboard";
-import DispatchDashboard from "./components/DispatchDashboard";
-import AccountsDashboard from "./components/AccountsDashboard";
-import SalesQueriesPage from "./components/SalesQueriesPage";
-import ProductionQueriesPage from "./components/ProductionQueriesPage";
-import ProductionOrdersPage from "./components/ProductionOrdersPage";
-import ProductionStockPage from "./components/ProductionStockPage";
-import ProductionPartDrawingsRawPage from "./components/ProductionPartDrawingsRawPage";
-import ProductionPartDrawingsPage from "./components/ProductionPartDrawingsPage";
-import ProductionPDIPage from "./components/ProductionPDIPage";
-import ProductionBOMPage from "./components/ProductionBOMPage";
-import ProblemsPage from "./components/ProblemsPage";
-import EmployeeDashboard from "./components/EmployeeDashboard";
-import AttendanceHistory from "./components/AttendanceHistory";
-import WorkOrderPage from "./components/WorkOrderPage";
-import SelectOrderPage from "./components/SelectOrderPage";
-import CreateMotorProcess from "./components/CreateMotorProcess";
-import CreateNonMotorProcess from "./components/CreateNonMotorProcess";
-import HRDashboard from "./components/HRDashboard";
-import AttendanceSummary from "./components/AttendanceSummary";
-import ActivitiesPage from "./components/ActivitiesPage";
-import HRPayslipForm from "./components/HRPayslipForm";
-import SalesEnquiryPage from "./components/SalesEnquiryPage";
-import DesignEnquiryPage from "./components/DesignEnquiryPage";
-import QuotationForm from "./components/QuotationForm"; // admin quotation page
-import SalesQuotationForm from "./components/SalesQuotationForm"; // sales quotation page
-import ProformaForm from "./components/ProformaForm"; // admin proforma page
-import SalesProformaForm from "./components/SalesProformaForm"; // sales proforma page (new)
 import "./styles.css";
 
 const ROLES = {
@@ -107,7 +128,7 @@ const allowedPathsByRole = {
     "/processes/:orderId",
     "/processes/non-motor/:orderId",
     "/quotation", // admin quotation page
-    "/proforma",  // admin proforma page
+    "/proforma", // admin proforma page
   ],
   [ROLES.CUSTOMER]: [
     "/customer-dashboard",
@@ -118,6 +139,7 @@ const allowedPathsByRole = {
   [ROLES.SALES]: [
     "/sales-dashboard",
     "/orders",
+    "/inventory",
     "/sales-queries",
     "/stock",
     "/price-list",
@@ -125,8 +147,8 @@ const allowedPathsByRole = {
     "/sales/enquiries",
     "/dispatch-tracking",
     "/edit-profile",
-    "/sales/quotations", // sales quotation page
-    "/proforma",         // allow sales access to proforma
+    "/sales/quotations", 
+    "/proforma", 
   ],
   [ROLES.DESIGN]: [
     "/design-dashboard",
@@ -432,7 +454,11 @@ function App() {
           element={
             userRole === "admin" || userRole === "sales" ? (
               <ErrorBoundary>
-                {userRole === "sales" ? <SalesProformaForm /> : <ProformaForm />}
+                {userRole === "sales" ? (
+                  <SalesProformaForm />
+                ) : (
+                  <ProformaForm />
+                )}
               </ErrorBoundary>
             ) : (
               <Navigate to="/" replace />
@@ -638,7 +664,7 @@ function App() {
         <Route
           path="/inventory"
           element={
-            ["admin", "store", "production"].includes(userRole) ? (
+            ["admin", "store", "production", "sales"].includes(userRole) ? (
               <ErrorBoundary>
                 {userRole === "store" ? (
                   <StoreInventoryPage socket={socket} userRole={userRole} />
@@ -790,14 +816,14 @@ function App() {
           }
         />
         <Route
-          path="/purchase-invoices"
+          path="/purchase-invoices" 
           element={
             ["admin", "accounts"].includes(userRole) ? (
               <ErrorBoundary>
                 <PurchaseInvoicesPage socket={socket} />
               </ErrorBoundary>
             ) : (
-              <Navigate to="/" replace />
+              <Navigate to="/" replace /> 
             )
           }
         />

@@ -9,7 +9,7 @@ import {
   Download
 } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css'; // Fixed typo: was 'toastify-js'
+import 'react-toastify/dist/ReactToastify.css'; 
 
 function HRDashboard({ socket, userRole }) {
   const [activitiesUnlocked, setActivitiesUnlocked] = useState(false);

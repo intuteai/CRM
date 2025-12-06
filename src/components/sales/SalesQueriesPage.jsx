@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { formatDate } from '../utils/helpers';
-import { useQueries } from '../hooks/useQueries';
+import { formatDate } from '../../utils/helpers';
+import { useQueries } from '../../hooks/useQueries';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, X } from 'lucide-react';

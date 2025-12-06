@@ -53,20 +53,16 @@ function AdminDashboard({ socket }) {
       <h1 className="text-3xl font-bold text-gray-800 mb-10 text-center tracking-tight">Admin Dashboard</h1>
 
       <div className="max-w-7xl mx-auto space-y-12">
-        {/* Sales & Customer Management */}
         <Section title="Sales & Customer Management">
           <DashboardCard to="/orders" icon={<Truck />} title="Orders" desc="Track and process orders" />
           <DashboardCard to="/customer-invoices" icon={<FileText />} title="Customer Invoices" desc="View customer invoices" />
           <DashboardCard to="/customer-list" icon={<Users />} title="Customers" desc="View customer details" />
           <DashboardCard to="/enquiries" icon={<Mail />} title="Enquiries" desc="Manage enquiries" />
           <DashboardCard to="/queries" icon={<MessageSquare />} title="Queries" desc="Manage customer inquiries" />
-          {/* NEW: Quotations card */}
           <DashboardCard to="/quotation" icon={<FileText />} title="Quotations" desc="Create and manage quotations" />
-          {/* NEW: Proforma Invoices card */}
           <DashboardCard to="/proforma" icon={<FileText />} title="Proforma Invoices" desc="Create and manage proforma invoices" />
         </Section>
 
-        {/* Inventory & Materials */}
         <Section title="Inventory & Materials">
           <DashboardCard to="/inventory" icon={<Package />} title="Finished Goods" desc="Manage finished goods inventory" />
           <DashboardCard to="/stock" icon={<Package />} title="Raw Materials" desc="Monitor raw material levels" />
@@ -91,7 +87,7 @@ function AdminDashboard({ socket }) {
         <Section title="Procurement">
           <DashboardCard to="/purchase-invoices" icon={<FileText />} title="Purchase Invoices" desc="View supplier invoices" />
         </Section>
-      </div>
+      </div> 
 
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </div>

@@ -5,8 +5,8 @@ import {
 } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { useQueries } from '../hooks/useQueries';
-import { formatDate } from '../utils/helpers';
+import { useQueries } from '../../hooks/useQueries';
+import { formatDate } from '../../utils/helpers';
 
 // Use the environment variable for the backend URL
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { formatDate as importedFormatDate } from '../utils/helpers';
+import { formatDate as importedFormatDate } from '../../utils/helpers';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, RefreshCw, Search } from 'lucide-react';
@@ -30,7 +30,7 @@ const formatDate = (dateString) => {
   }
 };
 
-function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
+function ProductionPartDrawingsRawPage({ socket: providedSocket, userRole }) {
   const [drawings, setDrawings] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,10 +49,9 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
       providedSocket ||
       io(BASE_URL, {
         withCredentials: true,
-        transports: ['websocket', 'polling'],
-        reconnectionAttempts: 10,
-        reconnectionDelay: 2000,
-        reconnectionDelayMax: 5000,
+        transports: ['websocket'],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
       }),
     [providedSocket]
   );
@@ -68,8 +67,8 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
       const token = localStorage.getItem('token');
       if (!token) throw new Error('Authentication token missing.');
 
-      const url = `${BASE_URL}/api/part-drawings?limit=${limit}&offset=${page * limit}&force_refresh=true&search=${encodeURIComponent(searchTerm)}`;
-      console.log('Fetching part drawings from:', url);
+      const url = `${BASE_URL}/api/part-drawings-raw?limit=${limit}&offset=${page * limit}&force_refresh=true&search=${encodeURIComponent(searchTerm)}`;
+      console.log('Fetching raw part drawings from:', url);
 
       const response = await fetch(url, {
         headers: {
@@ -80,7 +79,6 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Error response:', errorText);
         throw new Error(errorText || `Server responded with status: ${response.status}`);
       }
 
@@ -104,7 +102,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
       setDrawings(normalizedData);
       setTotalItems(responseData.total);
     } catch (err) {
-      console.error('Error fetching part drawings:', err);
+      console.error('Error fetching raw part drawings:', err);
       const errorMessage = err.message || 'Network error. Please try again later.';
       setError(errorMessage);
       toast.error(errorMessage, { autoClose: 3000 });
@@ -138,17 +136,17 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
 
         if (type === 'CREATE') {
           const newDrawing = {
-            srNo: item.srNo || item.sr_no || null,
-            drawingId: item.drawingId || item.drawing_id || 0,
+            srNo: item.srNo || null,
+            drawingId: item.drawingId || 0,
             productName: item.productName || 'N/A',
-            itemName: item.itemName || item.item_name || 'N/A',
-            drawingLink: item.drawingLink || item.drawing_link || '',
-            updatedAt: item.updatedAt || item.updated_at || timestamp,
-            productId: item.productId || item.product_id || null,
+            itemName: item.itemName || 'N/A',
+            drawingLink: item.drawingLink || '',
+            updatedAt: item.updatedAt || timestamp,
+            productId: item.productId || null,
           };
           // Only add if on the first page or matches search
           if (page === 0 && (!searchTerm || newDrawing.itemName.toLowerCase().includes(searchTerm.toLowerCase()))) {
-            toast.info(`New drawing #${newDrawing.srNo} added`, { autoClose: 2000 });
+            toast.info(`New drawing #${item.srNo} added`, { autoClose: 2000 });
             return [newDrawing, ...prev].slice(0, limit);
           }
           setTotalItems((prev) => prev + 1);
@@ -156,18 +154,18 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
         }
 
         if (type === 'UPDATE') {
-          const drawingIndex = prev.findIndex((drawing) => drawing.srNo === (item.srNo || item.sr_no));
+          const drawingIndex = prev.findIndex((drawing) => drawing.srNo === item.srNo);
           if (drawingIndex === -1) return prev;
 
           const drawingToUpdate = prev[drawingIndex];
           const updatedDrawing = {
             ...drawingToUpdate,
-            drawingId: item.drawingId || item.drawing_id || drawingToUpdate.drawingId,
+            drawingId: item.drawingId || drawingToUpdate.drawingId,
             productName: item.productName || drawingToUpdate.productName,
-            itemName: item.itemName || item.item_name || drawingToUpdate.itemName,
-            drawingLink: item.drawingLink || item.drawing_link || drawingToUpdate.drawingLink,
-            updatedAt: item.updatedAt || item.updated_at || timestamp,
-            productId: item.productId || item.product_id || drawingToUpdate.productId,
+            itemName: item.itemName || drawingToUpdate.itemName,
+            drawingLink: item.drawingLink || drawingToUpdate.drawingLink,
+            updatedAt: item.updatedAt || timestamp,
+            productId: item.productId || drawingToUpdate.productId,
           };
 
           if (
@@ -183,7 +181,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
 
           const updatedDrawings = [...prev];
           updatedDrawings[drawingIndex] = updatedDrawing;
-          toast.info(`Drawing #${updatedDrawing.srNo} updated`, { autoClose: 2000 });
+          toast.info(`Drawing #${item.srNo} updated`, { autoClose: 2000 });
           return updatedDrawings;
         }
 
@@ -202,12 +200,12 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
 
     socket.on('connect', handleConnect);
     socket.on('connect_error', handleConnectError);
-    socket.on('partDrawingsUpdate', handleDrawingsUpdate);
+    socket.on('partDrawingsRawUpdate', handleDrawingsUpdate);
 
     return () => {
       socket.off('connect', handleConnect);
       socket.off('connect_error', handleConnectError);
-      socket.off('partDrawingsUpdate', handleDrawingsUpdate);
+      socket.off('partDrawingsRawUpdate', handleDrawingsUpdate);
       if (!providedSocket) socket.disconnect();
     };
   }, [socket, providedSocket, page, searchTerm, limit]);
@@ -318,7 +316,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
       >
         <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
           <RefreshCw className="mx-auto mb-4 text-gray-400" size={48} />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">No Part Drawings</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">No Part Drawings Yet</h2>
           <p className="text-gray-600 mb-6">
             Your database is empty or no drawings match your search. Try refreshing or adjusting your search.
           </p>
@@ -329,11 +327,11 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-6 text-center tracking-tight">
-        Production Part Drawings
+      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
+        Production Raw Part Drawings
       </h1>
       <div className="max-w-7xl mx-auto">
-        <div className="flex mb-6 gap-6 flex-wrap">
+        <div className="flex mb-8 gap-6 flex-wrap">
           <div className="relative flex-grow">
             <label htmlFor="search-drawings" className="sr-only">
               Search Part Drawings
@@ -387,7 +385,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
                 ].map(({ key, label }) => (
                   <th
                     key={key}
-                    className="py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200"
+                    className={`py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200`}
                     onClick={() => handleSort(key)}
                     aria-sort={
                       sortConfig.key === key
@@ -450,7 +448,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600">
-                Showing {Math.min(page * limit + 1, totalItems)} to {Math.min((page + 1) * limit, totalItems)} of {totalItems} drawings
+                Showing {sortedDrawings.length} of {totalItems} drawings
               </div>
               <div className="flex space-x-2">
                 <button
@@ -497,4 +495,4 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
   );
 }
 
-export default ProductionPartDrawingsPage;
+export default ProductionPartDrawingsRawPage;
