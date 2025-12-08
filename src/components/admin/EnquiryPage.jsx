@@ -115,7 +115,7 @@ function EnquiryPage({ socket: providedSocket }) {
   const [errors, setErrors] = useState({});
   const limit = 10;
   const tableRef = useRef(null);
-  const hasFetched = useRef(false);
+  // const hasFetched = useRef(false);
   const isFetching = useRef(false);
 
   // Assign modal state
@@ -147,7 +147,7 @@ function EnquiryPage({ socket: providedSocket }) {
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
       }),
-    [providedSocket]
+    [providedSocket],
   );
 
   // helper sort: newest first (created_at desc or enquiry_id desc)
@@ -165,8 +165,62 @@ function EnquiryPage({ socket: providedSocket }) {
     });
   };
 
+  // const fetchEnquiries = useCallback(
+  //   async (forceRefresh = false) => {
+  //     if (isFetching.current) return;
+
+  //     isFetching.current = true;
+  //     setIsLoading(true);
+  //     setError(null);
+
+  //     try {
+  //       const token = localStorage.getItem("token");
+  //       const offset = page * limit;
+  //       const url = `${API_URL}?limit=${limit}&offset=${offset}${
+  //         forceRefresh ? "&force_refresh=true" : ""
+  //       }`;
+
+  //       const response = await fetch(url, {
+  //         headers: {
+  //           Authorization: `Bearer ${token}`,
+  //           "Content-Type": "application/json",
+  //         },
+  //       });
+
+  //       if (!response.ok) {
+  //         const errorText = await response.text();
+  //         throw new Error(
+  //           errorText || `Server responded with status: ${response.status}`
+  //         );
+  //       }
+
+  //       const responseData = await response.json();
+
+  //       if (!responseData.data || !Array.isArray(responseData.data)) {
+  //         throw new Error("Invalid data format");
+  //       }
+
+  //       // ensure newest first on fresh loads (server may sort by created_at but we enforce)
+  //       const sorted = sortNewestFirst(responseData.data);
+
+  //       setEnquiries(sorted);
+  //       setTotal(responseData.total || 0);
+  //       setError(null);
+  //     } catch (err) {
+  //       console.error("Error fetching enquiries:", err);
+  //       const errorMessage =
+  //         err.message || "Network error. Please try again later.";
+  //       setError(errorMessage);
+  //       toast.error(errorMessage, { autoClose: 3000 });
+  //     } finally {
+  //       setIsLoading(false);
+  //       isFetching.current = false;
+  //     }
+  //   },
+  //   [page]
+  // );
   const fetchEnquiries = useCallback(
-    async (forceRefresh = false) => {
+    async (forceRefresh = false, overridePage, overrideSearchTerm) => {
       if (isFetching.current) return;
 
       isFetching.current = true;
@@ -175,10 +229,21 @@ function EnquiryPage({ socket: providedSocket }) {
 
       try {
         const token = localStorage.getItem("token");
-        const offset = page * limit;
-        const url = `${API_URL}?limit=${limit}&offset=${offset}${
-          forceRefresh ? "&force_refresh=true" : ""
-        }`;
+
+        const currentPage = overridePage ?? page;
+        const currentSearch = overrideSearchTerm ?? searchTerm;
+
+        const offset = currentPage * limit;
+
+        const params = new URLSearchParams({
+          limit: String(limit),
+          offset: String(offset),
+        });
+
+        if (forceRefresh) params.append("force_refresh", "true");
+        if (currentSearch.trim()) params.append("search", currentSearch.trim());
+
+        const url = `${API_URL}?${params.toString()}`;
 
         const response = await fetch(url, {
           headers: {
@@ -190,7 +255,7 @@ function EnquiryPage({ socket: providedSocket }) {
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(
-            errorText || `Server responded with status: ${response.status}`
+            errorText || `Server responded with status: ${response.status}`,
           );
         }
 
@@ -200,7 +265,6 @@ function EnquiryPage({ socket: providedSocket }) {
           throw new Error("Invalid data format");
         }
 
-        // ensure newest first on fresh loads (server may sort by created_at but we enforce)
         const sorted = sortNewestFirst(responseData.data);
 
         setEnquiries(sorted);
@@ -217,8 +281,13 @@ function EnquiryPage({ socket: providedSocket }) {
         isFetching.current = false;
       }
     },
-    [page]
+    [page, searchTerm],
   );
+
+  
+useEffect(() => {
+  fetchEnquiries(false);
+}, [page, searchTerm, fetchEnquiries]);
 
   // Fetch detail + activities + templates
   const fetchEnquiryDetail = useCallback(async (enquiryId) => {
@@ -270,7 +339,7 @@ function EnquiryPage({ socket: providedSocket }) {
             Authorization: `Bearer ${token2}`,
             "Content-Type": "application/json",
           },
-        }).catch(() => {})
+        }).catch(() => {}),
       );
       Promise.all(markPromises);
     } catch (err) {
@@ -282,10 +351,6 @@ function EnquiryPage({ socket: providedSocket }) {
   }, []);
 
   useEffect(() => {
-    if (!hasFetched.current) {
-      fetchEnquiries(false);
-      hasFetched.current = true;
-    }
 
     socket.on("connect", () => {
       console.log("Connected to Socket.IO in EnquiryPage");
@@ -423,7 +488,7 @@ function EnquiryPage({ socket: providedSocket }) {
       socket.off("enquiryActivity");
       if (!providedSocket) socket.disconnect();
     };
-  }, [fetchEnquiries, socket, providedSocket, detailEnquiry]);
+  }, [socket, providedSocket, detailEnquiry]);
 
   const handleSort = useCallback((key) => {
     setSortConfig((prev) => ({
@@ -519,7 +584,7 @@ function EnquiryPage({ socket: providedSocket }) {
     async (enquiryId) => {
       if (
         !window.confirm(
-          `Are you sure you want to delete enquiry #${enquiryId}?`
+          `Are you sure you want to delete enquiry #${enquiryId}?`,
         )
       ) {
         return;
@@ -540,7 +605,7 @@ function EnquiryPage({ socket: providedSocket }) {
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(
-            errorText || `Delete failed with status: ${response.status}`
+            errorText || `Delete failed with status: ${response.status}`,
           );
         }
 
@@ -558,7 +623,7 @@ function EnquiryPage({ socket: providedSocket }) {
         });
       }
     },
-    [fetchEnquiries]
+    [fetchEnquiries],
   );
 
   const handleSubmit = async (e) => {
@@ -613,7 +678,7 @@ function EnquiryPage({ socket: providedSocket }) {
           errorText ||
             `${isEditing ? "Update" : "Create"} failed with status: ${
               response.status
-            }`
+            }`,
         );
       }
 
@@ -621,14 +686,14 @@ function EnquiryPage({ socket: providedSocket }) {
       if (isEditing) {
         setEnquiries((prev) =>
           prev.map((e) =>
-            e.enquiry_id === updatedEnquiry.enquiry_id ? updatedEnquiry : e
-          )
+            e.enquiry_id === updatedEnquiry.enquiry_id ? updatedEnquiry : e,
+          ),
         );
         toast.success(
           `Enquiry #${updatedEnquiry.enquiry_id} updated successfully!`,
           {
             className: "bg-amber-100 border-amber-300",
-          }
+          },
         );
       } else {
         // Put created enquiry at top, then ensure global newest-first order
@@ -637,7 +702,7 @@ function EnquiryPage({ socket: providedSocket }) {
           `Enquiry #${updatedEnquiry.enquiry_id} created successfully!`,
           {
             className: "bg-amber-100 border-amber-300",
-          }
+          },
         );
       }
       setIsModalOpen(false);
@@ -688,7 +753,7 @@ function EnquiryPage({ socket: providedSocket }) {
         isCurrentlyFollowed
           ? `Unfollowed enquiry #${enquiryId}`
           : `Following enquiry #${enquiryId}`,
-        { className: "bg-amber-100 border-amber-300" }
+        { className: "bg-amber-100 border-amber-300" },
       );
     } catch (err) {
       console.error("Follow toggle error:", err);
@@ -703,7 +768,7 @@ function EnquiryPage({ socket: providedSocket }) {
     setAssignDueDate(
       enquiry.due_date
         ? new Date(enquiry.due_date).toISOString().split("T")[0]
-        : ""
+        : "",
     );
     setAssignMessage("");
     setIsAssignModalOpen(true);
@@ -736,7 +801,7 @@ function EnquiryPage({ socket: providedSocket }) {
             due_date: assignDueDate || null,
             message: assignMessage || null,
           }),
-        }
+        },
       );
 
       if (!res.ok) {
@@ -749,20 +814,20 @@ function EnquiryPage({ socket: providedSocket }) {
       // Update list locally
       setEnquiries((prev) =>
         prev.map((e) =>
-          e.enquiry_id === updated.enquiry_id ? { ...e, ...updated } : e
-        )
+          e.enquiry_id === updated.enquiry_id ? { ...e, ...updated } : e,
+        ),
       );
 
       // Update detail if open
       setDetailEnquiry((prev) =>
         prev && prev.enquiry_id === updated.enquiry_id
           ? { ...prev, ...updated }
-          : prev
+          : prev,
       );
 
       toast.success(
         `Enquiry #${updated.enquiry_id} assigned to user ID ${assignUserId}`,
-        { className: "bg-amber-100 border-amber-300" }
+        { className: "bg-amber-100 border-amber-300" },
       );
 
       setIsAssignModalOpen(false);
@@ -798,7 +863,7 @@ function EnquiryPage({ socket: providedSocket }) {
       ].some((key) =>
         String(item[key] || "")
           .toLowerCase()
-          .includes(lowerSearch)
+          .includes(lowerSearch),
       );
 
       const leadValue = (item.lead || item.priority || "lead").toLowerCase();
@@ -807,8 +872,7 @@ function EnquiryPage({ socket: providedSocket }) {
 
       const matchesSource =
         sourceFilter === "all" ||
-        (item.source || "Website").toLowerCase() ===
-          sourceFilter.toLowerCase();
+        (item.source || "Website").toLowerCase() === sourceFilter.toLowerCase();
 
       const matchesTag =
         !tagFilterLower ||
@@ -816,7 +880,7 @@ function EnquiryPage({ socket: providedSocket }) {
           item.tags.some((t) =>
             String(t || "")
               .toLowerCase()
-              .includes(tagFilterLower)
+              .includes(tagFilterLower),
           ));
 
       return matchesSearch && matchesLead && matchesSource && matchesTag;
@@ -850,7 +914,7 @@ function EnquiryPage({ socket: providedSocket }) {
       detailActivities
         .filter((act) => act.activity_type === "assignment")
         .slice(-1)[0] || null,
-    [detailActivities]
+    [detailActivities],
   );
 
   // Close global menu on escape
@@ -918,7 +982,13 @@ function EnquiryPage({ socket: providedSocket }) {
               <input
                 type="text"
                 placeholder="Search enquiries..."
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={searchTerm}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSearchTerm(value);
+                  setPage(0); // always go back to first page on new search
+                  // fetchEnquiries(true, 0, value); // fetch from server WITH search
+                }}
                 className="w-full p-4 pl-12 border border-gray-200 rounded-xl bg-white shadow-md focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg transition-all duration-300 group-hover:shadow-lg group-hover:border-amber-300"
               />
               <svg
@@ -1174,12 +1244,10 @@ function EnquiryPage({ socket: providedSocket }) {
                             <button
                               type="button"
                               onClick={() => {
-                                setItemsModalText(
-                                  enquiry.items_required || ""
-                                );
+                                setItemsModalText(enquiry.items_required || "");
                                 setItemsModalTitle(
                                   enquiry.company_name ||
-                                    `Enquiry #${enquiry.enquiry_id}`
+                                    `Enquiry #${enquiry.enquiry_id}`,
                                 );
                                 setItemsModalOpen(true);
                               }}
@@ -1194,7 +1262,7 @@ function EnquiryPage({ socket: providedSocket }) {
                     <td className="px-6 md:px-8 py-4">
                       <span
                         className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full border ${getLeadClasses(
-                          leadValue
+                          leadValue,
                         )}`}
                       >
                         {formatLeadLabel(leadValue)}
@@ -1229,10 +1297,10 @@ function EnquiryPage({ socket: providedSocket }) {
                         enquiry.status === "Closed"
                           ? "text-green-600"
                           : enquiry.status === "In Progress"
-                          ? "text-yellow-600"
-                          : enquiry.status === "Pending"
-                          ? "text-gray-600"
-                          : "text-red-600"
+                            ? "text-yellow-600"
+                            : enquiry.status === "Pending"
+                              ? "text-gray-600"
+                              : "text-red-600"
                       }`}
                     >
                       {enquiry.status}
@@ -1579,7 +1647,7 @@ function EnquiryPage({ socket: providedSocket }) {
                         </p>
                       )}
                     </div>
-                  )
+                  ),
                 )}
                 <div className="flex justify-end gap-4">
                   <button
@@ -1741,26 +1809,38 @@ function EnquiryPage({ socket: providedSocket }) {
                             {detailEnquiry.mail_id}
                           </span>
                         ) : (
-                          <span className="text-gray-400 ml-1">Not specified</span>
+                          <span className="text-gray-400 ml-1">
+                            Not specified
+                          </span>
                         )}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        Application: <span className="font-medium">{detailEnquiry.application || "—"}</span>
+                        Application:{" "}
+                        <span className="font-medium">
+                          {detailEnquiry.application || "—"}
+                        </span>
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        Created by: <span className="font-medium">{detailEnquiry.created_by_name || "—"}</span>
+                        Created by:{" "}
+                        <span className="font-medium">
+                          {detailEnquiry.created_by_name || "—"}
+                        </span>
                         {" • "}
-                        <span className="text-[11px] text-gray-400">{detailEnquiry.created_at ? formatDate(detailEnquiry.created_at) : ""}</span>
+                        <span className="text-[11px] text-gray-400">
+                          {detailEnquiry.created_at
+                            ? formatDate(detailEnquiry.created_at)
+                            : ""}
+                        </span>
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span
                         className={`px-3 py-1 rounded-full text-[11px] font-semibold border ${getLeadClasses(
-                          detailEnquiry.lead || detailEnquiry.priority
+                          detailEnquiry.lead || detailEnquiry.priority,
                         )}`}
                       >
                         {formatLeadLabel(
-                          detailEnquiry.lead || detailEnquiry.priority
+                          detailEnquiry.lead || detailEnquiry.priority,
                         )}
                       </span>
                       <span className="text-[11px] text-gray-500">
@@ -1860,7 +1940,9 @@ function EnquiryPage({ socket: providedSocket }) {
                     </h3>
                     <div className="space-y-3">
                       {detailActivities.length === 0 && (
-                        <p className="text-xs text-gray-400">No activity yet.</p>
+                        <p className="text-xs text-gray-400">
+                          No activity yet.
+                        </p>
                       )}
                       {detailActivities.map((act) => {
                         const isAssignment = act.activity_type === "assignment";
@@ -1980,7 +2062,7 @@ Warm regards,
                           const id = e.target.value;
                           setSelectedTemplateId(id);
                           const tmpl = commentTemplates.find(
-                            (t) => String(t.id) === id
+                            (t) => String(t.id) === id,
                           );
                           if (tmpl) {
                             setCommentText(tmpl.content);
@@ -2026,7 +2108,7 @@ Warm regards,
                                   expected_by: null,
                                   is_internal: false,
                                 }),
-                              }
+                              },
                             );
                             if (!res.ok) {
                               const txt = await res.text();
@@ -2039,9 +2121,7 @@ Warm regards,
                             toast.success("Comment added");
                           } catch (err) {
                             console.error("Add comment error:", err);
-                            toast.error(
-                              err.message || "Failed to add comment"
-                            );
+                            toast.error(err.message || "Failed to add comment");
                           }
                         }}
                         className="px-4 py-2 bg-amber-500 text-white rounded-lg text-xs font-semibold hover:bg-amber-600"
