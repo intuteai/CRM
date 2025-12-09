@@ -15,14 +15,13 @@ import {
   MoreVertical,
   RefreshCw,
   Edit2,
-  Trash2
 } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
-function PartCreation() {
+function DesignPartCreation() {
   const [parts, setParts] = useState([]);
   const [total, setTotal] = useState(0);
   const [partTypes, setPartTypes] = useState([]);
@@ -386,28 +385,28 @@ function PartCreation() {
   // ----------------------------
   // Delete part
   // ----------------------------
-  const handleDelete = async (part) => {
-    if (!window.confirm(`Delete part ${part.partCode}?`)) return;
+//   const handleDelete = async (part) => {
+//     if (!window.confirm(`Delete part ${part.partCode}?`)) return;
 
-    try {
-      const headers = getAuthHeaders();
-      const res = await fetch(`${BASE_URL}/api/parts/${part.id}`, {
-        method: "DELETE",
-        headers,
-      });
+//     try {
+//       const headers = getAuthHeaders();
+//       const res = await fetch(`${BASE_URL}/api/parts/${part.id}`, {
+//         method: "DELETE",
+//         headers,
+//       });
 
-      if (!res.ok && res.status !== 204) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to delete part");
-      }
+//       if (!res.ok && res.status !== 204) {
+//         const err = await res.json().catch(() => ({}));
+//         throw new Error(err.error || "Failed to delete part");
+//       }
 
-      toast.success(`Part ${part.partCode} deleted`);
-      await fetchParts();
-    } catch (err) {
-      console.error("Delete part error:", err);
-      toast.error(err.message || "Failed to delete part");
-    }
-  };
+//       toast.success(`Part ${part.partCode} deleted`);
+//       await fetchParts();
+//     } catch (err) {
+//       console.error("Delete part error:", err);
+//       toast.error(err.message || "Failed to delete part");
+//     }
+//   };
 
   // ----------------------------
   // Actions menu component
@@ -445,15 +444,6 @@ function PartCreation() {
               className="w-full flex items-center px-3 py-2 text-sm hover:bg-gray-50 text-gray-700"
             >
               <Edit2 size={16} className="mr-2" /> Revise Part
-            </button>
-            <button
-              onClick={() => {
-                handleDelete(part);
-                setOpen(false);
-              }}
-              className="w-full flex items-center px-3 py-2 text-sm hover:bg-red-50 text-red-600"
-            >
-              <Trash2 size={16} className="mr-2 text-red-600" /> Delete
             </button>
           </div>
         )}
@@ -892,4 +882,4 @@ function PartCreation() {
   );
 }
 
-export default PartCreation;
+export default DesignPartCreation;

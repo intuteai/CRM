@@ -18,6 +18,7 @@ function DesignDashboard({ socket }) {
           <DashboardCard to="/design/enquiries" icon={<Mail />} title="Enquiries" desc="Manage enquiries" />
           <DashboardCard to="/pdi" icon={<CheckSquare />} title="PDI Reports" desc="Pre-dispatch inspection details" />
           <DashboardCard to="/bom" icon={<BarChart />} title="Unpriced BOM" desc="Bill of Materials (view only)" />
+          <DashboardCard to="/design/part-creation" icon={<PenTool />} title="Part Creation" desc="Create and manage part creation" />
         </Section>
       </div>
     </div>

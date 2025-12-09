@@ -53,6 +53,7 @@ import SalesProformaForm from "./components/sales/SalesProformaForm";
 
 // design 
 import DesignEnquiryPage from "./components/design/DesignEnquiryPage";
+import DesignPartCreation from "./components/design/DesignPartCreation";
 
 // production
 import ProductionQueriesPage from "./components/production/ProductionQueriesPage";
@@ -161,6 +162,7 @@ const allowedPathsByRole = {
     "/part-drawings/raw",
     "/bom",
     "/edit-profile",
+    "/design/part-creation"
   ],
   [ROLES.PRODUCTION]: [
     "/production-dashboard",
@@ -472,6 +474,14 @@ function App() {
           element={
             <ErrorBoundary>
               <PartCreation socket={socket} />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="/design/part-creation"
+          element={
+            <ErrorBoundary>
+              <DesignPartCreation socket={socket} />
             </ErrorBoundary>
           }
         />
