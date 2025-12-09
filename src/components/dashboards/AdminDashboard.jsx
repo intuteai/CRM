@@ -69,6 +69,7 @@ function AdminDashboard({ socket }) {
           <DashboardCard to="/price-list" icon={<DollarSign />} title="Price List" desc="View pricing details" />
           <DashboardCard to="/bom" icon={<BarChart />} title="Bill of Materials" desc="Bill of materials" />
           <DashboardCard to="/part-drawings" icon={<PenTool />} title="Part Drawings" desc="Access part drawings" />
+          <DashboardCard to="/part-creation" icon={<PenTool />} title="Part Creation" desc="Create and manage part creation" />
         </Section>
 
         {/* Production Management */}

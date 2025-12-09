@@ -43,6 +43,7 @@ import PurchaseInvoicesPage from "./components/admin/PurchaseInvoicesPage";
 import SelectOrderPage from "./components/admin/SelectOrderPage";
 import CreateMotorProcess from "./components/admin/CreateMotorProcess";
 import CreateNonMotorProcess from "./components/admin/CreateNonMotorProcess";
+import PartCreation from "./components/admin/PartCreation";
 
 // sales
 import SalesQueriesPage from "./components/sales/SalesQueriesPage";
@@ -127,8 +128,9 @@ const allowedPathsByRole = {
     "/select-component/:orderId/:action",
     "/processes/:orderId",
     "/processes/non-motor/:orderId",
-    "/quotation", // admin quotation page
-    "/proforma", // admin proforma page
+    "/quotation", 
+    "/proforma", 
+    "/part-creation"
   ],
   [ROLES.CUSTOMER]: [
     "/customer-dashboard",
@@ -465,7 +467,14 @@ function App() {
             )
           }
         />
-
+        <Route
+          path="/part-creation"
+          element={
+            <ErrorBoundary>
+              <PartCreation socket={socket} />
+            </ErrorBoundary>
+          }
+        />
         {/* Sales Dashboard */}
         <Route
           path="/sales-dashboard"
