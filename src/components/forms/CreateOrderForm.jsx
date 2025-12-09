@@ -18,6 +18,25 @@ function CreateOrderForm({
   const [formErrors, setFormErrors] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // useEffect(() => {
+  //   const fetchStock = async () => {
+  //     try {
+  //       const token = localStorage.getItem("token");
+  //       const backendUrl =
+  //         import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+  //       const response = await fetch(`${backendUrl}/api/inventory/stock`, {
+  //         headers: { Authorization: `Bearer ${token}` },
+  //       });
+  //       if (!response.ok) throw new Error("Failed to fetch available stock");
+  //       const data = await response.json();
+  //       setAvailableProducts(data);
+  //     } catch (error) {
+  //       setFormErrors([error.message]);
+  //     }
+  //   };
+  //   fetchStock();
+  // }, []);
+
   useEffect(() => {
     const fetchStock = async () => {
       try {
@@ -29,7 +48,14 @@ function CreateOrderForm({
         });
         if (!response.ok) throw new Error("Failed to fetch available stock");
         const data = await response.json();
-        setAvailableProducts(data);
+
+        // optional: ensure price is numeric
+        const normalized = (data || []).map((p) => ({
+          ...p,
+          price: p.price != null ? Number(p.price) : 0,
+        }));
+
+        setAvailableProducts(normalized);
       } catch (error) {
         setFormErrors([error.message]);
       }
@@ -49,10 +75,35 @@ function CreateOrderForm({
     setNewOrder((prev) => ({ ...prev, [name]: value }));
   };
 
+  // const handleItemChange = (index, field, value) => {
+  //   const updatedItems = [...newOrder.items];
+  //   updatedItems[index][field] = value;
+  //   setNewOrder((prev) => ({ ...prev, items: updatedItems }));
+  // };
   const handleItemChange = (index, field, value) => {
-    const updatedItems = [...newOrder.items];
-    updatedItems[index][field] = value;
-    setNewOrder((prev) => ({ ...prev, items: updatedItems }));
+    setNewOrder((prev) => {
+      const items = [...prev.items];
+      const updatedItem = { ...items[index], [field]: value };
+
+      if (field === "product_id") {
+        const product = availableProducts.find(
+          (p) => String(p.product_id) === String(value),
+        );
+
+        if (product) {
+          // use normalized price -> string for the controlled input
+          updatedItem.price =
+            product.price !== undefined && product.price !== null
+              ? String(product.price)
+              : "";
+        } else {
+          updatedItem.price = "";
+        }
+      }
+
+      items[index] = updatedItem;
+      return { ...prev, items };
+    });
   };
 
   const addItem = () => {
@@ -160,10 +211,13 @@ function CreateOrderForm({
                 {/* Product select – wide */}
                 <div className="flex-[2] min-w-[380px]">
                   <Select
+                    // build options with separate code field
                     options={availableProducts.map((p) => ({
                       value: String(p.product_id),
-                      label: `${p.product_name} (${p.product_code || p.product_id})`,
+                      label: p.product_name, // main label is just the name
+                      code: p.product_code || String(p.product_id), // keep code separately
                     }))}
+                    // find the current selected option
                     value={
                       availableProducts
                         .filter(
@@ -172,12 +226,32 @@ function CreateOrderForm({
                         )
                         .map((p) => ({
                           value: String(p.product_id),
-                          label: `${p.product_name} (${p.product_code || p.product_id})`,
+                          label: p.product_name,
+                          code: p.product_code || String(p.product_id),
                         }))[0] || null
                     }
+                    // update item on change
                     onChange={(opt) =>
-                      handleItemChange(idx, "product_id", opt?.value)
+                      handleItemChange(idx, "product_id", opt ? opt.value : "")
                     }
+                    // 🔍 search by BOTH name and product_code
+                    filterOption={(option, rawInput) => {
+                      const input = rawInput.toLowerCase().trim();
+                      const name = option.label?.toLowerCase() || "";
+                      const code = option.data.code?.toLowerCase() || "";
+                      return name.includes(input) || code.includes(input);
+                    }}
+                    // 💄 how each option is displayed in the dropdown
+                    formatOptionLabel={(option) => (
+                      <div className="flex flex-col">
+                        <span>{option.label}</span>
+                        <span className="text-xs text-gray-500">
+                          Code: {option.code}
+                        </span>
+                      </div>
+                    )}
+                    isClearable
+                    backspaceRemovesValue
                     styles={{
                       container: (base) => ({
                         ...base,
@@ -198,7 +272,6 @@ function CreateOrderForm({
                     }}
                   />
                 </div>
-
                 {/* Quantity */}
                 <input
                   type="number"
