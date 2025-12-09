@@ -18,25 +18,6 @@ function CreateOrderForm({
   const [formErrors, setFormErrors] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // useEffect(() => {
-  //   const fetchStock = async () => {
-  //     try {
-  //       const token = localStorage.getItem("token");
-  //       const backendUrl =
-  //         import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-  //       const response = await fetch(`${backendUrl}/api/inventory/stock`, {
-  //         headers: { Authorization: `Bearer ${token}` },
-  //       });
-  //       if (!response.ok) throw new Error("Failed to fetch available stock");
-  //       const data = await response.json();
-  //       setAvailableProducts(data);
-  //     } catch (error) {
-  //       setFormErrors([error.message]);
-  //     }
-  //   };
-  //   fetchStock();
-  // }, []);
-
   useEffect(() => {
     const fetchStock = async () => {
       try {
@@ -49,7 +30,6 @@ function CreateOrderForm({
         if (!response.ok) throw new Error("Failed to fetch available stock");
         const data = await response.json();
 
-        // optional: ensure price is numeric
         const normalized = (data || []).map((p) => ({
           ...p,
           price: p.price != null ? Number(p.price) : 0,
@@ -65,7 +45,7 @@ function CreateOrderForm({
 
   const getAvailableStock = (productId) => {
     const product = availableProducts.find(
-      (p) => p.product_id === parseInt(productId),
+      (p) => p.product_id === parseInt(productId)
     );
     return product ? product.stock_quantity : 0;
   };
@@ -75,11 +55,14 @@ function CreateOrderForm({
     setNewOrder((prev) => ({ ...prev, [name]: value }));
   };
 
-  // const handleItemChange = (index, field, value) => {
-  //   const updatedItems = [...newOrder.items];
-  //   updatedItems[index][field] = value;
-  //   setNewOrder((prev) => ({ ...prev, items: updatedItems }));
-  // };
+  // 🔹 NEW: handle customer change from react-select
+  const handleCustomerChange = (option) => {
+    setNewOrder((prev) => ({
+      ...prev,
+      customerId: option ? option.value : "",
+    }));
+  };
+
   const handleItemChange = (index, field, value) => {
     setNewOrder((prev) => {
       const items = [...prev.items];
@@ -87,11 +70,10 @@ function CreateOrderForm({
 
       if (field === "product_id") {
         const product = availableProducts.find(
-          (p) => String(p.product_id) === String(value),
+          (p) => String(p.product_id) === String(value)
         );
 
         if (product) {
-          // use normalized price -> string for the controlled input
           updatedItem.price =
             product.price !== undefined && product.price !== null
               ? String(product.price)
@@ -125,14 +107,13 @@ function CreateOrderForm({
     const { isValid, errors } = validateOrderItems(
       newOrder.items,
       availableProducts,
-      getAvailableStock,
+      getAvailableStock
     );
 
-    // Optional: Warn about past dates
     if (newOrder.targetDeliveryDate) {
-      const selectedDate = new Date(newOrder.targetDeliveryDate + "T00:00:00"); // Treat as local date
+      const selectedDate = new Date(newOrder.targetDeliveryDate + "T00:00:00");
       const today = new Date();
-      today.setHours(0, 0, 0, 0); // Reset time for comparison
+      today.setHours(0, 0, 0, 0);
       if (selectedDate < today) {
         errors.push("Warning: The selected delivery date is in the past.");
       }
@@ -163,9 +144,23 @@ function CreateOrderForm({
     }
   };
 
+  // build customer options for react-select
+  const customerOptions = customers.map((c) => ({
+    value: String(c.user_id),
+    label: c.name || `Customer #${c.user_id}`,
+    // you can add extra fields if you want to search by them too
+    email: c.email,
+    phone: c.phone,
+  }));
+
+  const selectedCustomer =
+    customerOptions.find(
+      (opt) => String(opt.value) === String(newOrder.customerId)
+    ) || null;
+
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-[600px] relative">
+      <div className="bg-white p-8 rounded-2xl shadow-xl w-[600px] max-w-full max-h-[80vh] overflow-y-auto relative">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-500"
@@ -175,23 +170,48 @@ function CreateOrderForm({
         </button>
         <h2 className="text-2xl font-bold mb-6">Create New Order</h2>
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* 🔍 Searchable Customer Select */}
           <div>
-            <label className="text-gray-700 font-medium">Customer</label>
-            <select
-              name="customerId"
-              value={newOrder.customerId}
-              onChange={handleInputChange}
-              className="w-full p-3 border rounded-lg"
-              required
-            >
-              <option value="">Select Customer</option>
-              {customers.map((customer) => (
-                <option key={customer.user_id} value={customer.user_id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
+            <label className="text-gray-700 font-medium mb-1 block">
+              Customer
+            </label>
+            <Select
+              options={customerOptions}
+              value={selectedCustomer}
+              onChange={handleCustomerChange}
+              isClearable
+              backspaceRemovesValue
+              placeholder="Select or search customer..."
+              // optional: search by name + email + phone
+              filterOption={(option, rawInput) => {
+                const input = rawInput.toLowerCase().trim();
+                const label = option.label?.toLowerCase() || "";
+                const email = option.data.email?.toLowerCase() || "";
+                const phone = option.data.phone?.toLowerCase() || "";
+                return (
+                  label.includes(input) ||
+                  email.includes(input) ||
+                  phone.includes(input)
+                );
+              }}
+              styles={{
+                container: (base) => ({
+                  ...base,
+                  width: "100%",
+                }),
+                control: (base) => ({
+                  ...base,
+                  minHeight: "48px",
+                  fontSize: "15px",
+                }),
+                menu: (base) => ({
+                  ...base,
+                  zIndex: 9999,
+                }),
+              }}
+            />
           </div>
+
           <div>
             <label className="text-gray-700 font-medium">
               Target Delivery Date
@@ -204,6 +224,7 @@ function CreateOrderForm({
               className="w-full p-3 border rounded-lg"
             />
           </div>
+
           <div>
             <label className="text-gray-700 font-medium">Items</label>
             {newOrder.items.map((item, idx) => (
@@ -211,18 +232,16 @@ function CreateOrderForm({
                 {/* Product select – wide */}
                 <div className="flex-[2] min-w-[380px]">
                   <Select
-                    // build options with separate code field
                     options={availableProducts.map((p) => ({
                       value: String(p.product_id),
-                      label: p.product_name, // main label is just the name
-                      code: p.product_code || String(p.product_id), // keep code separately
+                      label: p.product_name,
+                      code: p.product_code || String(p.product_id),
                     }))}
-                    // find the current selected option
                     value={
                       availableProducts
                         .filter(
                           (p) =>
-                            String(p.product_id) === String(item.product_id),
+                            String(p.product_id) === String(item.product_id)
                         )
                         .map((p) => ({
                           value: String(p.product_id),
@@ -230,18 +249,19 @@ function CreateOrderForm({
                           code: p.product_code || String(p.product_id),
                         }))[0] || null
                     }
-                    // update item on change
                     onChange={(opt) =>
-                      handleItemChange(idx, "product_id", opt ? opt.value : "")
+                      handleItemChange(
+                        idx,
+                        "product_id",
+                        opt ? opt.value : ""
+                      )
                     }
-                    // 🔍 search by BOTH name and product_code
                     filterOption={(option, rawInput) => {
                       const input = rawInput.toLowerCase().trim();
                       const name = option.label?.toLowerCase() || "";
                       const code = option.data.code?.toLowerCase() || "";
                       return name.includes(input) || code.includes(input);
                     }}
-                    // 💄 how each option is displayed in the dropdown
                     formatOptionLabel={(option) => (
                       <div className="flex flex-col">
                         <span>{option.label}</span>
@@ -272,6 +292,7 @@ function CreateOrderForm({
                     }}
                   />
                 </div>
+
                 {/* Quantity */}
                 <input
                   type="number"
