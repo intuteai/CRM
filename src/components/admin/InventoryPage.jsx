@@ -10,7 +10,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
 
-const formatCurrency = (amount) => 
+const formatCurrency = (amount) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 
 const useFetchInventory = ({ limit, offset }) => {
@@ -836,6 +836,14 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Part search state
+  const [partSearch, setPartSearch] = useState('');
+  const [allParts, setAllParts] = useState([]);
+  const [filteredParts, setFilteredParts] = useState([]);
+  const [isPartLoading, setIsPartLoading] = useState(false);
+  const [showPartDropdown, setShowPartDropdown] = useState(false);
+  const [partsLoaded, setPartsLoaded] = useState(false);
+
   const validateField = (name, value) => {
     if (name === 'product_name' && !value.trim()) return 'Product name is required';
     if ((name === 'stock_quantity' || name === 'price') && value < 0) return `${name === 'stock_quantity' ? 'Quantity' : 'Price'} cannot be negative`;
@@ -848,6 +856,79 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     const processedValue = name === 'stock_quantity' ? parseInt(value) || 0 : name === 'price' ? parseFloat(value) || 0 : value;
     setFormData(prev => ({ ...prev, [name]: processedValue }));
     setErrors(prev => ({ ...prev, [name]: validateField(name, processedValue) }));
+  };
+
+  const loadParts = useCallback(async () => {
+    if (partsLoaded || isPartLoading) return;
+    try {
+      setIsPartLoading(true);
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Authentication token missing.');
+
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const res = await fetch(`${backendUrl}/api/parts?limit=500&offset=0`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to fetch parts (${res.status})`);
+      }
+
+      const json = await res.json();
+      const list = json.data || [];
+      setAllParts(list);
+      setPartsLoaded(true);
+    } catch (err) {
+      console.error('Failed to load parts:', err);
+      toast.error(err.message || 'Failed to load parts', { autoClose: 3000 });
+    } finally {
+      setIsPartLoading(false);
+    }
+  }, [partsLoaded, isPartLoading]);
+
+  useEffect(() => {
+    const term = partSearch.toLowerCase().trim();
+    if (!term) {
+      setFilteredParts(allParts.slice(0, 20));
+    } else {
+      setFilteredParts(
+        allParts
+          .filter(p =>
+            (p.partCode || '').toLowerCase().includes(term) ||
+            (p.name || '').toLowerCase().includes(term) ||
+            (p.drawingNo || '').toLowerCase().includes(term)
+          )
+          .slice(0, 20)
+      );
+    }
+  }, [partSearch, allParts]);
+
+  const handlePartSearchChange = async (e) => {
+    const value = e.target.value;
+    setPartSearch(value);
+    setShowPartDropdown(true);
+    if (!partsLoaded && !isPartLoading) {
+      loadParts();
+    }
+  };
+
+  const handlePartSelect = (part) => {
+    setFormData(prev => ({
+      ...prev,
+      product_name: part.name || '',
+      product_code: part.partCode || '',
+      description: part.description || '',
+    }));
+    setErrors(prev => ({
+      ...prev,
+      product_name: '',
+      product_code: '',
+      description: '',
+    }));
+    setPartSearch(`${part.partCode} — ${part.name}`);
+    setShowPartDropdown(false);
   };
 
   const handleSave = async () => {
@@ -871,6 +952,54 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
 
   return (
     <form className="space-y-4" onSubmit={e => e.preventDefault()}>
+      {/* Part search / typing selector */}
+      <div>
+        <label className="text-gray-700 font-medium">Search Part (optional)</label>
+        <div className="relative">
+          <input
+            type="text"
+            value={partSearch}
+            onChange={handlePartSearchChange}
+            onFocus={() => {
+              setShowPartDropdown(true);
+              if (!partsLoaded && !isPartLoading) {
+                loadParts();
+              }
+            }}
+            placeholder="Type part code or name..."
+            className="w-full p-2 pl-8 border rounded-lg focus:ring-2 focus:ring-amber-300"
+            disabled={isSubmitting}
+          />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+          {showPartDropdown && (
+            <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white border rounded-lg shadow-lg">
+              {isPartLoading && (
+                <div className="px-3 py-2 text-sm text-gray-500">Loading parts...</div>
+              )}
+              {!isPartLoading && filteredParts.length === 0 && (
+                <div className="px-3 py-2 text-sm text-gray-500">No parts found.</div>
+              )}
+              {!isPartLoading && filteredParts.map(part => (
+                <button
+                  key={part.id}
+                  type="button"
+                  onClick={() => handlePartSelect(part)}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50"
+                >
+                  <div className="font-medium">{part.partCode} — {part.name}</div>
+                  <div className="text-xs text-gray-500">
+                    {part.partTypeName}{part.drawingNo ? ` • Drawing: ${part.drawingNo}` : ''}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          Selecting a part will fill Product Code, Product Name and Description.
+        </p>
+      </div>
+
       <div>
         <label htmlFor="create-product-name" className="text-gray-700 font-medium">Product Name</label>
         <input
