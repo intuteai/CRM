@@ -17,7 +17,9 @@ const API_URL = `${BASE_URL}/api/enquiry`;
 const SALES_USER_ID = import.meta.env.VITE_DEFAULT_SALES_USER_ID
   ? parseInt(import.meta.env.VITE_DEFAULT_SALES_USER_ID, 10)
   : 7;
-
+const ADMIN_USER_ID = import.meta.env.VITE_DEFAULT_ADMIN_USER_ID
+  ? parseInt(import.meta.env.VITE_DEFAULT_ADMIN_USER_ID, 10)
+  : 1;
 // Fallback date formatter
 const formatDate = (dateString) => {
   if (!dateString) return "N/A";
@@ -159,58 +161,6 @@ function DesignEnquiryPage({ socket: providedSocket }) {
     [providedSocket],
   );
 
-  // Fetch list
-  // const fetchEnquiries = useCallback(
-  //   async (forceRefresh = false) => {
-  //     if (isFetching.current) return;
-  //     isFetching.current = true;
-  //     setIsLoading(true);
-  //     setError(null);
-
-  //     try {
-  //       const token = localStorage.getItem("token");
-  //       const offset = page * limit;
-  //       const url = `${API_URL}?limit=${limit}&offset=${offset}${
-  //         forceRefresh ? "&force_refresh=true" : ""
-  //       }`;
-
-  //       const response = await fetch(url, {
-  //         headers: {
-  //           Authorization: `Bearer ${token}`,
-  //           "Content-Type": "application/json",
-  //         },
-  //       });
-
-  //       if (!response.ok) {
-  //         const errorText = await response.text();
-  //         throw new Error(
-  //           errorText || `Server responded with status: ${response.status}`
-  //         );
-  //       }
-
-  //       const responseData = await response.json();
-
-  //       if (!responseData.data || !Array.isArray(responseData.data)) {
-  //         throw new Error("Invalid data format");
-  //       }
-
-  //       setEnquiries(responseData.data);
-  //       setTotal(responseData.total || 0);
-  //       setError(null);
-  //     } catch (err) {
-  //       console.error("Error fetching enquiries:", err);
-  //       const errorMessage =
-  //         err.message || "Network error. Please try again later.";
-  //       setError(errorMessage);
-  //       toast.error(errorMessage, { autoClose: 3000 });
-  //     } finally {
-  //       setIsLoading(false);
-  //       isFetching.current = false;
-  //     }
-  //   },
-  //   [page]
-  // );
-  // Helper: sort newest enquiries first (by created_at, fallback to enquiry_id)
   const sortNewestFirst = (arr) => {
     return arr.slice().sort((a, b) => {
       const aCreated = a.created_at ? new Date(a.created_at).getTime() : null;
@@ -752,6 +702,51 @@ function DesignEnquiryPage({ socket: providedSocket }) {
   };
 
   // ASSIGN TO SALES (simple action - assigns to default SALES_USER_ID)
+  // const assignToSales = async (enquiryId) => {
+  //   if (
+  //     !window.confirm(
+  //       `Assign enquiry #${enquiryId} to Sales (user ${SALES_USER_ID})?`,
+  //     )
+  //   )
+  //     return;
+  //   try {
+  //     const token = localStorage.getItem("token");
+  //     const res = await fetch(`${API_URL}/${enquiryId}/assign`, {
+  //       method: "POST",
+  //       headers: {
+  //         Authorization: `Bearer ${token}`,
+  //         "Content-Type": "application/json",
+  //       },
+  //       body: JSON.stringify({
+  //         assigned_to: SALES_USER_ID,
+  //         due_date: null,
+  //         message: "Assigned to Sales via UI",
+  //       }),
+  //     });
+  //     if (!res.ok) {
+  //       const txt = await res.text();
+  //       throw new Error(txt || "Failed to assign to Sales");
+  //     }
+  //     const updated = await res.json();
+  //     // update locally
+  //     setEnquiries((prev) =>
+  //       prev.map((e) =>
+  //         e.enquiry_id === updated.enquiry_id ? { ...e, ...updated } : e,
+  //       ),
+  //     );
+  //     setDetailEnquiry((prev) =>
+  //       prev && prev.enquiry_id === updated.enquiry_id
+  //         ? { ...prev, ...updated }
+  //         : prev,
+  //     );
+  //     toast.success(`Enquiry #${enquiryId} assigned to Sales`);
+  //     fetchEnquiries(true);
+  //   } catch (err) {
+  //     console.error("Assign to Sales error:", err);
+  //     toast.error(err.message || "Failed to assign to Sales");
+  //   }
+  // };
+  // ASSIGN TO SALES (simple action - assigns to default SALES_USER_ID)
   const assignToSales = async (enquiryId) => {
     if (
       !window.confirm(
@@ -794,6 +789,52 @@ function DesignEnquiryPage({ socket: providedSocket }) {
     } catch (err) {
       console.error("Assign to Sales error:", err);
       toast.error(err.message || "Failed to assign to Sales");
+    }
+  };
+
+  // ASSIGN TO ADMIN (similar to Sales, but uses ADMIN_USER_ID)
+  const assignToAdmin = async (enquiryId) => {
+    if (
+      !window.confirm(
+        `Assign enquiry #${enquiryId} to Admin (user ${ADMIN_USER_ID})?`,
+      )
+    )
+      return;
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/${enquiryId}/assign`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          assigned_to: ADMIN_USER_ID,
+          due_date: null,
+          message: "Assigned to Admin via UI",
+        }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || "Failed to assign to Admin");
+      }
+      const updated = await res.json();
+      // update locally
+      setEnquiries((prev) =>
+        prev.map((e) =>
+          e.enquiry_id === updated.enquiry_id ? { ...e, ...updated } : e,
+        ),
+      );
+      setDetailEnquiry((prev) =>
+        prev && prev.enquiry_id === updated.enquiry_id
+          ? { ...prev, ...updated }
+          : prev,
+      );
+      toast.success(`Enquiry #${enquiryId} assigned to Admin`);
+      fetchEnquiries(true);
+    } catch (err) {
+      console.error("Assign to Admin error:", err);
+      toast.error(err.message || "Failed to assign to Admin");
     }
   };
 
@@ -1427,15 +1468,33 @@ function DesignEnquiryPage({ socket: providedSocket }) {
               {!String(currentUser.role_name || "")
                 .toLowerCase()
                 .includes("design") && (
-                <button
-                  onClick={() => {
-                    setActionsMenuState((prev) => ({ ...prev, isOpen: false }));
-                    assignToSales(actionsMenuState.enquiry.enquiry_id);
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-amber-50 flex items-center gap-2"
-                >
-                  📤 Assign to Sales
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      setActionsMenuState((prev) => ({
+                        ...prev,
+                        isOpen: false,
+                      }));
+                      assignToSales(actionsMenuState.enquiry.enquiry_id);
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-amber-50 flex items-center gap-2"
+                  >
+                    📤 Assign to Sales
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActionsMenuState((prev) => ({
+                        ...prev,
+                        isOpen: false,
+                      }));
+                      assignToAdmin(actionsMenuState.enquiry.enquiry_id);
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-amber-50 flex items-center gap-2"
+                  >
+                    🧑‍💼 Assign to Admin
+                  </button>
+                </>
               )}
 
               {/* MARK DONE - only show if assigned to current Design user */}

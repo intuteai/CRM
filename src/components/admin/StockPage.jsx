@@ -780,7 +780,7 @@ function StockPage({ socket }) {
         {/* Create/Edit Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50" role="dialog">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl w-[520px] relative" ref={modalRef}>
+            <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto relative" ref={modalRef}>
               <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-gray-700">
                 <XCircle size={24} />
               </button>
