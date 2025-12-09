@@ -136,7 +136,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
 
   const limit = 10;
   const tableRef = useRef(null);
-  const hasFetched = useRef(false);
+  // const hasFetched = useRef(false);
   const isFetching = useRef(false);
 
   // Global actions menu
@@ -156,23 +156,102 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
       }),
-    [providedSocket]
+    [providedSocket],
   );
 
   // Fetch list
+  // const fetchEnquiries = useCallback(
+  //   async (forceRefresh = false) => {
+  //     if (isFetching.current) return;
+  //     isFetching.current = true;
+  //     setIsLoading(true);
+  //     setError(null);
+
+  //     try {
+  //       const token = localStorage.getItem("token");
+  //       const offset = page * limit;
+  //       const url = `${API_URL}?limit=${limit}&offset=${offset}${
+  //         forceRefresh ? "&force_refresh=true" : ""
+  //       }`;
+
+  //       const response = await fetch(url, {
+  //         headers: {
+  //           Authorization: `Bearer ${token}`,
+  //           "Content-Type": "application/json",
+  //         },
+  //       });
+
+  //       if (!response.ok) {
+  //         const errorText = await response.text();
+  //         throw new Error(
+  //           errorText || `Server responded with status: ${response.status}`
+  //         );
+  //       }
+
+  //       const responseData = await response.json();
+
+  //       if (!responseData.data || !Array.isArray(responseData.data)) {
+  //         throw new Error("Invalid data format");
+  //       }
+
+  //       setEnquiries(responseData.data);
+  //       setTotal(responseData.total || 0);
+  //       setError(null);
+  //     } catch (err) {
+  //       console.error("Error fetching enquiries:", err);
+  //       const errorMessage =
+  //         err.message || "Network error. Please try again later.";
+  //       setError(errorMessage);
+  //       toast.error(errorMessage, { autoClose: 3000 });
+  //     } finally {
+  //       setIsLoading(false);
+  //       isFetching.current = false;
+  //     }
+  //   },
+  //   [page]
+  // );
+  // Helper: sort newest enquiries first (by created_at, fallback to enquiry_id)
+  const sortNewestFirst = (arr) => {
+    return arr.slice().sort((a, b) => {
+      const aCreated = a.created_at ? new Date(a.created_at).getTime() : null;
+      const bCreated = b.created_at ? new Date(b.created_at).getTime() : null;
+
+      if (aCreated && bCreated) return bCreated - aCreated;
+      if (aCreated && !bCreated) return -1;
+      if (!aCreated && bCreated) return 1;
+
+      // fallback: sort by enquiry_id string descending
+      const aId = String(a.enquiry_id || "");
+      const bId = String(b.enquiry_id || "");
+      return bId.localeCompare(aId);
+    });
+  };
+
   const fetchEnquiries = useCallback(
-    async (forceRefresh = false) => {
+    async (forceRefresh = false, overridePage, overrideSearchTerm) => {
       if (isFetching.current) return;
+
       isFetching.current = true;
       setIsLoading(true);
       setError(null);
 
       try {
         const token = localStorage.getItem("token");
-        const offset = page * limit;
-        const url = `${API_URL}?limit=${limit}&offset=${offset}${
-          forceRefresh ? "&force_refresh=true" : ""
-        }`;
+
+        const currentPage = overridePage ?? page;
+        const currentSearch = overrideSearchTerm ?? searchTerm;
+
+        const offset = currentPage * limit;
+
+        const params = new URLSearchParams({
+          limit: String(limit),
+          offset: String(offset),
+        });
+
+        if (forceRefresh) params.append("force_refresh", "true");
+        if (currentSearch.trim()) params.append("search", currentSearch.trim());
+
+        const url = `${API_URL}?${params.toString()}`;
 
         const response = await fetch(url, {
           headers: {
@@ -184,7 +263,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(
-            errorText || `Server responded with status: ${response.status}`
+            errorText || `Server responded with status: ${response.status}`,
           );
         }
 
@@ -194,7 +273,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           throw new Error("Invalid data format");
         }
 
-        setEnquiries(responseData.data);
+        const sorted = sortNewestFirst(responseData.data);
+
+        setEnquiries(sorted);
         setTotal(responseData.total || 0);
         setError(null);
       } catch (err) {
@@ -208,8 +289,13 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         isFetching.current = false;
       }
     },
-    [page]
+    [page, searchTerm],
   );
+
+  // Fetch whenever page or searchTerm change (including first load)
+  useEffect(() => {
+    fetchEnquiries(false);
+  }, [page, searchTerm, fetchEnquiries]);
 
   // Fetch detail + activities + templates
   const fetchEnquiryDetail = useCallback(
@@ -277,7 +363,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
               Authorization: `Bearer ${token2}`,
               "Content-Type": "application/json",
             },
-          }).catch(() => {})
+          }).catch(() => {}),
         );
         Promise.all(markPromises);
       } catch (err) {
@@ -287,16 +373,11 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         setDetailLoading(false);
       }
     },
-    [currentUser]
+    [currentUser],
   );
 
   // Socket wiring
   useEffect(() => {
-    if (!hasFetched.current) {
-      fetchEnquiries(false);
-      hasFetched.current = true;
-    }
-
     socket.on("connect", () => {
       console.log("Connected to Socket.IO (Design)");
       toast.success("Connected to real-time updates!", {
@@ -409,7 +490,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
 
     socket.on("enquiryActivity", ({ enquiryId, activity }) => {
       setDetailActivities((prev) => {
-        if (!detailEnquiry || detailEnquiry.enquiry_id !== enquiryId) return prev;
+        if (!detailEnquiry || detailEnquiry.enquiry_id !== enquiryId)
+          return prev;
         return [...prev, activity];
       });
     });
@@ -421,7 +503,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
       socket.off("enquiryActivity");
       if (!providedSocket) socket.disconnect();
     };
-  }, [fetchEnquiries, socket, providedSocket, detailEnquiry, currentUser]);
+  }, [socket, providedSocket, detailEnquiry, currentUser]);
 
   // Sorting
   const handleSort = useCallback((key) => {
@@ -515,7 +597,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
     async (enquiryId) => {
       if (
         !window.confirm(
-          `Are you sure you want to delete enquiry #${enquiryId}?`
+          `Are you sure you want to delete enquiry #${enquiryId}?`,
         )
       )
         return;
@@ -535,7 +617,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(
-            errorText || `Delete failed with status: ${response.status}`
+            errorText || `Delete failed with status: ${response.status}`,
           );
         }
 
@@ -546,7 +628,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         toast.error(err.message || "Failed to delete enquiry");
       }
     },
-    [fetchEnquiries]
+    [fetchEnquiries],
   );
 
   const handleSubmit = async (e) => {
@@ -598,7 +680,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           errorText ||
             `${isEditing ? "Update" : "Create"} failed with status: ${
               response.status
-            }`
+            }`,
         );
       }
 
@@ -606,16 +688,16 @@ function DesignEnquiryPage({ socket: providedSocket }) {
       if (isEditing) {
         setEnquiries((prev) =>
           prev.map((e) =>
-            e.enquiry_id === updatedEnquiry.enquiry_id ? updatedEnquiry : e
-          )
+            e.enquiry_id === updatedEnquiry.enquiry_id ? updatedEnquiry : e,
+          ),
         );
         toast.success(
-          `Enquiry #${updatedEnquiry.enquiry_id} updated successfully!`
+          `Enquiry #${updatedEnquiry.enquiry_id} updated successfully!`,
         );
       } else {
         setEnquiries((prev) => [updatedEnquiry, ...prev]);
         toast.success(
-          `Enquiry #${updatedEnquiry.enquiry_id} created successfully!`
+          `Enquiry #${updatedEnquiry.enquiry_id} created successfully!`,
         );
       }
       setIsModalOpen(false);
@@ -661,7 +743,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
       toast.success(
         isCurrentlyFollowed
           ? `Unfollowed enquiry #${enquiryId}`
-          : `Following enquiry #${enquiryId}`
+          : `Following enquiry #${enquiryId}`,
       );
     } catch (err) {
       console.error("Follow toggle error:", err);
@@ -671,7 +753,12 @@ function DesignEnquiryPage({ socket: providedSocket }) {
 
   // ASSIGN TO SALES (simple action - assigns to default SALES_USER_ID)
   const assignToSales = async (enquiryId) => {
-    if (!window.confirm(`Assign enquiry #${enquiryId} to Sales (user ${SALES_USER_ID})?`)) return;
+    if (
+      !window.confirm(
+        `Assign enquiry #${enquiryId} to Sales (user ${SALES_USER_ID})?`,
+      )
+    )
+      return;
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`${API_URL}/${enquiryId}/assign`, {
@@ -680,7 +767,11 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ assigned_to: SALES_USER_ID, due_date: null, message: "Assigned to Sales via UI" }),
+        body: JSON.stringify({
+          assigned_to: SALES_USER_ID,
+          due_date: null,
+          message: "Assigned to Sales via UI",
+        }),
       });
       if (!res.ok) {
         const txt = await res.text();
@@ -688,8 +779,16 @@ function DesignEnquiryPage({ socket: providedSocket }) {
       }
       const updated = await res.json();
       // update locally
-      setEnquiries((prev) => prev.map((e) => (e.enquiry_id === updated.enquiry_id ? { ...e, ...updated } : e)));
-      setDetailEnquiry((prev) => (prev && prev.enquiry_id === updated.enquiry_id ? { ...prev, ...updated } : prev));
+      setEnquiries((prev) =>
+        prev.map((e) =>
+          e.enquiry_id === updated.enquiry_id ? { ...e, ...updated } : e,
+        ),
+      );
+      setDetailEnquiry((prev) =>
+        prev && prev.enquiry_id === updated.enquiry_id
+          ? { ...prev, ...updated }
+          : prev,
+      );
       toast.success(`Enquiry #${enquiryId} assigned to Sales`);
       fetchEnquiries(true);
     } catch (err) {
@@ -724,15 +823,17 @@ function DesignEnquiryPage({ socket: providedSocket }) {
 
       setEnquiries((prev) =>
         prev.map((e) =>
-          e.enquiry_id === updated.enquiry_id ? { ...e, ...updated } : e
-        )
+          e.enquiry_id === updated.enquiry_id ? { ...e, ...updated } : e,
+        ),
       );
       setDetailEnquiry((prev) =>
-        prev && prev.enquiry_id === updated.enquiry_id ? { ...prev, ...updated } : prev
+        prev && prev.enquiry_id === updated.enquiry_id
+          ? { ...prev, ...updated }
+          : prev,
       );
 
       toast.success(
-        `Enquiry #${updated.enquiry_id} marked done and returned to Sales`
+        `Enquiry #${updated.enquiry_id} marked done and returned to Sales`,
       );
       fetchEnquiries(true);
     } catch (err) {
@@ -777,7 +878,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
       ].some((key) =>
         String(item[key] || "")
           .toLowerCase()
-          .includes(lowerSearch)
+          .includes(lowerSearch),
       );
 
       const leadValue = (item.lead || item.priority || "lead").toLowerCase();
@@ -794,7 +895,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           item.tags.some((t) =>
             String(t || "")
               .toLowerCase()
-              .includes(tagFilterLower)
+              .includes(tagFilterLower),
           ));
 
       return matchesSearch && matchesLead && matchesSource && matchesTag;
@@ -816,7 +917,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           const aNum = Number(aRaw);
           const bNum = Number(bRaw);
           if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
-            return sortConfig.direction === "ascending" ? aNum - bNum : bNum - aNum;
+            return sortConfig.direction === "ascending"
+              ? aNum - bNum
+              : bNum - aNum;
           }
         }
 
@@ -824,7 +927,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         if (["due_date", "last_discussion", "next_interaction"].includes(key)) {
           const aDate = aRaw ? new Date(aRaw).getTime() : 0;
           const bDate = bRaw ? new Date(bRaw).getTime() : 0;
-          return sortConfig.direction === "ascending" ? aDate - bDate : bDate - aDate;
+          return sortConfig.direction === "ascending"
+            ? aDate - bDate
+            : bDate - aDate;
         }
 
         // fallback string compare
@@ -843,7 +948,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
       detailActivities
         .filter((act) => act.activity_type === "assignment")
         .slice(-1)[0] || null,
-    [detailActivities]
+    [detailActivities],
   );
 
   // Close actions menu with Escape
@@ -911,7 +1016,12 @@ function DesignEnquiryPage({ socket: providedSocket }) {
               <input
                 type="text"
                 placeholder="Search enquiries..."
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={searchTerm}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSearchTerm(value);
+                  setPage(0); // always go back to first page on new search
+                }}
                 className="w-full p-4 pl-12 border border-gray-200 rounded-xl bg-white shadow-md focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg transition-all duration-300 group-hover:shadow-lg group-hover:border-amber-300"
               />
               <svg
@@ -1073,7 +1183,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                     key={key}
                     onClick={() => key !== "actions" && handleSort(key)}
                     className={`px-3 md:px-4 py-3 text-xs md:text-sm font-bold ${
-                      key !== "actions" ? "cursor-pointer hover:bg-amber-400" : ""
+                      key !== "actions"
+                        ? "cursor-pointer hover:bg-amber-400"
+                        : ""
                     } transition-all.duration-300 whitespace-nowrap border-b border-amber-200 shadow-sm`}
                   >
                     <div className="flex justify-between items-center">
@@ -1158,7 +1270,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                                 setItemsModalText(enquiry.items_required || "");
                                 setItemsModalTitle(
                                   enquiry.company_name ||
-                                    `Enquiry #${enquiry.enquiry_id}`
+                                    `Enquiry #${enquiry.enquiry_id}`,
                                 );
                                 setItemsModalOpen(true);
                               }}
@@ -1172,7 +1284,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                     <td className="px-6 md:px-8 py-4">
                       <span
                         className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full border ${getLeadClasses(
-                          leadValue
+                          leadValue,
                         )}`}
                       >
                         {formatLeadLabel(leadValue)}
@@ -1192,10 +1304,10 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                         enquiry.status === "Closed"
                           ? "text-green-600"
                           : enquiry.status === "In Progress"
-                          ? "text-yellow-600"
-                          : enquiry.status === "Pending"
-                          ? "text-gray-600"
-                          : "text-red-600"
+                            ? "text-yellow-600"
+                            : enquiry.status === "Pending"
+                              ? "text-gray-600"
+                              : "text-red-600"
                       }`}
                     >
                       {enquiry.status}
@@ -1312,7 +1424,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
               </button>
 
               {/* Assign to Sales - visible to non-design/admin-like roles (you can tweak the condition) */}
-              {!(String(currentUser.role_name || "").toLowerCase().includes("design")) && (
+              {!String(currentUser.role_name || "")
+                .toLowerCase()
+                .includes("design") && (
                 <button
                   onClick={() => {
                     setActionsMenuState((prev) => ({ ...prev, isOpen: false }));
@@ -1327,7 +1441,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
               {/* MARK DONE - only show if assigned to current Design user */}
               {Number(actionsMenuState.enquiry.assigned_to) ===
                 Number(currentUser.user_id) &&
-                String(currentUser.role_name || "").toLowerCase().includes("design") && (
+                String(currentUser.role_name || "")
+                  .toLowerCase()
+                  .includes("design") && (
                   <button
                     onClick={() => {
                       setActionsMenuState((prev) => ({
@@ -1549,7 +1665,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                           >
                             {options.map((option) => (
                               <option key={option} value={option}>
-                                {key === "lead" ? formatLeadLabel(option) : option}
+                                {key === "lead"
+                                  ? formatLeadLabel(option)
+                                  : option}
                               </option>
                             ))}
                           </select>
@@ -1575,7 +1693,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                         </p>
                       )}
                     </div>
-                  )
+                  ),
                 )}
 
                 <div className="flex justify-end gap-4">
@@ -1643,7 +1761,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                         {detailEnquiry.company_name}
                       </h2>
                       <p className="text-xs text-gray-500 mt-1">
-                        Contact: {detailEnquiry.contact_person || "Not specified"} •
+                        Contact:{" "}
+                        {detailEnquiry.contact_person || "Not specified"} •
                         Phone: {detailEnquiry.phone_no || "Not specified"} •
                         Email: {detailEnquiry.mail_id || "Not specified"}
                       </p>
@@ -1651,11 +1770,11 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                     <div className="flex flex-col items-end gap-1">
                       <span
                         className={`px-3 py-1 rounded-full text-[11px] font-semibold border ${getLeadClasses(
-                          detailEnquiry.lead || detailEnquiry.priority
+                          detailEnquiry.lead || detailEnquiry.priority,
                         )}`}
                       >
                         {formatLeadLabel(
-                          detailEnquiry.lead || detailEnquiry.priority
+                          detailEnquiry.lead || detailEnquiry.priority,
                         )}
                       </span>
                       <span className="text-[11px] text-gray-500">
@@ -1692,7 +1811,10 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                         {detailEnquiry.status}
                       </p>
                       <p className="text-[11px] text-gray-500 mt-1">
-                        Due: {detailEnquiry.due_date ? formatDate(detailEnquiry.due_date) : "Not set"}
+                        Due:{" "}
+                        {detailEnquiry.due_date
+                          ? formatDate(detailEnquiry.due_date)
+                          : "Not set"}
                       </p>
                     </div>
                   </div>
@@ -1740,7 +1862,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                     </h3>
                     <div className="space-y-3">
                       {detailActivities.length === 0 && (
-                        <p className="text-xs text-gray-400">No activity yet.</p>
+                        <p className="text-xs text-gray-400">
+                          No activity yet.
+                        </p>
                       )}
                       {detailActivities.map((act) => {
                         const isAssignment = act.activity_type === "assignment";
@@ -1766,7 +1890,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                               <span className="text-[10px] text-gray-400 flex items-center gap-1">
                                 {formatDate(act.created_at)}{" "}
                                 {act.read_by_me ||
-                                (act.read_receipts && act.read_receipts.length > 0) ? (
+                                (act.read_receipts &&
+                                  act.read_receipts.length > 0) ? (
                                   <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-500 text-white text-[9px]">
                                     ✓
                                   </span>
@@ -1777,7 +1902,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                                 )}
                               </span>
                             </div>
-                            <p className="text-gray-700 whitespace-pre-wrap">{act.message}</p>
+                            <p className="text-gray-700 whitespace-pre-wrap">
+                              {act.message}
+                            </p>
                             {act.expected_by && (
                               <p className="text-[10px] text-gray-500 mt-1">
                                 Expected by: {formatDate(act.expected_by)}
@@ -1791,13 +1918,16 @@ function DesignEnquiryPage({ socket: providedSocket }) {
 
                   {/* Comment composer + Mark Done */}
                   <div className="mt-4 border-t pt-3">
-                    <h3 className="text-sm font-semibold text-gray-800 mb-2">Add Comment</h3>
+                    <h3 className="text-sm font-semibold text-gray-800 mb-2">
+                      Add Comment
+                    </h3>
 
                     <div className="flex flex-wrap gap-2 mb-2">
                       <button
                         type="button"
                         onClick={() => {
-                          const name = detailEnquiry.company_name || "Sir/Madam";
+                          const name =
+                            detailEnquiry.company_name || "Sir/Madam";
                           const text = `Dear ${name},\n\nThank you for your positive response and confirmation to proceed with the order.\n\nWarm regards,\n[Your Name]`;
                           setCommentText(text);
                         }}
@@ -1809,7 +1939,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                       <button
                         type="button"
                         onClick={() => {
-                          const name = detailEnquiry.company_name || "Sir/Madam";
+                          const name =
+                            detailEnquiry.company_name || "Sir/Madam";
                           const text = `Dear ${name},\n\nWe understand you will not be proceeding further at the moment.\n\nWarm regards,\n[Your Name]`;
                           setCommentText(text);
                         }}
@@ -1825,7 +1956,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                         onChange={(e) => {
                           const id = e.target.value;
                           setSelectedTemplateId(id);
-                          const tmpl = commentTemplates.find((t) => String(t.id) === id);
+                          const tmpl = commentTemplates.find(
+                            (t) => String(t.id) === id,
+                          );
                           if (tmpl) {
                             setCommentText(tmpl.content);
                           }
@@ -1850,10 +1983,15 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                     </div>
 
                     <div className="flex justify-between items-center gap-3">
-                      {Number(detailEnquiry.assigned_to) === Number(currentUser.user_id) &&
-                        String(currentUser.role_name || "").toLowerCase().includes("design") && (
+                      {Number(detailEnquiry.assigned_to) ===
+                        Number(currentUser.user_id) &&
+                        String(currentUser.role_name || "")
+                          .toLowerCase()
+                          .includes("design") && (
                           <button
-                            onClick={() => handleMarkDone(detailEnquiry.enquiry_id)}
+                            onClick={() =>
+                              handleMarkDone(detailEnquiry.enquiry_id)
+                            }
                             className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700"
                           >
                             ✅ Mark Done
@@ -1883,20 +2021,25 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                                     expected_by: null,
                                     is_internal: false,
                                   }),
-                                }
+                                },
                               );
                               if (!res.ok) {
                                 const txt = await res.text();
                                 throw new Error(txt || "Failed to add comment");
                               }
                               const activity = await res.json();
-                              setDetailActivities((prev) => [...prev, activity]);
+                              setDetailActivities((prev) => [
+                                ...prev,
+                                activity,
+                              ]);
                               setCommentText("");
                               setSelectedTemplateId("");
                               toast.success("Comment added");
                             } catch (err) {
                               console.error("Add comment error:", err);
-                              toast.error(err.message || "Failed to add comment");
+                              toast.error(
+                                err.message || "Failed to add comment",
+                              );
                             }
                           }}
                           className="px-4 py-2 bg-amber-500 text-white rounded-lg text-xs font-semibold hover:bg-amber-600"
@@ -1924,7 +2067,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
               <X size={18} />
             </button>
             <div className="px-5 pt-5 pb-3 border-b border-gray-200">
-              <h3 className="text-lg font-bold text-gray-800">Items Required</h3>
+              <h3 className="text-lg font-bold text-gray-800">
+                Items Required
+              </h3>
               {itemsModalTitle && (
                 <p className="text-xs text-gray-500 mt-1">{itemsModalTitle}</p>
               )}
