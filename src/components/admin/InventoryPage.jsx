@@ -844,6 +844,9 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   const [showPartDropdown, setShowPartDropdown] = useState(false);
   const [partsLoaded, setPartsLoaded] = useState(false);
 
+  // Ref for click-outside detection
+  const partDropdownRef = useRef(null);
+
   const validateField = (name, value) => {
     if (name === 'product_name' && !value.trim()) return 'Product name is required';
     if ((name === 'stock_quantity' || name === 'price') && value < 0) return `${name === 'stock_quantity' ? 'Quantity' : 'Price'} cannot be negative`;
@@ -888,6 +891,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     }
   }, [partsLoaded, isPartLoading]);
 
+  // Filter parts on search term
   useEffect(() => {
     const term = partSearch.toLowerCase().trim();
     if (!term) {
@@ -904,6 +908,20 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
       );
     }
   }, [partSearch, allParts]);
+
+  // Click-outside to close part dropdown
+  useEffect(() => {
+    if (!showPartDropdown) return;
+
+    const handleClickOutside = (event) => {
+      if (partDropdownRef.current && !partDropdownRef.current.contains(event.target)) {
+        setShowPartDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPartDropdown]);
 
   const handlePartSearchChange = async (e) => {
     const value = e.target.value;
@@ -955,7 +973,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
       {/* Part search / typing selector */}
       <div>
         <label className="text-gray-700 font-medium">Search Part (optional)</label>
-        <div className="relative">
+        <div className="relative" ref={partDropdownRef}>
           <input
             type="text"
             value={partSearch}

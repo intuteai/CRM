@@ -99,6 +99,16 @@ function StockPage({ socket }) {
   const fileInputRef = useRef(null);
   const debouncedSearch = useDebounce(searchInput, 300);
 
+  // ---- Part selector state (for modal) ----
+  const [partSearch, setPartSearch] = useState('');
+  const [allParts, setAllParts] = useState([]);
+  const [filteredParts, setFilteredParts] = useState([]);
+  const [isPartLoading, setIsPartLoading] = useState(false);
+  const [showPartDropdown, setShowPartDropdown] = useState(false);
+  const [partsLoaded, setPartsLoaded] = useState(false);
+  const partDropdownRef = useRef(null);
+  // ----------------------------------------
+
   // Fetch Stock
   const fetchStock = useCallback(async () => {
     setIsLoading(true);
@@ -204,26 +214,121 @@ function StockPage({ socket }) {
   useEffect(() => setSearchTerm(debouncedSearch), [debouncedSearch]);
   useEffect(() => setPage(0), [searchTerm]);
 
-  // Modal Focus Trap
+  // Modal Focus Trap (focus Product Name, not part search)
   useEffect(() => {
     if (showModal && modalRef.current) {
-      const firstInput = modalRef.current.querySelector('input');
-      firstInput?.focus();
+      // Prefer productName input
+      const targetInput =
+        modalRef.current.querySelector('input[name="productName"]') ||
+        modalRef.current.querySelector('input:not([name="partSearch"])') ||
+        modalRef.current.querySelector('input');
+
+      targetInput?.focus();
 
       const handleTab = (e) => {
         if (e.key !== 'Tab') return;
         const focusable = modalRef.current.querySelectorAll('button, input, textarea');
-        const first = focusable[0], last = focusable[focusable.length - 1];
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
         if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault(); last.focus();
+          e.preventDefault();
+          last.focus();
         } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault(); first.focus();
+          e.preventDefault();
+          first.focus();
         }
       };
       document.addEventListener('keydown', handleTab);
       return () => document.removeEventListener('keydown', handleTab);
     }
   }, [showModal]);
+
+  // ---- Parts API + filtering for modal ----
+  const loadParts = useCallback(async () => {
+    if (partsLoaded || isPartLoading) return;
+    try {
+      setIsPartLoading(true);
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Authentication token missing.');
+
+      const res = await fetch(`${BASE_URL}/api/parts?limit=500&offset=0`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to fetch parts (${res.status})`);
+      }
+
+      const json = await res.json();
+      const list = json.data || [];
+      setAllParts(list);
+      setPartsLoaded(true);
+    } catch (err) {
+      console.error('Failed to load parts:', err);
+      toast.error(err.message || 'Failed to load parts', { autoClose: 3000 });
+    } finally {
+      setIsPartLoading(false);
+    }
+  }, [partsLoaded, isPartLoading]);
+
+  useEffect(() => {
+    const term = partSearch.toLowerCase().trim();
+    if (!term) {
+      setFilteredParts(allParts.slice(0, 20));
+    } else {
+      setFilteredParts(
+        allParts
+          .filter(p =>
+            (p.partCode || '').toLowerCase().includes(term) ||
+            (p.name || '').toLowerCase().includes(term) ||
+            (p.drawingNo || '').toLowerCase().includes(term)
+          )
+          .slice(0, 20)
+      );
+    }
+  }, [partSearch, allParts]);
+
+  useEffect(() => {
+    if (!showPartDropdown) return;
+
+    const handleClickOutside = (event) => {
+      if (partDropdownRef.current && !partDropdownRef.current.contains(event.target)) {
+        setShowPartDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPartDropdown]);
+
+  const handlePartSearchChange = (e) => {
+    const value = e.target.value;
+    setPartSearch(value);
+    // Do NOT auto-open here; dropdown only opens on focus
+    if (!partsLoaded && !isPartLoading) {
+      loadParts();
+    }
+  };
+
+  const handlePartSelect = (part) => {
+    setFormData(prev => ({
+      ...prev,
+      productName: part.name || '',
+      productCode: part.partCode || '',
+      description: part.description || '',
+    }));
+    setFormErrors(prev => ({
+      ...prev,
+      productName: '',
+      productCode: '',
+      description: '',
+    }));
+    setPartSearch(`${part.partCode} — ${part.name}`);
+    setShowPartDropdown(false);
+  };
+  // -----------------------------------------
 
   // Sorting & Filtering
   const sortedStock = useMemo(() => {
@@ -372,6 +477,8 @@ function StockPage({ socket }) {
       productName: '', description: '', productCode: '', price: '', stockQuantity: '', qtyRequired: '', location: ''
     });
     setFormErrors({});
+    setPartSearch('');
+    setShowPartDropdown(false);
     setShowModal(true);
   }, []);
 
@@ -388,6 +495,8 @@ function StockPage({ socket }) {
       location: item.location || ''
     });
     setFormErrors({});
+    setPartSearch('');
+    setShowPartDropdown(false);
     setShowModal(true);
   }, []);
 
@@ -474,15 +583,15 @@ function StockPage({ socket }) {
     setUploadingId(productId);
     const toastId = toast.loading(`Uploading ${file.name}...`);
     
-    const formData = new FormData();
-    formData.append('photo', file);
+    const formDataUpload = new FormData();
+    formDataUpload.append('photo', file);
 
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${BASE_URL}/api/stock/${productId}/photo`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
+        body: formDataUpload
       });
 
       const result = await res.json();
@@ -492,11 +601,9 @@ function StockPage({ socket }) {
         throw new Error(result.message || result.error || 'Upload failed');
       }
 
-      // Get the raw image URL and convert to Weserv
       const rawImageUrl = result.imageUrl || result.image_url || result.link || null;
       const weservImageUrl = getWeservUrl(rawImageUrl);
       
-      // Update local state with Weserv URL
       setStockItems(prev => prev.map(item =>
         item.productId === productId ? { ...item, imageUrl: weservImageUrl } : item
       ));
@@ -698,7 +805,6 @@ function StockPage({ socket }) {
                         <td className="py-4 px-3 text-gray-600">{item.productId}</td>
                         <td className="py-4 px-3 text-gray-600 font-medium">
                           <div className="flex items-center gap-3">
-                            {/* Thumbnail with Weserv proxy */}
                             {weservImageUrl ? (
                               <img 
                                 src={weservImageUrl} 
@@ -788,9 +894,58 @@ function StockPage({ socket }) {
                 {modalMode === 'create' ? 'Create Product' : `Edit #${selectedItem?.productId}`}
               </h2>
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Part search (optional) */}
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">Search Part (optional)</label>
+                  <div className="relative" ref={partDropdownRef}>
+                    <input
+                      name="partSearch"
+                      type="text"
+                      value={partSearch}
+                      onChange={handlePartSearchChange}
+                      onFocus={() => {
+                        setShowPartDropdown(true);
+                        if (!partsLoaded && !isPartLoading) {
+                          loadParts();
+                        }
+                      }}
+                      placeholder="Type part code or name..."
+                      className="w-full p-3 pl-9 border rounded-lg focus:ring-2 focus:ring-amber-300"
+                    />
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    {showPartDropdown && (
+                      <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white border rounded-lg shadow-lg">
+                        {isPartLoading && (
+                          <div className="px-3 py-2 text-sm text-gray-500">Loading parts...</div>
+                        )}
+                        {!isPartLoading && filteredParts.length === 0 && (
+                          <div className="px-3 py-2 text-sm text-gray-500">No parts found.</div>
+                        )}
+                        {!isPartLoading && filteredParts.map(part => (
+                          <button
+                            key={part.id}
+                            type="button"
+                            onClick={() => handlePartSelect(part)}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50"
+                          >
+                            <div className="font-medium">{part.partCode} — {part.name}</div>
+                            <div className="text-xs text-gray-500">
+                              {part.partTypeName}{part.drawingNo ? ` • Drawing: ${part.drawingNo}` : ''}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Selecting a part will fill Product Name, Product Code and Description.
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Product Name *</label>
                   <input 
+                    name="productName"
                     type="text" 
                     value={formData.productName} 
                     onChange={e => setFormData({ ...formData, productName: e.target.value })} 
@@ -802,6 +957,7 @@ function StockPage({ socket }) {
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Product Code *</label>
                   <input 
+                    name="productCode"
                     type="text" 
                     value={formData.productCode} 
                     onChange={e => setFormData({ ...formData, productCode: e.target.value })} 
@@ -830,6 +986,7 @@ function StockPage({ socket }) {
                     className={`w-full p-3 border rounded-lg ${formErrors.price ? 'border-red-500' : ''}`} 
                     required 
                   />
+                  {formErrors.price && <p className="text-red-500 text-sm mt-1">{formErrors.price}</p>}
                 </div>
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">{modalMode === 'create' ? 'Initial Stock' : 'Stock Quantity'}</label>
@@ -842,6 +999,7 @@ function StockPage({ socket }) {
                     className={`w-full p-3 border rounded-lg ${formErrors.stockQuantity ? 'border-red-500' : ''}`} 
                     required={modalMode === 'create'} 
                   />
+                  {formErrors.stockQuantity && <p className="text-red-500 text-sm mt-1">{formErrors.stockQuantity}</p>}
                 </div>
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Qty Required</label>
