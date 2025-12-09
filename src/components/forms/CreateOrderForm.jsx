@@ -1,11 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { XCircle, PlusCircle, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { XCircle, PlusCircle, Trash2 } from "lucide-react";
+import Select from "react-select";
 
-function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, formatDate }) {
+function CreateOrderForm({
+  customers,
+  onClose,
+  onSubmit,
+  validateOrderItems,
+  formatDate,
+}) {
   const [newOrder, setNewOrder] = useState({
-    customerId: '',
-    targetDeliveryDate: '',
-    items: [{ product_id: '', quantity: '', price: '' }],
+    customerId: "",
+    targetDeliveryDate: "",
+    items: [{ product_id: "", quantity: "", price: "" }],
   });
   const [availableProducts, setAvailableProducts] = useState([]);
   const [formErrors, setFormErrors] = useState([]);
@@ -14,12 +21,13 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
   useEffect(() => {
     const fetchStock = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const token = localStorage.getItem("token");
+        const backendUrl =
+          import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
         const response = await fetch(`${backendUrl}/api/inventory/stock`, {
-          headers: { 'Authorization': `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}` },
         });
-        if (!response.ok) throw new Error('Failed to fetch available stock');
+        if (!response.ok) throw new Error("Failed to fetch available stock");
         const data = await response.json();
         setAvailableProducts(data);
       } catch (error) {
@@ -30,30 +38,32 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
   }, []);
 
   const getAvailableStock = (productId) => {
-    const product = availableProducts.find(p => p.product_id === parseInt(productId));
+    const product = availableProducts.find(
+      (p) => p.product_id === parseInt(productId),
+    );
     return product ? product.stock_quantity : 0;
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setNewOrder(prev => ({ ...prev, [name]: value }));
+    setNewOrder((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleItemChange = (index, field, value) => {
     const updatedItems = [...newOrder.items];
     updatedItems[index][field] = value;
-    setNewOrder(prev => ({ ...prev, items: updatedItems }));
+    setNewOrder((prev) => ({ ...prev, items: updatedItems }));
   };
 
   const addItem = () => {
-    setNewOrder(prev => ({
+    setNewOrder((prev) => ({
       ...prev,
-      items: [...prev.items, { product_id: '', quantity: '', price: '' }],
+      items: [...prev.items, { product_id: "", quantity: "", price: "" }],
     }));
   };
 
   const removeItem = (index) => {
-    setNewOrder(prev => ({
+    setNewOrder((prev) => ({
       ...prev,
       items: prev.items.filter((_, i) => i !== index),
     }));
@@ -61,15 +71,19 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const { isValid, errors } = validateOrderItems(newOrder.items, availableProducts, getAvailableStock);
-    
+    const { isValid, errors } = validateOrderItems(
+      newOrder.items,
+      availableProducts,
+      getAvailableStock,
+    );
+
     // Optional: Warn about past dates
     if (newOrder.targetDeliveryDate) {
-      const selectedDate = new Date(newOrder.targetDeliveryDate + 'T00:00:00'); // Treat as local date
+      const selectedDate = new Date(newOrder.targetDeliveryDate + "T00:00:00"); // Treat as local date
       const today = new Date();
       today.setHours(0, 0, 0, 0); // Reset time for comparison
       if (selectedDate < today) {
-        errors.push('Warning: The selected delivery date is in the past.');
+        errors.push("Warning: The selected delivery date is in the past.");
       }
     }
 
@@ -82,7 +96,7 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
       const payload = {
         user_id: newOrder.customerId,
         targetDeliveryDate: newOrder.targetDeliveryDate,
-        items: newOrder.items.map(item => ({
+        items: newOrder.items.map((item) => ({
           product_id: parseInt(item.product_id, 10),
           quantity: parseInt(item.quantity, 10),
           price: parseFloat(item.price),
@@ -101,7 +115,11 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-[600px] relative">
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500" aria-label="Close form">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-500"
+          aria-label="Close form"
+        >
           <XCircle size={24} />
         </button>
         <h2 className="text-2xl font-bold mb-6">Create New Order</h2>
@@ -116,7 +134,7 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
               required
             >
               <option value="">Select Customer</option>
-              {customers.map(customer => (
+              {customers.map((customer) => (
                 <option key={customer.user_id} value={customer.user_id}>
                   {customer.name}
                 </option>
@@ -124,7 +142,9 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
             </select>
           </div>
           <div>
-            <label className="text-gray-700 font-medium">Target Delivery Date</label>
+            <label className="text-gray-700 font-medium">
+              Target Delivery Date
+            </label>
             <input
               type="date"
               name="targetDeliveryDate"
@@ -136,43 +156,76 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
           <div>
             <label className="text-gray-700 font-medium">Items</label>
             {newOrder.items.map((item, idx) => (
-              <div key={idx} className="flex space-x-2 mb-3 items-center">
-                <select
-                  value={item.product_id}
-                  onChange={(e) => handleItemChange(idx, 'product_id', e.target.value)}
-                  className="w-1/3 p-3 border rounded-lg"
-                  required
-                >
-                  <option value="">Select Product</option>
-                  {availableProducts.map(product => (
-                    <option
-                      key={product.product_id}
-                      value={product.product_id}
-                      disabled={getAvailableStock(product.product_id) <= 0}
-                    >
-                      {product.product_name} (Available: {getAvailableStock(product.product_id)})
-                    </option>
-                  ))}
-                </select>
+              <div key={idx} className="flex flex-wrap gap-2 mb-3 items-center">
+                {/* Product select – wide */}
+                <div className="flex-[2] min-w-[380px]">
+                  <Select
+                    options={availableProducts.map((p) => ({
+                      value: String(p.product_id),
+                      label: `${p.product_name} (${p.product_code || p.product_id})`,
+                    }))}
+                    value={
+                      availableProducts
+                        .filter(
+                          (p) =>
+                            String(p.product_id) === String(item.product_id),
+                        )
+                        .map((p) => ({
+                          value: String(p.product_id),
+                          label: `${p.product_name} (${p.product_code || p.product_id})`,
+                        }))[0] || null
+                    }
+                    onChange={(opt) =>
+                      handleItemChange(idx, "product_id", opt?.value)
+                    }
+                    styles={{
+                      container: (base) => ({
+                        ...base,
+                        width: "100%",
+                        minWidth: "380px",
+                      }),
+                      control: (base) => ({
+                        ...base,
+                        minHeight: "48px",
+                        fontSize: "15px",
+                        paddingLeft: "4px",
+                      }),
+                      menu: (base) => ({
+                        ...base,
+                        zIndex: 9999,
+                        width: "100%",
+                      }),
+                    }}
+                  />
+                </div>
+
+                {/* Quantity */}
                 <input
                   type="number"
                   placeholder="Quantity"
                   value={item.quantity}
-                  onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                  className="w-1/4 p-3 border rounded-lg"
+                  onChange={(e) =>
+                    handleItemChange(idx, "quantity", e.target.value)
+                  }
+                  className="flex-1 min-w-[110px] p-3 border rounded-lg"
                   min="1"
                   required
                 />
+
+                {/* Price */}
                 <input
                   type="number"
                   placeholder="Price per Item"
                   value={item.price}
-                  onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
-                  className="w-1/4 p-3 border rounded-lg"
+                  onChange={(e) =>
+                    handleItemChange(idx, "price", e.target.value)
+                  }
+                  className="flex-1 min-w-[130px] p-3 border rounded-lg"
                   min="0.01"
                   step="0.01"
                   required
                 />
+
                 {newOrder.items.length > 1 && (
                   <button
                     type="button"
@@ -185,6 +238,7 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
                 )}
               </div>
             ))}
+
             <button
               type="button"
               onClick={addItem}
@@ -193,9 +247,12 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
               <PlusCircle className="mr-2" size={20} /> Add Item
             </button>
           </div>
+
           {formErrors.length > 0 && (
             <div className="text-red-700">
-              {formErrors.map((error, idx) => <p key={idx}>{error}</p>)}
+              {formErrors.map((error, idx) => (
+                <p key={idx}>{error}</p>
+              ))}
             </div>
           )}
           <button
@@ -203,7 +260,7 @@ function CreateOrderForm({ customers, onClose, onSubmit, validateOrderItems, for
             disabled={isSubmitting || !newOrder.customerId}
             className="w-full p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:bg-gray-400"
           >
-            {isSubmitting ? 'Submitting...' : 'Create Order'}
+            {isSubmitting ? "Submitting..." : "Create Order"}
           </button>
         </form>
       </div>
