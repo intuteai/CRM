@@ -44,6 +44,7 @@ import SelectOrderPage from "./components/admin/SelectOrderPage";
 import CreateMotorProcess from "./components/admin/CreateMotorProcess";
 import CreateNonMotorProcess from "./components/admin/CreateNonMotorProcess";
 import PartCreation from "./components/admin/PartCreation";
+import DeliveryChallanForm from "./components/admin/DeliveryChallanForm";
 
 // sales
 import SalesQueriesPage from "./components/sales/SalesQueriesPage";
@@ -133,6 +134,7 @@ const allowedPathsByRole = {
     "/quotation",
     "/proforma",
     "/part-creation",
+    "/delivery-challan"
   ],
   [ROLES.CUSTOMER]: [
     "/customer-dashboard",
@@ -471,6 +473,18 @@ function App() {
             )
           }
         />
+        <Route
+          path="/delivery-challan"
+          element={
+            userRole === "admin" ? (
+              <ErrorBoundary>
+                <DeliveryChallanForm socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        /> 
         <Route
           path="/part-creation"
           element={
