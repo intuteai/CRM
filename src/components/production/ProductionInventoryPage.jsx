@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
-  Edit2, MoreVertical, Package, XCircle, Trash2, Eye, Download, Upload
+  Edit2, MoreVertical, Package, XCircle, Eye, Download, Upload
 } from 'lucide-react';
 import { debounce } from 'lodash';
 import { io } from 'socket.io-client';
@@ -41,7 +41,7 @@ const useFetchInventory = ({ limit, offset }) => {
         const normalizedData = data.map(item => ({
           ...item,
           price: item.price !== null ? Number(item.price) : 0,
-          stock_quantity: item.stock_quantity ?? 0,
+          stock_quantity: item.stock_quantity || 0,
           description: item.description || '',
           product_code: item.product_code,
         }));
@@ -62,7 +62,7 @@ const useFetchInventory = ({ limit, offset }) => {
   return { inventory, totalItems, isLoading, error, refetchData: fetchData };
 };
 
-function InventoryPage({ userRole }) {
+function ProductionInventoryPage() {
   const [page, setPage] = useState(0);
   const [itemsPerPage] = useState(10);
   const [searchInput, setSearchInput] = useState('');
@@ -81,6 +81,7 @@ function InventoryPage({ userRole }) {
   const tableRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  // Fetch ALL items at once (limit 5000) for client-side search
   const { inventory: allInventory, totalItems, isLoading, error, refetchData } =
     useFetchInventory({ limit: 5000, offset: 0 });
 
@@ -123,13 +124,24 @@ function InventoryPage({ userRole }) {
 
   useEffect(() => {
     if (showBarcodeModal && selectedBarcode) {
-      generateQRCode(selectedBarcode, selectedProductName, selectedProductDescription, 'qrcode-canvas');
+      generateQRCode(
+        selectedBarcode,
+        selectedProductName,
+        selectedProductDescription,
+        'qrcode-canvas'
+      );
     }
   }, [showBarcodeModal, selectedBarcode, selectedProductName, selectedProductDescription, generateQRCode]);
 
-  const debouncedSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);
+  const debouncedSearch = useCallback(
+    debounce((value) => setSearchTerm(value), 300),
+    []
+  );
 
-  useEffect(() => { setPage(0); }, [searchTerm, filterStock]);
+  // Reset page to 0 on search/filter change
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, filterStock]);
 
   const handleSearchChange = (e) => {
     const value = e.target.value.toLowerCase();
@@ -137,11 +149,13 @@ function InventoryPage({ userRole }) {
     debouncedSearch(value);
   };
 
+  // SORT full inventory
   const sortedInventory = useMemo(() => {
     const sortableInventory = [...allInventory];
     if (sortConfig.key) {
       sortableInventory.sort((a, b) => {
-        let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
+        let aValue = a[sortConfig.key],
+          bValue = b[sortConfig.key];
         if (sortConfig.key === 'price' || sortConfig.key === 'stock_quantity') {
           aValue = Number(aValue);
           bValue = Number(bValue);
@@ -157,8 +171,9 @@ function InventoryPage({ userRole }) {
     return sortableInventory;
   }, [allInventory, sortConfig]);
 
+  // FILTER sorted inventory according to search and stock filter
   const filteredInventory = useMemo(() => {
-    return sortedInventory.filter(item => {
+    return sortedInventory.filter((item) => {
       const matchesSearch =
         item.product_id.toString().includes(searchTerm) ||
         item.product_name.toLowerCase().includes(searchTerm) ||
@@ -171,12 +186,13 @@ function InventoryPage({ userRole }) {
     });
   }, [sortedInventory, searchTerm, filterStock]);
 
+  // PAGINATE filtered inventory client-side
   const paginatedInventory = useMemo(() => {
     const start = page * itemsPerPage;
     return filteredInventory.slice(start, start + itemsPerPage);
   }, [filteredInventory, page, itemsPerPage]);
 
-  // Import validation – allow negative stock, just enforce integer
+  // Validation helper for import
   const validateImportRow = useCallback((row, index) => {
     const errors = [];
     if (!row['Product Name'] || !String(row['Product Name']).trim()) {
@@ -185,138 +201,167 @@ function InventoryPage({ userRole }) {
     if (!row['Product Code'] || String(row['Product Code']).trim().length !== 10) {
       errors.push(`Row ${index + 1}: Product Code must be exactly 10 characters`);
     }
+
+    // Stock can be negative / positive, but must be integer
     const stockQuantity = parseInt(row['Stock Quantity']);
     if (isNaN(stockQuantity) || !Number.isInteger(Number(row['Stock Quantity']))) {
       errors.push(`Row ${index + 1}: Stock Quantity must be an integer`);
     }
-    const price = parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, ''));
-    if (isNaN(price) || price < 0) {
-      errors.push(`Row ${index + 1}: Price must be a non-negative number`);
+
+    const price = parseFloat(
+      String(row['Price (₹)'] || '0').replace(/[^0-9.\-]/g, '')
+    );
+    if (isNaN(price)) {
+      errors.push(`Row ${index + 1}: Price must be a number`);
     }
     return errors;
   }, []);
 
-  const importFromExcel = useCallback(async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+  const importFromExcel = useCallback(
+    async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
 
-    try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      try {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        if (!jsonData.length) {
-          toast.error('Excel file is empty', { autoClose: 3000 });
-          return;
-        }
-
-        const errors = [];
-        const validRows = [];
-
-        jsonData.forEach((row, index) => {
-          const rowErrors = validateImportRow(row, index);
-          if (rowErrors.length > 0) {
-            errors.push(...rowErrors);
-          } else {
-            validRows.push({
-              product_name: String(row['Product Name'] || '').trim(),
-              product_code: String(row['Product Code'] || '').trim(),
-              stock_quantity: parseInt(row['Stock Quantity'] || 0),
-              price: parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, '')),
-              description: String(row['Description'] || '').trim() || undefined,
-              product_id: row['Product ID'] ? parseInt(row['Product ID']) : undefined,
-            });
+          if (!jsonData.length) {
+            toast.error('Excel file is empty', { autoClose: 3000 });
+            return;
           }
-        });
 
-        if (errors.length > 0) {
-          errors.forEach(error => toast.error(error, { autoClose: 5000 }));
-        }
-        if (!validRows.length) {
-          toast.error('No valid rows to import. Check validation errors.', { autoClose: 5000 });
-          return;
-        }
+          const errors = [];
+          const validRows = [];
 
-        const token = localStorage.getItem('token');
-        if (!token) {
-          toast.error('Authentication token missing. Please log in.', { autoClose: 5000 });
-          return;
-        }
-
-        let createdCount = 0;
-        let updatedCount = 0;
-        let failedCount = 0;
-
-        for (const row of validRows) {
-          try {
-            const { product_id, ...body } = row;
-            const url = product_id
-              ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory/${product_id}`
-              : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory`;
-            const method = product_id ? 'PUT' : 'POST';
-
-            const response = await fetch(url, {
-              method,
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(body),
-              credentials: 'include',
-            });
-
-            if (!response.ok) {
-              const errorData = await response.json();
-              console.error(`Row ${validRows.indexOf(row) + 1} failed:`, { status: response.status, errorData });
-              throw new Error(errorData.error || `Failed to ${product_id ? 'update' : 'create'} item (Status: ${response.status})`);
-            }
-
-            if (product_id) {
-              updatedCount++;
+          jsonData.forEach((row, index) => {
+            const rowErrors = validateImportRow(row, index);
+            if (rowErrors.length > 0) {
+              errors.push(...rowErrors);
             } else {
-              createdCount++;
+              validRows.push({
+                product_name: String(row['Product Name'] || '').trim(),
+                product_code: String(row['Product Code'] || '').trim(),
+                stock_quantity: parseInt(row['Stock Quantity'] || 0),
+                price: parseFloat(
+                  String(row['Price (₹)'] || '0').replace(/[^0-9.\-]/g, '')
+                ),
+                description: String(row['Description'] || '').trim() || undefined,
+                product_id: row['Product ID'] ? parseInt(row['Product ID']) : undefined,
+              });
             }
-          } catch (err) {
-            failedCount++;
-            console.error(`Row ${validRows.indexOf(row) + 1} error:`, err);
-            toast.error(`Row ${validRows.indexOf(row) + 1}: ${err.message}`, { autoClose: 3000 });
+          });
+
+          if (errors.length > 0) {
+            errors.forEach((error) => toast.error(error, { autoClose: 5000 }));
           }
-        }
+          if (!validRows.length) {
+            toast.error('No valid rows to import. Check validation errors.', {
+              autoClose: 5000,
+            });
+            return;
+          }
 
-        if (createdCount > 0 || updatedCount > 0) {
-          await refetchData();
-          setPage(0);
-          toast.success(
-            `Imported successfully: ${createdCount} created, ${updatedCount} updated${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
-            { autoClose: 5000 }
-          );
-        } else {
-          toast.error(`Import failed: ${failedCount} rows could not be processed`, { autoClose: 5000 });
-        }
-      };
+          const token = localStorage.getItem('token');
+          if (!token) {
+            toast.error('Authentication token missing. Please log in.', {
+              autoClose: 5000,
+            });
+            return;
+          }
 
-      reader.readAsArrayBuffer(file);
-      event.target.value = '';
-    } catch (err) {
-      console.error('Import error:', err);
-      toast.error(`Import failed: ${err.message}`, { autoClose: 3000 });
-    }
-  }, [validateImportRow, refetchData]);
+          let createdCount = 0;
+          let updatedCount = 0;
+          let failedCount = 0;
+
+          for (const row of validRows) {
+            try {
+              const { product_id, ...body } = row;
+              const url = product_id
+                ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory/${product_id}`
+                : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory`;
+              const method = product_id ? 'PUT' : 'POST';
+
+              const response = await fetch(url, {
+                method,
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+                credentials: 'include',
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json();
+                console.error(`Row ${validRows.indexOf(row) + 1} failed:`, {
+                  status: response.status,
+                  errorData,
+                });
+                throw new Error(
+                  errorData.error ||
+                    `Failed to ${product_id ? 'update' : 'create'} item (Status: ${response.status})`
+                );
+              }
+
+              if (product_id) {
+                updatedCount++;
+              } else {
+                createdCount++;
+              }
+            } catch (err) {
+              failedCount++;
+              console.error(`Row ${validRows.indexOf(row) + 1} error:`, err);
+              toast.error(`Row ${validRows.indexOf(row) + 1}: ${err.message}`, {
+                autoClose: 3000,
+              });
+            }
+          }
+
+          if (createdCount > 0 || updatedCount > 0) {
+            await refetchData();
+            setPage(0);
+            toast.success(
+              `Imported successfully: ${createdCount} created, ${updatedCount} updated${
+                failedCount > 0 ? `, ${failedCount} failed` : ''
+              }`,
+              { autoClose: 5000 }
+            );
+          } else {
+            toast.error(
+              `Import failed: ${failedCount} rows could not be processed`,
+              { autoClose: 5000 }
+            );
+          }
+        };
+
+        reader.readAsArrayBuffer(file);
+        event.target.value = '';
+      } catch (err) {
+        console.error('Import error:', err);
+        toast.error(`Import failed: ${err.message}`, { autoClose: 3000 });
+      }
+    },
+    [validateImportRow, refetchData]
+  );
 
   const exportToExcel = useCallback(() => {
-    const data = filteredInventory.map(item => ({
+    const data = filteredInventory.map((item) => ({
       'Product ID': item.product_id,
       'Product Code': item.product_code || 'N/A',
       'Product Name': item.product_name.replace(/<[^>]*>/g, '') || 'N/A',
-      'Description': item.description || 'N/A',
+      Description: item.description || 'N/A',
       'Stock Quantity': Number(item.stock_quantity),
       'Price (₹)': formatCurrency(Number(item.price)),
       'Created At (IST)': item.created_at
-        ? `${new Date(item.created_at).toLocaleDateString('en-IN')} ${new Date(item.created_at).toLocaleTimeString('en-IN')}`
+        ? `${new Date(item.created_at).toLocaleDateString('en-IN')} ${new Date(
+            item.created_at
+          ).toLocaleTimeString('en-IN')}`
         : 'N/A',
     }));
 
@@ -331,90 +376,92 @@ function InventoryPage({ userRole }) {
       });
       return acc;
     }, []);
-    worksheet['!cols'] = colWidths.map(width => ({ wch: width }));
+    worksheet['!cols'] = colWidths.map((width) => ({ wch: width }));
 
     XLSX.writeFile(workbook, 'Products_Finished_Goods_Inventory.xlsx');
     toast.success('Products/Finished Goods exported to Excel!', { autoClose: 2000 });
   }, [filteredInventory]);
 
-  const handleCreateItem = useCallback(async ({ product_name, stock_quantity, price, description, product_code }) => {
-    const token = localStorage.getItem('token');
-    try {
-      if (!token) throw new Error("Authentication token missing.");
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const response = await fetch(`${backendUrl}/api/inventory`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ product_name, stock_quantity, price, description, product_code }),
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create item');
+  const handleCreateItem = useCallback(
+    async ({ product_name, stock_quantity, price, description, product_code }) => {
+      const token = localStorage.getItem('token');
+      try {
+        if (!token) throw new Error('Authentication token missing.');
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const response = await fetch(`${backendUrl}/api/inventory`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ product_name, stock_quantity, price, description, product_code }),
+          credentials: 'include',
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to create item');
+        }
+        setPage(0);
+        setSearchInput('');
+        setFilterStock('All');
+        setTimeout(() => refetchData(), 100);
+        setShowCreateForm(false);
+        toast.success('Item created successfully');
+      } catch (err) {
+        toast.error(err.message);
+        throw err;
       }
-      setPage(0);
-      setSearchInput('');
-      setFilterStock('All');
-      setTimeout(() => refetchData(), 100);
-      setShowCreateForm(false);
-      toast.success('Item created successfully');
-    } catch (err) {
-      toast.error(err.message);
-      throw err;
-    }
-  }, [refetchData]);
+    },
+    [refetchData]
+  );
 
-  const handleUpdateItem = useCallback(async (itemId, { product_name, stock_quantity, price, description, product_code }) => {
-    const token = localStorage.getItem('token');
-    try {
-      if (!token) throw new Error("Authentication token missing.");
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const response = await fetch(`${backendUrl}/api/inventory/${itemId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ product_name, stock_quantity, price, description, product_code }),
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to update item (Status: ${response.status})`);
+  const handleUpdateItem = useCallback(
+    async (itemId, { product_name, stock_quantity, price, description, product_code }) => {
+      const token = localStorage.getItem('token');
+      try {
+        if (!token) throw new Error('Authentication token missing.');
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const response = await fetch(`${backendUrl}/api/inventory/${itemId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            product_name,
+            stock_quantity,
+            price,
+            description,
+            product_code,
+          }),
+          credentials: 'include',
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.error || `Failed to update item (Status: ${response.status})`
+          );
+        }
+        setTimeout(() => refetchData(), 100);
+        setShowEditForm(false);
+        setSelectedItem(null);
+        toast.success('Item updated successfully');
+      } catch (err) {
+        toast.error(err.message);
+        throw err;
       }
-      setTimeout(() => refetchData(), 100);
-      setShowEditForm(false);
-      setSelectedItem(null);
-      toast.success('Item updated successfully');
-    } catch (err) {
-      toast.error(err.message);
-      throw err;
-    }
-  }, [refetchData]);
+    },
+    [refetchData]
+  );
 
-  const handleDeleteItem = useCallback(async (itemId) => {
-    if (!window.confirm("Are you sure you want to delete this item? This action cannot be undone.")) return;
-    const token = localStorage.getItem('token');
-    try {
-      if (!token) throw new Error("Authentication token missing.");
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const response = await fetch(`${backendUrl}/api/inventory/${itemId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete item');
-      }
-      refetchData();
-      toast.success('Item deleted successfully');
-    } catch (err) {
-      toast.error(err.message);
-    }
-  }, [refetchData]);
-
-  const confirmEdit = useCallback((itemId, formData) => {
-    if (window.confirm("Are you sure you want to update this item?")) return handleUpdateItem(itemId, formData);
-    return Promise.reject(new Error("Update cancelled."));
-  }, [handleUpdateItem]);
+  const confirmEdit = useCallback(
+    (itemId, formData) => {
+      if (window.confirm('Are you sure you want to update this item?'))
+        return handleUpdateItem(itemId, formData);
+      return Promise.reject(new Error('Update cancelled.'));
+    },
+    [handleUpdateItem]
+  );
 
   const initiateEdit = useCallback((item) => {
     setSelectedItem(item);
@@ -461,17 +508,15 @@ function InventoryPage({ userRole }) {
         {isOpen && (
           <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
             <button
-              onClick={() => { onEdit(item); setIsOpen(false); }}
+              onClick={() => {
+                onEdit(item);
+                setIsOpen(false);
+              }}
               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
             >
               <Edit2 size={16} className="mr-2" /> Edit
             </button>
-            <button
-              onClick={() => { handleDeleteItem(item.product_id); setIsOpen(false); }}
-              className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-100 focus:outline-none focus:bg-red-100"
-            >
-              <Trash2 size={16} className="mr-2" /> Delete
-            </button>
+            {/* Delete button intentionally removed for Production view */}
           </div>
         )}
       </div>
@@ -479,43 +524,43 @@ function InventoryPage({ userRole }) {
   };
 
   const handleSort = useCallback((key) => {
-    setSortConfig(prev => ({
+    setSortConfig((prev) => ({
       key,
-      direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+      direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc',
     }));
   }, []);
 
-  if (userRole !== 'admin') return (
-    <div className="min-h-screen flex items-center justify-center text-gray-800 text-2xl" role="alert">
-      Access Denied
-    </div>
-  );
+  if (isLoading && !allInventory.length)
+    return (
+      <div className="min-h-screen flex items-center justify-center" aria-live="polite">
+        <div className="text-gray-600 text-xl animate-pulse">Loading inventory...</div>
+      </div>
+    );
 
-  if (isLoading && !allInventory.length) return (
-    <div className="min-h-screen flex items-center justify-center" aria-live="polite">
-      <div className="text-gray-600 text-xl animate-pulse">Loading inventory...</div>
-    </div>
-  );
-
-  if (error && !showEditForm && !showCreateForm) return (
-    <div className="min-h-screen flex items-center justify-center text-red-700" role="alert">
-      {error}
-      <button
-        onClick={() => refetchData()}
-        className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
-      >
-        Retry
-      </button>
-    </div>
-  );
+  if (error && !showEditForm && !showCreateForm)
+    return (
+      <div className="min-h-screen flex items-center justify-center text-red-700" role="alert">
+        {error}
+        <button
+          onClick={() => refetchData()}
+          className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
+        >
+          Retry
+        </button>
+      </div>
+    );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Products/Finished Goods Stocks</h1>
+      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">
+        Products/Finished Goods Stocks
+      </h1>
       <div className="max-w-7xl mx-auto">
         <div className="flex mb-8 gap-6 flex-wrap">
           <div className="relative flex-grow">
-            <label htmlFor="search-input" className="sr-only">Search inventory</label>
+            <label htmlFor="search-input" className="sr-only">
+              Search inventory
+            </label>
             <input
               id="search-input"
               type="text"
@@ -524,10 +569,15 @@ function InventoryPage({ userRole }) {
               onChange={handleSearchChange}
               className="w-full p-4 pl-12 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md"
             />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" aria-hidden="true" />
+            <Search
+              className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"
+              aria-hidden="true"
+            />
           </div>
           <div>
-            <label htmlFor="stock-filter" className="sr-only">Filter inventory by stock</label>
+            <label htmlFor="stock-filter" className="sr-only">
+              Filter inventory by stock
+            </label>
             <select
               id="stock-filter"
               value={filterStock}
@@ -535,8 +585,8 @@ function InventoryPage({ userRole }) {
               className="p-4 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md"
             >
               <option value="All">All Stock</option>
-              <option value="In Stock">In Stock (&gt; 0)</option>
-              <option value="Out of Stock">Zero Stock (= 0)</option>
+              <option value="In Stock">In Stock</option>
+              <option value="Out of Stock">Out of Stock</option>
             </select>
           </div>
           <button
@@ -588,7 +638,13 @@ function InventoryPage({ userRole }) {
         )}
 
         <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
-          <table className="w-full text-left" role="grid" aria-label="Inventory table" ref={tableRef} tabIndex={0}>
+          <table
+            className="w-full text-left"
+            role="grid"
+            aria-label="Inventory table"
+            ref={tableRef}
+            tabIndex={0}
+          >
             <thead className="bg-amber-100">
               <tr role="row">
                 {[
@@ -604,7 +660,9 @@ function InventoryPage({ userRole }) {
                 ].map(({ key, label }) => (
                   <th
                     key={key}
-                    onClick={() => key !== 'actions' && key !== 'qrcode' && handleSort(key)}
+                    onClick={() =>
+                      key !== 'actions' && key !== 'qrcode' && handleSort(key)
+                    }
                     onKeyDown={(e) =>
                       key !== 'actions' &&
                       key !== 'qrcode' &&
@@ -616,8 +674,12 @@ function InventoryPage({ userRole }) {
                         ? 'cursor-pointer hover:bg-amber-200 focus:outline-none focus:bg-amber-200'
                         : ''
                     }`}
-                    tabIndex={key !== 'actions' && key !== 'qrcode' ? 0 : undefined}
-                    aria-sort={sortConfig.key === key ? sortConfig.direction : 'none'}
+                    tabIndex={
+                      key !== 'actions' && key !== 'qrcode' ? 0 : undefined
+                    }
+                    aria-sort={
+                      sortConfig.key === key ? sortConfig.direction : 'none'
+                    }
                     role="columnheader"
                   >
                     <div className="flex items-center">
@@ -631,11 +693,17 @@ function InventoryPage({ userRole }) {
               </tr>
             </thead>
             <tbody>
-              {paginatedInventory.map(item => (
-                <tr key={item.product_id} className="border-t hover:bg-amber-50" role="row">
+              {paginatedInventory.map((item) => (
+                <tr
+                  key={item.product_id}
+                  className="border-t hover:bg-amber-50"
+                  role="row"
+                >
                   <td className="py-4 px-3">{item.product_id}</td>
                   <td className="py-4 px-3">{item.product_code}</td>
-                  <td className="py-4 px-3">{item.product_name.replace(/<[^>]*>/g, '')}</td>
+                  <td className="py-4 px-3">
+                    {item.product_name.replace(/<[^>]*>/g, '')}
+                  </td>
                   <td className="py-4 px-3">
                     {item.description ? (
                       <button
@@ -645,16 +713,14 @@ function InventoryPage({ userRole }) {
                       >
                         <Eye size={16} className="mr-1" aria-hidden="true" /> View
                       </button>
-                    ) : '-'}
+                    ) : (
+                      '-'
+                    )}
                   </td>
                   <td className="py-4 px-3">
                     <span
                       className={`px-3 py-1 rounded-full text-white text-sm ${
-                        item.stock_quantity > 0
-                          ? 'bg-green-600'
-                          : item.stock_quantity === 0
-                            ? 'bg-gray-500'
-                            : 'bg-red-600'
+                        item.stock_quantity > 0 ? 'bg-green-600' : 'bg-red-600'
                       }`}
                     >
                       {item.stock_quantity}
@@ -663,7 +729,9 @@ function InventoryPage({ userRole }) {
                   <td className="py-4 px-3">{formatCurrency(item.price)}</td>
                   <td className="py-4 px-3">
                     <div className="flex flex-col">
-                      <span>{new Date(item.created_at).toLocaleDateString('en-IN')}</span>
+                      <span>
+                        {new Date(item.created_at).toLocaleDateString('en-IN')}
+                      </span>
                       <span className="text-sm text-gray-500">
                         {new Date(item.created_at).toLocaleTimeString('en-IN')}
                       </span>
@@ -672,7 +740,11 @@ function InventoryPage({ userRole }) {
                   <td className="py-4 px-3">
                     <button
                       onClick={() =>
-                        showBarcode(item.product_code, item.product_name, item.description)
+                        showBarcode(
+                          item.product_code,
+                          item.product_name,
+                          item.description
+                        )
                       }
                       className="text-amber-600 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
                       aria-label={`View QR code for ${item.product_name}`}
@@ -691,11 +763,12 @@ function InventoryPage({ userRole }) {
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600">
-                Showing {paginatedInventory.length} of {filteredInventory.length} filtered items (Total: {totalItems})
+                Showing {paginatedInventory.length} of {filteredInventory.length}{' '}
+                filtered items (Total: {totalItems})
               </div>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => setPage(p => (p > 0 ? p - 1 : 0))}
+                  onClick={() => setPage((p) => (p > 0 ? p - 1 : 0))}
                   disabled={page === 0}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Previous page"
@@ -703,7 +776,7 @@ function InventoryPage({ userRole }) {
                   <ChevronLeft size={20} aria-hidden="true" />
                 </button>
                 <button
-                  onClick={() => setPage(p => p + 1)}
+                  onClick={() => setPage((p) => p + 1)}
                   disabled={(page + 1) * itemsPerPage >= filteredInventory.length}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Next page"
@@ -715,7 +788,10 @@ function InventoryPage({ userRole }) {
           )}
 
           {filteredInventory.length === 0 && (
-            <div className="text-center py-16 flex flex-col items-center justify-center text-gray-500" role="alert">
+            <div
+              className="text-center py-16 flex flex-col items-center justify-center text-gray-500"
+              role="alert"
+            >
               <Package size={48} className="mb-4 text-gray-400" />
               <p className="text-lg">No inventory items found.</p>
               {searchTerm || filterStock !== 'All' ? (
@@ -736,7 +812,11 @@ function InventoryPage({ userRole }) {
       {/* Create Item Modal */}
       {showCreateForm && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="create-form-title">
+          <div
+            className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative"
+            role="dialog"
+            aria-labelledby="create-form-title"
+          >
             <button
               onClick={() => setShowCreateForm(false)}
               className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
@@ -744,8 +824,13 @@ function InventoryPage({ userRole }) {
             >
               <XCircle size={24} aria-hidden="true" />
             </button>
-            <h2 id="create-form-title" className="text-2xl font-bold mb-6">Add New Item</h2>
-            <CreateItemForm onSubmit={handleCreateItem} onClose={() => setShowCreateForm(false)} />
+            <h2 id="create-form-title" className="text-2xl font-bold mb-6">
+              Add New Item
+            </h2>
+            <CreateItemForm
+              onSubmit={handleCreateItem}
+              onClose={() => setShowCreateForm(false)}
+            />
           </div>
         </div>
       )}
@@ -753,7 +838,11 @@ function InventoryPage({ userRole }) {
       {/* Edit Item Modal */}
       {showEditForm && selectedItem && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="edit-form-title">
+          <div
+            className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative"
+            role="dialog"
+            aria-labelledby="edit-form-title"
+          >
             <button
               onClick={() => setShowEditForm(false)}
               className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
@@ -761,8 +850,14 @@ function InventoryPage({ userRole }) {
             >
               <XCircle size={24} aria-hidden="true" />
             </button>
-            <h2 id="edit-form-title" className="text-2xl font-bold mb-6">Edit Item #{selectedItem.product_id}</h2>
-            <EditItemForm item={selectedItem} onSubmit={confirmEdit} onClose={() => setShowEditForm(false)} />
+            <h2 id="edit-form-title" className="text-2xl font-bold mb-6">
+              Edit Item #{selectedItem.product_id}
+            </h2>
+            <EditItemForm
+              item={selectedItem}
+              onSubmit={confirmEdit}
+              onClose={() => setShowEditForm(false)}
+            />
           </div>
         </div>
       )}
@@ -770,7 +865,11 @@ function InventoryPage({ userRole }) {
       {/* Description Modal */}
       {showDescriptionModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="description-modal-title">
+          <div
+            className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative"
+            role="dialog"
+            aria-labelledby="description-modal-title"
+          >
             <button
               onClick={() => setShowDescriptionModal(false)}
               className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
@@ -778,8 +877,12 @@ function InventoryPage({ userRole }) {
             >
               <XCircle size={24} aria-hidden="true" />
             </button>
-            <h2 id="description-modal-title" className="text-2xl font-bold mb-6">Description</h2>
-            <p className="text-gray-700 whitespace-pre-wrap">{selectedDescription || 'No description available'}</p>
+            <h2 id="description-modal-title" className="text-2xl font-bold mb-6">
+              Description
+            </h2>
+            <p className="text-gray-700 whitespace-pre-wrap">
+              {selectedDescription || 'No description available'}
+            </p>
           </div>
         </div>
       )}
@@ -800,12 +903,18 @@ function InventoryPage({ userRole }) {
               <XCircle size={24} aria-hidden="true" />
             </button>
 
-            <h2 id="qrcode-modal-title" className="text-2xl font-bold mb-4">QR Code for {selectedProductName}</h2>
+            <h2 id="qrcode-modal-title" className="text-2xl font-bold mb-4">
+              QR Code for {selectedProductName}
+            </h2>
 
             <div className="flex flex-col max-h-[70vh] overflow-y-auto pr-2">
               <div className="mb-4">
-                <p className="text-gray-700"><strong>Product Code:</strong> {selectedBarcode}</p>
-                <p className="text-gray-700 whitespace-pre-wrap"><strong>Description:</strong> {selectedProductDescription}</p>
+                <p className="text-gray-700">
+                  <strong>Product Code:</strong> {selectedBarcode}
+                </p>
+                <p className="text-gray-700 whitespace-pre-wrap">
+                  <strong>Description:</strong> {selectedProductDescription}
+                </p>
               </div>
               <canvas
                 id="qrcode-canvas"
@@ -823,7 +932,9 @@ function InventoryPage({ userRole }) {
                   link.href = canvas.toDataURL('image/png');
                   link.download = `qrcode_${selectedBarcode}.png`;
                   link.click();
-                  toast.success('QR code downloaded successfully', { autoClose: 2000 });
+                  toast.success('QR code downloaded successfully', {
+                    autoClose: 2000,
+                  });
                 }}
                 className="w-full p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center justify-center"
               >
@@ -834,17 +945,24 @@ function InventoryPage({ userRole }) {
         </div>
       )}
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        closeOnClick
+        pauseOnHover
+        draggable
+      />
     </div>
   );
 }
 
-// CreateItemForm – stock_quantity is STRING while typing (allows "-", empty)
+// CreateItemForm Component
 const CreateItemForm = ({ onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: '',
-    stock_quantity: '0',   // string
-    price: 0,
+    stock_quantity: '',
+    price: '',
     description: '',
     product_code: '',
   });
@@ -857,6 +975,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Part search state
   const [partSearch, setPartSearch] = useState('');
   const [allParts, setAllParts] = useState([]);
   const [filteredParts, setFilteredParts] = useState([]);
@@ -867,29 +986,26 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   const partDropdownRef = useRef(null);
 
   const validateField = (name, value) => {
-    if (name === 'product_name' && !value.trim()) return 'Product name is required';
-    if (name === 'price' && value < 0) return 'Price cannot be negative';
-    if (name === 'product_code' && value.length !== 10) return 'Product code must be exactly 10 characters';
+    if (name === 'product_name' && !value.trim())
+      return 'Product name is required';
+    if (name === 'product_code' && value.length !== 10)
+      return 'Product code must be exactly 10 characters';
+    // negative allowed for stock_quantity / price at this layer
     return '';
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    let processedValue;
-    if (name === 'stock_quantity') {
-      // Keep raw string so "-" and "" are allowed while typing
-      processedValue = value;
-    } else if (name === 'price') {
-      processedValue = parseFloat(value) || 0;
-    } else {
-      processedValue = value;
+    if (name === 'stock_quantity' || name === 'price') {
+      // free text (so "-" works), validation later
+      setFormData((prev) => ({ ...prev, [name]: value }));
+      setErrors((prev) => ({ ...prev, [name]: '' }));
+      return;
     }
 
-    setFormData(prev => ({ ...prev, [name]: processedValue }));
-    if (name !== 'stock_quantity') {
-      setErrors(prev => ({ ...prev, [name]: validateField(name, processedValue) }));
-    }
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }));
   };
 
   const loadParts = useCallback(async () => {
@@ -901,7 +1017,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
 
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       const res = await fetch(`${backendUrl}/api/parts?limit=500&offset=0`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
         credentials: 'include',
       });
 
@@ -929,10 +1045,11 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     } else {
       setFilteredParts(
         allParts
-          .filter(p =>
-            (p.partCode || '').toLowerCase().includes(term) ||
-            (p.name || '').toLowerCase().includes(term) ||
-            (p.drawingNo || '').toLowerCase().includes(term)
+          .filter(
+            (p) =>
+              (p.partCode || '').toLowerCase().includes(term) ||
+              (p.name || '').toLowerCase().includes(term) ||
+              (p.drawingNo || '').toLowerCase().includes(term)
           )
           .slice(0, 20)
       );
@@ -943,7 +1060,10 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     if (!showPartDropdown) return;
 
     const handleClickOutside = (event) => {
-      if (partDropdownRef.current && !partDropdownRef.current.contains(event.target)) {
+      if (
+        partDropdownRef.current &&
+        !partDropdownRef.current.contains(event.target)
+      ) {
         setShowPartDropdown(false);
       }
     };
@@ -962,13 +1082,13 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   };
 
   const handlePartSelect = (part) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       product_name: part.name || '',
       product_code: part.partCode || '',
       description: part.description || '',
     }));
-    setErrors(prev => ({
+    setErrors((prev) => ({
       ...prev,
       product_name: '',
       product_code: '',
@@ -979,32 +1099,32 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   };
 
   const handleSave = async () => {
+    const parsedQuantity =
+      formData.stock_quantity === '' || formData.stock_quantity === '-'
+        ? 0
+        : parseInt(formData.stock_quantity, 10);
+
+    const parsedPrice =
+      formData.price === '' || formData.price === '-'
+        ? 0
+        : parseFloat(formData.price);
+
     const fieldErrors = {
       product_name: validateField('product_name', formData.product_name),
       stock_quantity: '',
-      price: validateField('price', formData.price),
+      price: '',
       product_code: validateField('product_code', formData.product_code),
       description: '',
     };
-
-    // validate stock_quantity as integer (can be negative)
-    const sq = formData.stock_quantity.trim();
-    if (sq === '') {
-      fieldErrors.stock_quantity = 'Stock quantity is required';
-    } else if (!Number.isInteger(Number(sq))) {
-      fieldErrors.stock_quantity = 'Stock quantity must be an integer (can be negative)';
-    }
-
     setErrors(fieldErrors);
-    if (Object.values(fieldErrors).some(err => err)) return;
-
-    const parsedQty = parseInt(sq, 10);
+    if (Object.values(fieldErrors).some((err) => err)) return;
 
     try {
       setIsSubmitting(true);
       await onSubmit({
         ...formData,
-        stock_quantity: parsedQty,
+        stock_quantity: isNaN(parsedQuantity) ? 0 : parsedQuantity,
+        price: isNaN(parsedPrice) ? 0 : parsedPrice,
       });
     } finally {
       setIsSubmitting(false);
@@ -1012,7 +1132,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   };
 
   return (
-    <form className="space-y-4" onSubmit={e => e.preventDefault()}>
+    <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div>
         <label className="text-gray-700 font-medium">Search Part (optional)</label>
         <div className="relative" ref={partDropdownRef}>
@@ -1030,28 +1150,39 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
             className="w-full p-2 pl-8 border rounded-lg focus:ring-2 focus:ring-amber-300"
             disabled={isSubmitting}
           />
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+          <Search
+            className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400"
+            size={16}
+          />
           {showPartDropdown && (
             <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white border rounded-lg shadow-lg">
               {isPartLoading && (
-                <div className="px-3 py-2 text-sm text-gray-500">Loading parts...</div>
+                <div className="px-3 py-2 text-sm text-gray-500">
+                  Loading parts...
+                </div>
               )}
               {!isPartLoading && filteredParts.length === 0 && (
-                <div className="px-3 py-2 text-sm text-gray-500">No parts found.</div>
+                <div className="px-3 py-2 text-sm text-gray-500">
+                  No parts found.
+                </div>
               )}
-              {!isPartLoading && filteredParts.map(part => (
-                <button
-                  key={part.id}
-                  type="button"
-                  onClick={() => handlePartSelect(part)}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50"
-                >
-                  <div className="font-medium">{part.partCode} — {part.name}</div>
-                  <div className="text-xs text-gray-500">
-                    {part.partTypeName}{part.drawingNo ? ` • Drawing: ${part.drawingNo}` : ''}
-                  </div>
-                </button>
-              ))}
+              {!isPartLoading &&
+                filteredParts.map((part) => (
+                  <button
+                    key={part.id}
+                    type="button"
+                    onClick={() => handlePartSelect(part)}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50"
+                  >
+                    <div className="font-medium">
+                      {part.partCode} — {part.name}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {part.partTypeName}
+                      {part.drawingNo ? ` • Drawing: ${part.drawingNo}` : ''}
+                    </div>
+                  </button>
+                ))}
             </div>
           )}
         </div>
@@ -1061,7 +1192,12 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
       </div>
 
       <div>
-        <label htmlFor="create-product-name" className="text-gray-700 font-medium">Product Name</label>
+        <label
+          htmlFor="create-product-name"
+          className="text-gray-700 font-medium"
+        >
+          Product Name
+        </label>
         <input
           id="create-product-name"
           type="text"
@@ -1070,13 +1206,27 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_name}
-          aria-describedby={errors.product_name ? "create-product-name-error" : undefined}
+          aria-describedby={
+            errors.product_name ? 'create-product-name-error' : undefined
+          }
           disabled={isSubmitting}
         />
-        {errors.product_name && <p id="create-product-name-error" className="text-red-600 text-sm mt-1">{errors.product_name}</p>}
+        {errors.product_name && (
+          <p
+            id="create-product-name-error"
+            className="text-red-600 text-sm mt-1"
+          >
+            {errors.product_name}
+          </p>
+        )}
       </div>
       <div>
-        <label htmlFor="create-product-code" className="text-gray-700 font-medium">Product Code (10 chars)</label>
+        <label
+          htmlFor="create-product-code"
+          className="text-gray-700 font-medium"
+        >
+          Product Code (10 chars)
+        </label>
         <input
           id="create-product-code"
           type="text"
@@ -1086,13 +1236,27 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           maxLength={10}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_code}
-          aria-describedby={errors.product_code ? "create-product-code-error" : undefined}
+          aria-describedby={
+            errors.product_code ? 'create-product-code-error' : undefined
+          }
           disabled={isSubmitting}
         />
-        {errors.product_code && <p id="create-product-code-error" className="text-red-600 text-sm mt-1">{errors.product_code}</p>}
+        {errors.product_code && (
+          <p
+            id="create-product-code-error"
+            className="text-red-600 text-sm mt-1"
+          >
+            {errors.product_code}
+          </p>
+        )}
       </div>
       <div>
-        <label htmlFor="create-description" className="text-gray-700 font-medium">Description</label>
+        <label
+          htmlFor="create-description"
+          className="text-gray-700 font-medium"
+        >
+          Description
+        </label>
         <textarea
           id="create-description"
           name="description"
@@ -1103,7 +1267,12 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
         />
       </div>
       <div>
-        <label htmlFor="create-stock-quantity" className="text-gray-700 font-medium">Stock Quantity (can be negative)</label>
+        <label
+          htmlFor="create-stock-quantity"
+          className="text-gray-700 font-medium"
+        >
+          Stock Quantity
+        </label>
         <input
           id="create-stock-quantity"
           type="number"
@@ -1112,27 +1281,41 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.stock_quantity}
-          aria-describedby={errors.stock_quantity ? "create-stock-quantity-error" : undefined}
+          aria-describedby={
+            errors.stock_quantity ? 'create-stock-quantity-error' : undefined
+          }
           disabled={isSubmitting}
         />
-        {errors.stock_quantity && <p id="create-stock-quantity-error" className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
+        {errors.stock_quantity && (
+          <p
+            id="create-stock-quantity-error"
+            className="text-red-600 text-sm mt-1"
+          >
+            {errors.stock_quantity}
+          </p>
+        )}
       </div>
       <div>
-        <label htmlFor="create-price" className="text-gray-700 font-medium">Price (₹)</label>
+        <label htmlFor="create-price" className="text-gray-700 font-medium">
+          Price (₹)
+        </label>
         <input
           id="create-price"
           type="number"
           name="price"
           value={formData.price}
           onChange={handleChange}
-          min="0"
           step="0.01"
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.price}
-          aria-describedby={errors.price ? "create-price-error" : undefined}
+          aria-describedby={errors.price ? 'create-price-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.price && <p id="create-price-error" className="text-red-600 text-sm mt-1">{errors.price}</p>}
+        {errors.price && (
+          <p id="create-price-error" className="text-red-600 text-sm mt-1">
+            {errors.price}
+          </p>
+        )}
       </div>
       <div className="flex justify-end space-x-4">
         <button
@@ -1159,8 +1342,8 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
 const EditItemForm = ({ item, onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: item.product_name,
-    stock_quantity: String(item.stock_quantity ?? 0), // string
-    price: item.price,
+    stock_quantity: String(item.stock_quantity),
+    price: String(item.price),
     description: item.description || '',
     product_code: item.product_code,
   });
@@ -1174,56 +1357,53 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validateField = (name, value) => {
-    if (name === 'product_name' && !value.trim()) return 'Product name is required';
-    if (name === 'price' && value < 0) return 'Price cannot be negative';
-    if (name === 'product_code' && value.length !== 10) return 'Product code must be exactly 10 characters';
+    if (name === 'product_name' && !value.trim())
+      return 'Product name is required';
+    if (name === 'product_code' && value.length !== 10)
+      return 'Product code must be exactly 10 characters';
     return '';
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    let processedValue;
-    if (name === 'stock_quantity') {
-      processedValue = value; // keep string
-    } else if (name === 'price') {
-      processedValue = parseFloat(value) || 0;
-    } else {
-      processedValue = value;
+    if (name === 'stock_quantity' || name === 'price') {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+      setErrors((prev) => ({ ...prev, [name]: '' }));
+      return;
     }
 
-    setFormData(prev => ({ ...prev, [name]: processedValue }));
-    if (name !== 'stock_quantity') {
-      setErrors(prev => ({ ...prev, [name]: validateField(name, processedValue) }));
-    }
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }));
   };
 
   const handleSave = async () => {
+    const parsedQuantity =
+      formData.stock_quantity === '' || formData.stock_quantity === '-'
+        ? 0
+        : parseInt(formData.stock_quantity, 10);
+
+    const parsedPrice =
+      formData.price === '' || formData.price === '-'
+        ? 0
+        : parseFloat(formData.price);
+
     const fieldErrors = {
       product_name: validateField('product_name', formData.product_name),
       stock_quantity: '',
-      price: validateField('price', formData.price),
+      price: '',
       product_code: validateField('product_code', formData.product_code),
       description: '',
     };
-
-    const sq = formData.stock_quantity.trim();
-    if (sq === '') {
-      fieldErrors.stock_quantity = 'Stock quantity is required';
-    } else if (!Number.isInteger(Number(sq))) {
-      fieldErrors.stock_quantity = 'Stock quantity must be an integer (can be negative)';
-    }
-
     setErrors(fieldErrors);
-    if (Object.values(fieldErrors).some(err => err)) return;
-
-    const parsedQty = parseInt(sq, 10);
+    if (Object.values(fieldErrors).some((err) => err)) return;
 
     try {
       setIsSubmitting(true);
       await onSubmit(item.product_id, {
         ...formData,
-        stock_quantity: parsedQty,
+        stock_quantity: isNaN(parsedQuantity) ? 0 : parsedQuantity,
+        price: isNaN(parsedPrice) ? 0 : parsedPrice,
       });
     } finally {
       setIsSubmitting(false);
@@ -1233,7 +1413,12 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   return (
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div>
-        <label htmlFor="edit-product-name" className="text-gray-700 font-medium">Product Name</label>
+        <label
+          htmlFor="edit-product-name"
+          className="text-gray-700 font-medium"
+        >
+          Product Name
+        </label>
         <input
           id="edit-product-name"
           type="text"
@@ -1242,13 +1427,27 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_name}
-          aria-describedby={errors.product_name ? "edit-product-name-error" : undefined}
+          aria-describedby={
+            errors.product_name ? 'edit-product-name-error' : undefined
+          }
           disabled={isSubmitting}
         />
-        {errors.product_name && <p id="edit-product-name-error" className="text-red-600 text-sm mt-1">{errors.product_name}</p>}
+        {errors.product_name && (
+          <p
+            id="edit-product-name-error"
+            className="text-red-600 text-sm mt-1"
+          >
+            {errors.product_name}
+          </p>
+        )}
       </div>
       <div>
-        <label htmlFor="edit-product-code" className="text-gray-700 font-medium">Product Code (10 chars)</label>
+        <label
+          htmlFor="edit-product-code"
+          className="text-gray-700 font-medium"
+        >
+          Product Code (10 chars)
+        </label>
         <input
           id="edit-product-code"
           type="text"
@@ -1258,13 +1457,27 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           maxLength={10}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_code}
-          aria-describedby={errors.product_code ? "edit-product-code-error" : undefined}
+          aria-describedby={
+            errors.product_code ? 'edit-product-code-error' : undefined
+          }
           disabled={isSubmitting}
         />
-        {errors.product_code && <p id="edit-product-code-error" className="text-red-600 text-sm mt-1">{errors.product_code}</p>}
+        {errors.product_code && (
+          <p
+            id="edit-product-code-error"
+            className="text-red-600 text-sm mt-1"
+          >
+            {errors.product_code}
+          </p>
+        )}
       </div>
       <div>
-        <label htmlFor="edit-description" className="text-gray-700 font-medium">Description</label>
+        <label
+          htmlFor="edit-description"
+          className="text-gray-700 font-medium"
+        >
+          Description
+        </label>
         <textarea
           id="edit-description"
           name="description"
@@ -1275,7 +1488,12 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
         />
       </div>
       <div>
-        <label htmlFor="edit-stock-quantity" className="text-gray-700 font-medium">Stock Quantity (can be negative)</label>
+        <label
+          htmlFor="edit-stock-quantity"
+          className="text-gray-700 font-medium"
+        >
+          Stock Quantity
+        </label>
         <input
           id="edit-stock-quantity"
           type="number"
@@ -1284,27 +1502,41 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.stock_quantity}
-          aria-describedby={errors.stock_quantity ? "edit-stock-quantity-error" : undefined}
+          aria-describedby={
+            errors.stock_quantity ? 'edit-stock-quantity-error' : undefined
+          }
           disabled={isSubmitting}
         />
-        {errors.stock_quantity && <p id="edit-stock-quantity-error" className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
+        {errors.stock_quantity && (
+          <p
+            id="edit-stock-quantity-error"
+            className="text-red-600 text-sm mt-1"
+          >
+            {errors.stock_quantity}
+          </p>
+        )}
       </div>
       <div>
-        <label htmlFor="edit-price" className="text-gray-700 font-medium">Price (₹)</label>
+        <label htmlFor="edit-price" className="text-gray-700 font-medium">
+          Price (₹)
+        </label>
         <input
           id="edit-price"
           type="number"
           name="price"
           value={formData.price}
           onChange={handleChange}
-          min="0"
           step="0.01"
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.price}
-          aria-describedby={errors.price ? "edit-price-error" : undefined}
+          aria-describedby={errors.price ? 'edit-price-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.price && <p id="edit-price-error" className="text-red-600 text-sm mt-1">{errors.price}</p>}
+        {errors.price && (
+          <p id="edit-price-error" className="text-red-600 text-sm mt-1">
+            {errors.price}
+          </p>
+        )}
       </div>
       <div className="flex justify-end space-x-4">
         <button
@@ -1328,4 +1560,4 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   );
 };
 
-export default InventoryPage;
+export default ProductionInventoryPage;

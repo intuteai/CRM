@@ -48,10 +48,10 @@ import PartCreation from "./components/admin/PartCreation";
 // sales
 import SalesQueriesPage from "./components/sales/SalesQueriesPage";
 import SalesEnquiryPage from "./components/sales/SalesEnquiryPage";
-import SalesQuotationForm from "./components/sales/SalesQuotationForm"; 
-import SalesProformaForm from "./components/sales/SalesProformaForm"; 
+import SalesQuotationForm from "./components/sales/SalesQuotationForm";
+import SalesProformaForm from "./components/sales/SalesProformaForm";
 
-// design 
+// design
 import DesignEnquiryPage from "./components/design/DesignEnquiryPage";
 import DesignPartCreation from "./components/design/DesignPartCreation";
 
@@ -63,13 +63,14 @@ import ProductionPartDrawingsRawPage from "./components/production/ProductionPar
 import ProductionPartDrawingsPage from "./components/production/ProductionPartDrawingsPage";
 import ProductionPDIPage from "./components/production/ProductionPDIPage";
 import ProductionBOMPage from "./components/production/ProductionBOMPage";
+import ProductionInventoryPage from "./components/production/ProductionInventoryPage";
 
 // employees
 import AttendanceHistory from "./components/employees/AttendanceHistory";
 
 // hr
-import HRPayslipForm from "./components/hr/HRPayslipForm"; 
-import AttendanceSummary from "./components/hr/AttendanceSummary"; 
+import HRPayslipForm from "./components/hr/HRPayslipForm";
+import AttendanceSummary from "./components/hr/AttendanceSummary";
 
 // customers
 import CustomerOrdersPage from "./components/customers/CustomerOrdersPage";
@@ -86,7 +87,7 @@ import OrdersPage from "./components/pages/OrdersPage";
 import EditProfile from "./components/pages/EditProfile";
 import DispatchTrackingPage from "./components/pages/DispatchTrackingPage";
 import LoginModal from "./components/pages/LoginModal";
-import Navbar from "./components/pages/Navbar"; 
+import Navbar from "./components/pages/Navbar";
 
 import ErrorBoundary from "./components/ErrorBoundary";
 import logo from "/intute-ai_logo.jpeg";
@@ -129,9 +130,9 @@ const allowedPathsByRole = {
     "/select-component/:orderId/:action",
     "/processes/:orderId",
     "/processes/non-motor/:orderId",
-    "/quotation", 
-    "/proforma", 
-    "/part-creation"
+    "/quotation",
+    "/proforma",
+    "/part-creation",
   ],
   [ROLES.CUSTOMER]: [
     "/customer-dashboard",
@@ -150,8 +151,8 @@ const allowedPathsByRole = {
     "/sales/enquiries",
     "/dispatch-tracking",
     "/edit-profile",
-    "/sales/quotations", 
-    "/proforma", 
+    "/sales/quotations",
+    "/proforma",
   ],
   [ROLES.DESIGN]: [
     "/design-dashboard",
@@ -162,7 +163,7 @@ const allowedPathsByRole = {
     "/part-drawings/raw",
     "/bom",
     "/edit-profile",
-    "/design/part-creation"
+    "/design/part-creation",
   ],
   [ROLES.PRODUCTION]: [
     "/production-dashboard",
@@ -177,6 +178,7 @@ const allowedPathsByRole = {
     "/production-bom-unpriced",
     "/bom",
     "/edit-profile",
+    "/production-inventory", // ✅ NEW finished-goods inventory route
   ],
   [ROLES.STORE]: [
     "/store-dashboard",
@@ -212,7 +214,7 @@ const allowedPathsByRole = {
     "/attendance-summary",
     "/edit-profile",
     "/activities",
-    "/hr-payslips", // ← NEW: Payslip Generator
+    "/hr-payslips",
   ],
 };
 
@@ -485,6 +487,7 @@ function App() {
             </ErrorBoundary>
           }
         />
+
         {/* Sales Dashboard */}
         <Route
           path="/sales-dashboard"
@@ -696,6 +699,21 @@ function App() {
             )
           }
         />
+
+        {/* NEW: Production Finished Goods Inventory */}
+        <Route
+          path="/production-inventory"
+          element={
+            userRole === "production" ? (
+              <ErrorBoundary>
+                <ProductionInventoryPage socket={socket} userRole={userRole} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
         <Route
           path="/stock"
           element={
@@ -835,14 +853,14 @@ function App() {
           }
         />
         <Route
-          path="/purchase-invoices" 
+          path="/purchase-invoices"
           element={
             ["admin", "accounts"].includes(userRole) ? (
               <ErrorBoundary>
                 <PurchaseInvoicesPage socket={socket} />
               </ErrorBoundary>
             ) : (
-              <Navigate to="/" replace /> 
+              <Navigate to="/" replace />
             )
           }
         />
@@ -1008,6 +1026,7 @@ function App() {
             )
           }
         />
+
         {/* Attendance */}
         <Route
           path="/attendance-history"

@@ -30,10 +30,13 @@ import EditOrderForm from "../forms/EditOrderForm";
 
 const formatDate = (dateString) =>
   dateString ? new Date(dateString).toISOString().split("T")[0] : "";
+
 const formatCurrency = (amount) =>
-  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(
-    amount
-  );
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+  }).format(amount);
+
 const calculateTotalAmount = (items) =>
   items.reduce(
     (sum, item) =>
@@ -41,25 +44,30 @@ const calculateTotalAmount = (items) =>
     0
   );
 
+// ✅ UPDATED: no stock restriction → overselling/backorders allowed
 const validateOrderItems = (
   items,
   products,
-  getAvailableStock,
+  getAvailableStock, // kept for signature compatibility, not used now
   editingOrderId = null
 ) => {
   const errors = [];
   const productIds = new Set();
+
   const isValid = items.every((item) => {
     if (!item.product_id || productIds.has(item.product_id)) {
       errors.push(`Duplicate or invalid product ID: ${item.product_id}`);
       return false;
     }
+
     productIds.add(item.product_id);
+
     const product = products.find(
       (p) => String(p.product_id) === String(item.product_id)
     );
-    const quantity = parseInt(item.quantity) || 0;
+    const quantity = parseInt(item.quantity, 10) || 0;
     const price = parseFloat(item.price) || 0;
+
     if (!product || quantity <= 0 || price <= 0) {
       errors.push(
         product
@@ -68,23 +76,21 @@ const validateOrderItems = (
       );
       return false;
     }
-    if (!editingOrderId) {
-      const availableStock = getAvailableStock(item.product_id, null);
-      if (availableStock < quantity) {
-        errors.push(
-          `Insufficient stock for ${product.product_name}: ${availableStock} available`
-        );
-        return false;
-      }
-    }
+
+    // ⛔️ Removed stock validation — we now allow negative inventory.
+    // If you ever want a warning (non-blocking), you could push to errors
+    // but still return true here.
+
     return true;
   });
+
   console.log("validateOrderItems result:", {
     isValid,
     errors,
     items,
     editingOrderId,
   });
+
   return { isValid, errors };
 };
 
@@ -884,7 +890,11 @@ function OrdersPage() {
                 ].map(({ key, label }) => (
                   <th
                     key={key}
-                    className={`py-5 px-3 text-gray-800 text-base font-semibold ${key !== "items" && key !== "actions" ? "cursor-pointer hover:bg-amber-300" : ""} transition-all duration-200`}
+                    className={`py-5 px-3 text-gray-800 text-base font-semibold ${
+                      key !== "items" && key !== "actions"
+                        ? "cursor-pointer hover:bg-amber-300"
+                        : ""
+                    } transition-all duration-200`}
                     onClick={() =>
                       key !== "items" && key !== "actions" && handleSort(key)
                     }
@@ -898,7 +908,11 @@ function OrdersPage() {
                       {key !== "items" && key !== "actions" && (
                         <ArrowDownUp
                           size={16}
-                          className={`ml-2 text-gray-600 ${sortConfig.key === key ? "text-gray-900" : "opacity-50"}`}
+                          className={`ml-2 text-gray-600 ${
+                            sortConfig.key === key
+                              ? "text-gray-900"
+                              : "opacity-50"
+                          }`}
                           aria-hidden="true"
                         />
                       )}
@@ -1002,7 +1016,9 @@ function OrdersPage() {
                 </button>
                 <button
                   onClick={() => setPage((p) => p + 1)}
-                  disabled={(page + 1) * ordersPerPage >= filteredOrders.length}
+                  disabled={
+                    (page + 1) * ordersPerPage >= filteredOrders.length
+                  }
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Next page"
                 >
