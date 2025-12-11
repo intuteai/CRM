@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
-  Edit2, MoreVertical, Package, XCircle, Trash2, Eye, Download, Upload
+  Edit2, MoreVertical, Package, XCircle, Trash2, Eye, Download, Upload, CheckCircle
 } from 'lucide-react';
 import { debounce } from 'lodash';
 import { io } from 'socket.io-client';
@@ -13,6 +13,7 @@ import QRCode from 'qrcode';
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 
+/* ========= useFetchInventory (reads returnable_qty) ========= */
 const useFetchInventory = ({ limit, offset }) => {
   const [inventory, setInventory] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -32,7 +33,7 @@ const useFetchInventory = ({ limit, offset }) => {
         credentials: 'include',
       });
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `Inventory fetch failed: ${response.statusText}`);
       }
       const { data, total } = await response.json();
@@ -42,6 +43,7 @@ const useFetchInventory = ({ limit, offset }) => {
           ...item,
           price: item.price !== null ? Number(item.price) : 0,
           stock_quantity: item.stock_quantity ?? 0,
+          returnable_qty: item.returnable_qty ?? 0, // <-- new
           description: item.description || '',
           product_code: item.product_code,
         }));
@@ -62,6 +64,28 @@ const useFetchInventory = ({ limit, offset }) => {
   return { inventory, totalItems, isLoading, error, refetchData: fetchData };
 };
 
+/* ========= Accept Return API helper (no notes) ========= */
+const acceptReturnApi = async (productId, qty) => {
+  const token = localStorage.getItem('token');
+  if (!token) throw new Error('Authentication token missing.');
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+  const res = await fetch(`${backendUrl}/api/inventory/${productId}/accept-return`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    credentials: 'include',
+    body: JSON.stringify({ qty })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Accept return failed (${res.status})`);
+  }
+  return await res.json();
+};
+
+/* ========= InventoryPage ========= */
 function InventoryPage({ userRole }) {
   const [page, setPage] = useState(0);
   const [itemsPerPage] = useState(10);
@@ -115,7 +139,7 @@ function InventoryPage({ userRole }) {
     });
     socket.on('stockUpdate', () => {
       refetchData();
-      toast.info('Inventory updated in real-time', { autoClose: 2000 });
+      toast.info('Inventory updated in real-time', { autoClose: 1200 });
       if (tableRef.current) tableRef.current.focus();
     });
     return () => socket.disconnect();
@@ -142,7 +166,7 @@ function InventoryPage({ userRole }) {
     if (sortConfig.key) {
       sortableInventory.sort((a, b) => {
         let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
-        if (sortConfig.key === 'price' || sortConfig.key === 'stock_quantity') {
+        if (sortConfig.key === 'price' || sortConfig.key === 'stock_quantity' || sortConfig.key === 'returnable_qty') {
           aValue = Number(aValue);
           bValue = Number(bValue);
         } else if (sortConfig.key === 'created_at') {
@@ -162,7 +186,7 @@ function InventoryPage({ userRole }) {
       const matchesSearch =
         item.product_id.toString().includes(searchTerm) ||
         item.product_name.toLowerCase().includes(searchTerm) ||
-        item.product_code.toLowerCase().includes(searchTerm);
+        (item.product_code || '').toLowerCase().includes(searchTerm);
       const matchesStock =
         filterStock === 'All' ||
         (filterStock === 'In Stock' && item.stock_quantity > 0) ||
@@ -176,7 +200,7 @@ function InventoryPage({ userRole }) {
     return filteredInventory.slice(start, start + itemsPerPage);
   }, [filteredInventory, page, itemsPerPage]);
 
-  // Import validation – allow negative stock, just enforce integer
+  /* ========= Import/Export validation includes returnable_qty ========= */
   const validateImportRow = useCallback((row, index) => {
     const errors = [];
     if (!row['Product Name'] || !String(row['Product Name']).trim()) {
@@ -192,6 +216,10 @@ function InventoryPage({ userRole }) {
     const price = parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, ''));
     if (isNaN(price) || price < 0) {
       errors.push(`Row ${index + 1}: Price must be a non-negative number`);
+    }
+    const rq = row['Returnable Qty'] !== undefined ? parseInt(row['Returnable Qty']) : 0;
+    if (row['Returnable Qty'] !== undefined && (!Number.isInteger(rq) || rq < 0)) {
+      errors.push(`Row ${index + 1}: Returnable Qty must be a non-negative integer`);
     }
     return errors;
   }, []);
@@ -228,6 +256,7 @@ function InventoryPage({ userRole }) {
               stock_quantity: parseInt(row['Stock Quantity'] || 0),
               price: parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, '')),
               description: String(row['Description'] || '').trim() || undefined,
+              returnable_qty: row['Returnable Qty'] !== undefined ? parseInt(row['Returnable Qty']) : 0,
               product_id: row['Product ID'] ? parseInt(row['Product ID']) : undefined,
             });
           }
@@ -270,7 +299,7 @@ function InventoryPage({ userRole }) {
             });
 
             if (!response.ok) {
-              const errorData = await response.json();
+              const errorData = await response.json().catch(() => ({}));
               console.error(`Row ${validRows.indexOf(row) + 1} failed:`, { status: response.status, errorData });
               throw new Error(errorData.error || `Failed to ${product_id ? 'update' : 'create'} item (Status: ${response.status})`);
             }
@@ -307,6 +336,7 @@ function InventoryPage({ userRole }) {
     }
   }, [validateImportRow, refetchData]);
 
+  /* ========= Export includes returnable_qty ========= */
   const exportToExcel = useCallback(() => {
     const data = filteredInventory.map(item => ({
       'Product ID': item.product_id,
@@ -314,6 +344,7 @@ function InventoryPage({ userRole }) {
       'Product Name': item.product_name.replace(/<[^>]*>/g, '') || 'N/A',
       'Description': item.description || 'N/A',
       'Stock Quantity': Number(item.stock_quantity),
+      'Returnable Qty': Number(item.returnable_qty ?? 0),
       'Price (₹)': formatCurrency(Number(item.price)),
       'Created At (IST)': item.created_at
         ? `${new Date(item.created_at).toLocaleDateString('en-IN')} ${new Date(item.created_at).toLocaleTimeString('en-IN')}`
@@ -337,7 +368,8 @@ function InventoryPage({ userRole }) {
     toast.success('Products/Finished Goods exported to Excel!', { autoClose: 2000 });
   }, [filteredInventory]);
 
-  const handleCreateItem = useCallback(async ({ product_name, stock_quantity, price, description, product_code }) => {
+  /* ========= Create / Update handlers now send returnable_qty ========= */
+  const handleCreateItem = useCallback(async ({ product_name, stock_quantity, price, description, product_code, returnable_qty = 0 }) => {
     const token = localStorage.getItem('token');
     try {
       if (!token) throw new Error("Authentication token missing.");
@@ -345,11 +377,11 @@ function InventoryPage({ userRole }) {
       const response = await fetch(`${backendUrl}/api/inventory`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ product_name, stock_quantity, price, description, product_code }),
+        body: JSON.stringify({ product_name, stock_quantity, price, description, product_code, returnable_qty }),
         credentials: 'include',
       });
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to create item');
       }
       setPage(0);
@@ -364,7 +396,7 @@ function InventoryPage({ userRole }) {
     }
   }, [refetchData]);
 
-  const handleUpdateItem = useCallback(async (itemId, { product_name, stock_quantity, price, description, product_code }) => {
+  const handleUpdateItem = useCallback(async (itemId, { product_name, stock_quantity, price, description, product_code, returnable_qty = 0 }) => {
     const token = localStorage.getItem('token');
     try {
       if (!token) throw new Error("Authentication token missing.");
@@ -372,11 +404,11 @@ function InventoryPage({ userRole }) {
       const response = await fetch(`${backendUrl}/api/inventory/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ product_name, stock_quantity, price, description, product_code }),
+        body: JSON.stringify({ product_name, stock_quantity, price, description, product_code, returnable_qty }),
         credentials: 'include',
       });
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `Failed to update item (Status: ${response.status})`);
       }
       setTimeout(() => refetchData(), 100);
@@ -401,7 +433,7 @@ function InventoryPage({ userRole }) {
         credentials: 'include',
       });
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to delete item');
       }
       refetchData();
@@ -433,9 +465,11 @@ function InventoryPage({ userRole }) {
     setShowBarcodeModal(true);
   }, []);
 
+  /* ========= ActionsDropdown includes Accept Return (modal) ========= */
   const ActionsDropdown = ({ item, onEdit }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
+    const [showAcceptModal, setShowAcceptModal] = useState(false);
 
     useEffect(() => {
       const handleClickOutside = (event) => {
@@ -459,13 +493,22 @@ function InventoryPage({ userRole }) {
           <MoreVertical size={20} />
         </button>
         {isOpen && (
-          <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
+          <div className="absolute right-0 z-10 mt-2 w-56 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
             <button
               onClick={() => { onEdit(item); setIsOpen(false); }}
               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
             >
               <Edit2 size={16} className="mr-2" /> Edit
             </button>
+
+            <button
+              onClick={() => { setShowAcceptModal(true); setIsOpen(false); }}
+              className="flex items-center w-full px-4 py-2 text-sm text-green-700 hover:bg-green-50 focus:outline-none focus:bg-green-50"
+              disabled={item.returnable_qty <= 0}
+            >
+              <CheckCircle size={16} className="mr-2" /> Accept Return
+            </button>
+
             <button
               onClick={() => { handleDeleteItem(item.product_id); setIsOpen(false); }}
               className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-100 focus:outline-none focus:bg-red-100"
@@ -473,6 +516,17 @@ function InventoryPage({ userRole }) {
               <Trash2 size={16} className="mr-2" /> Delete
             </button>
           </div>
+        )}
+
+        {showAcceptModal && (
+          <AcceptReturnModal
+            product={item}
+            onClose={() => setShowAcceptModal(false)}
+            onAccepted={async () => {
+              setShowAcceptModal(false);
+              await refetchData();
+            }}
+          />
         )}
       </div>
     );
@@ -509,6 +563,7 @@ function InventoryPage({ userRole }) {
     </div>
   );
 
+  /* ========= Render ========= */
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Products/Finished Goods Stocks</h1>
@@ -597,6 +652,7 @@ function InventoryPage({ userRole }) {
                   { key: 'product_name', label: 'Product Name' },
                   { key: 'description', label: 'Description' },
                   { key: 'stock_quantity', label: 'Stock Quantity' },
+                  { key: 'returnable_qty', label: 'Returnable Qty' }, // <-- new column
                   { key: 'price', label: 'Price' },
                   { key: 'created_at', label: 'Created At (IST)' },
                   { key: 'qrcode', label: 'QR Code' },
@@ -660,6 +716,18 @@ function InventoryPage({ userRole }) {
                       {item.stock_quantity}
                     </span>
                   </td>
+
+                  {/* Returnable Qty cell */}
+                  <td className="py-4 px-3">
+                    <span
+                      className={`px-3 py-1 rounded-full text-white text-sm ${
+                        item.returnable_qty > 0 ? 'bg-indigo-600' : 'bg-gray-400'
+                      }`}
+                    >
+                      {item.returnable_qty}
+                    </span>
+                  </td>
+
                   <td className="py-4 px-3">{formatCurrency(item.price)}</td>
                   <td className="py-4 px-3">
                     <div className="flex flex-col">
@@ -839,11 +907,12 @@ function InventoryPage({ userRole }) {
   );
 }
 
-// CreateItemForm – stock_quantity is STRING while typing (allows "-", empty)
+/* ========= CreateItemForm (includes returnable_qty) ========= */
 const CreateItemForm = ({ onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: '',
-    stock_quantity: '0',   // string
+    stock_quantity: '0',
+    returnable_qty: '0', // <-- new
     price: 0,
     description: '',
     product_code: '',
@@ -851,6 +920,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   const [errors, setErrors] = useState({
     product_name: '',
     stock_quantity: '',
+    returnable_qty: '',
     price: '',
     description: '',
     product_code: '',
@@ -870,6 +940,9 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     if (name === 'product_name' && !value.trim()) return 'Product name is required';
     if (name === 'price' && value < 0) return 'Price cannot be negative';
     if (name === 'product_code' && value.length !== 10) return 'Product code must be exactly 10 characters';
+    if (name === 'returnable_qty' && (value === '' || !Number.isInteger(Number(value)) || Number(value) < 0)) {
+      return 'Returnable Qty must be a non-negative integer';
+    }
     return '';
   };
 
@@ -877,7 +950,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     const { name, value } = e.target;
 
     let processedValue;
-    if (name === 'stock_quantity') {
+    if (name === 'stock_quantity' || name === 'returnable_qty') {
       // Keep raw string so "-" and "" are allowed while typing
       processedValue = value;
     } else if (name === 'price') {
@@ -892,6 +965,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     }
   };
 
+  // ... loading parts logic identical to earlier (kept unchanged) ...
   const loadParts = useCallback(async () => {
     if (partsLoaded || isPartLoading) return;
     try {
@@ -982,6 +1056,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     const fieldErrors = {
       product_name: validateField('product_name', formData.product_name),
       stock_quantity: '',
+      returnable_qty: validateField('returnable_qty', formData.returnable_qty),
       price: validateField('price', formData.price),
       product_code: validateField('product_code', formData.product_code),
       description: '',
@@ -999,12 +1074,14 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     if (Object.values(fieldErrors).some(err => err)) return;
 
     const parsedQty = parseInt(sq, 10);
+    const parsedReturnable = parseInt(formData.returnable_qty || '0', 10);
 
     try {
       setIsSubmitting(true);
       await onSubmit({
         ...formData,
         stock_quantity: parsedQty,
+        returnable_qty: parsedReturnable
       });
     } finally {
       setIsSubmitting(false);
@@ -1075,6 +1152,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
         />
         {errors.product_name && <p id="create-product-name-error" className="text-red-600 text-sm mt-1">{errors.product_name}</p>}
       </div>
+
       <div>
         <label htmlFor="create-product-code" className="text-gray-700 font-medium">Product Code (10 chars)</label>
         <input
@@ -1091,6 +1169,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
         />
         {errors.product_code && <p id="create-product-code-error" className="text-red-600 text-sm mt-1">{errors.product_code}</p>}
       </div>
+
       <div>
         <label htmlFor="create-description" className="text-gray-700 font-medium">Description</label>
         <textarea
@@ -1102,6 +1181,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           disabled={isSubmitting}
         />
       </div>
+
       <div>
         <label htmlFor="create-stock-quantity" className="text-gray-700 font-medium">Stock Quantity (can be negative)</label>
         <input
@@ -1117,6 +1197,24 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
         />
         {errors.stock_quantity && <p id="create-stock-quantity-error" className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
       </div>
+
+      <div>
+        <label htmlFor="create-returnable-qty" className="text-gray-700 font-medium">Returnable Qty</label>
+        <input
+          id="create-returnable-qty"
+          type="number"
+          name="returnable_qty"
+          value={formData.returnable_qty}
+          onChange={handleChange}
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          aria-invalid={!!errors.returnable_qty}
+          aria-describedby={errors.returnable_qty ? "create-returnable-qty-error" : undefined}
+          disabled={isSubmitting}
+          min={0}
+        />
+        {errors.returnable_qty && <p id="create-returnable-qty-error" className="text-red-600 text-sm mt-1">{errors.returnable_qty}</p>}
+      </div>
+
       <div>
         <label htmlFor="create-price" className="text-gray-700 font-medium">Price (₹)</label>
         <input
@@ -1134,6 +1232,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
         />
         {errors.price && <p id="create-price-error" className="text-red-600 text-sm mt-1">{errors.price}</p>}
       </div>
+
       <div className="flex justify-end space-x-4">
         <button
           type="button"
@@ -1156,10 +1255,12 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   );
 };
 
+/* ========= EditItemForm (includes returnable_qty) ========= */
 const EditItemForm = ({ item, onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: item.product_name,
-    stock_quantity: String(item.stock_quantity ?? 0), // string
+    stock_quantity: String(item.stock_quantity ?? 0),
+    returnable_qty: String(item.returnable_qty ?? 0), // <-- new
     price: item.price,
     description: item.description || '',
     product_code: item.product_code,
@@ -1167,6 +1268,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   const [errors, setErrors] = useState({
     product_name: '',
     stock_quantity: '',
+    returnable_qty: '',
     price: '',
     description: '',
     product_code: '',
@@ -1177,6 +1279,9 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     if (name === 'product_name' && !value.trim()) return 'Product name is required';
     if (name === 'price' && value < 0) return 'Price cannot be negative';
     if (name === 'product_code' && value.length !== 10) return 'Product code must be exactly 10 characters';
+    if (name === 'returnable_qty' && (value === '' || !Number.isInteger(Number(value)) || Number(value) < 0)) {
+      return 'Returnable Qty must be a non-negative integer';
+    }
     return '';
   };
 
@@ -1184,7 +1289,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     const { name, value } = e.target;
 
     let processedValue;
-    if (name === 'stock_quantity') {
+    if (name === 'stock_quantity' || name === 'returnable_qty') {
       processedValue = value; // keep string
     } else if (name === 'price') {
       processedValue = parseFloat(value) || 0;
@@ -1202,6 +1307,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     const fieldErrors = {
       product_name: validateField('product_name', formData.product_name),
       stock_quantity: '',
+      returnable_qty: validateField('returnable_qty', formData.returnable_qty),
       price: validateField('price', formData.price),
       product_code: validateField('product_code', formData.product_code),
       description: '',
@@ -1218,12 +1324,14 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     if (Object.values(fieldErrors).some(err => err)) return;
 
     const parsedQty = parseInt(sq, 10);
+    const parsedReturnable = parseInt(formData.returnable_qty || '0', 10);
 
     try {
       setIsSubmitting(true);
       await onSubmit(item.product_id, {
         ...formData,
         stock_quantity: parsedQty,
+        returnable_qty: parsedReturnable
       });
     } finally {
       setIsSubmitting(false);
@@ -1247,6 +1355,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
         />
         {errors.product_name && <p id="edit-product-name-error" className="text-red-600 text-sm mt-1">{errors.product_name}</p>}
       </div>
+
       <div>
         <label htmlFor="edit-product-code" className="text-gray-700 font-medium">Product Code (10 chars)</label>
         <input
@@ -1263,6 +1372,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
         />
         {errors.product_code && <p id="edit-product-code-error" className="text-red-600 text-sm mt-1">{errors.product_code}</p>}
       </div>
+
       <div>
         <label htmlFor="edit-description" className="text-gray-700 font-medium">Description</label>
         <textarea
@@ -1274,6 +1384,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           disabled={isSubmitting}
         />
       </div>
+
       <div>
         <label htmlFor="edit-stock-quantity" className="text-gray-700 font-medium">Stock Quantity (can be negative)</label>
         <input
@@ -1289,6 +1400,24 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
         />
         {errors.stock_quantity && <p id="edit-stock-quantity-error" className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
       </div>
+
+      <div>
+        <label htmlFor="edit-returnable-qty" className="text-gray-700 font-medium">Returnable Qty</label>
+        <input
+          id="edit-returnable-qty"
+          type="number"
+          name="returnable_qty"
+          value={formData.returnable_qty}
+          onChange={handleChange}
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          aria-invalid={!!errors.returnable_qty}
+          aria-describedby={errors.returnable_qty ? "edit-returnable-qty-error" : undefined}
+          disabled={isSubmitting}
+          min={0}
+        />
+        {errors.returnable_qty && <p id="edit-returnable-qty-error" className="text-red-600 text-sm mt-1">{errors.returnable_qty}</p>}
+      </div>
+
       <div>
         <label htmlFor="edit-price" className="text-gray-700 font-medium">Price (₹)</label>
         <input
@@ -1306,6 +1435,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
         />
         {errors.price && <p id="edit-price-error" className="text-red-600 text-sm mt-1">{errors.price}</p>}
       </div>
+
       <div className="flex justify-end space-x-4">
         <button
           type="button"
@@ -1325,6 +1455,79 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
         </button>
       </div>
     </form>
+  );
+};
+
+/* ========= AcceptReturnModal component (NOTES REMOVED) ========= */
+const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
+  const [qty, setQty] = useState(product.returnable_qty ?? 0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleAccept = async () => {
+    const parsed = parseInt(qty, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      toast.error('Please enter a positive integer quantity to accept.', { autoClose: 3000 });
+      return;
+    }
+    if (parsed > (product.returnable_qty ?? 0)) {
+      toast.error(`Cannot accept more than ${product.returnable_qty}`, { autoClose: 3000 });
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      await acceptReturnApi(product.product_id, parsed);
+      toast.success('Return accepted and stock updated', { autoClose: 2000 });
+      if (onAccepted) await onAccepted();
+    } catch (err) {
+      console.error('Accept return failed', err);
+      toast.error(err.message || 'Accept return failed', { autoClose: 4000 });
+    } finally {
+      setIsSubmitting(false);
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-60">
+      <div className="bg-white p-6 rounded-2xl shadow-xl w-[420px] relative">
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          aria-label="Close accept return modal"
+        >
+          <XCircle size={22} />
+        </button>
+        <h3 className="text-xl font-semibold mb-3">Accept Return — {product.product_name}</h3>
+        <p className="text-sm text-gray-600 mb-4">Available to accept: <strong>{product.returnable_qty}</strong></p>
+
+        <label className="text-sm font-medium">Quantity to accept</label>
+        <input
+          type="number"
+          min={1}
+          max={product.returnable_qty}
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300 mb-3"
+        />
+
+        <div className="flex space-x-3 justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleAccept}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Accepting...' : (<><CheckCircle className="mr-2" /> Accept</>)}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 

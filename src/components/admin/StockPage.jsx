@@ -3,7 +3,7 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import {
   ArrowDownUp, Search, ChevronLeft, ChevronRight, X, RefreshCw,
-  Plus, Edit2, XCircle, MoreVertical, Download, Upload, Eye
+  Plus, Edit2, XCircle, MoreVertical, Download, Upload, Eye, CheckCircle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -12,9 +12,7 @@ const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 // Error Boundary
 class ErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
   render() {
     if (this.state.hasError) {
       return (
@@ -40,31 +38,39 @@ function useDebounce(value, delay) {
 // Format Date Helper
 const formatDate = (date) => {
   if (!date) return 'N/A';
-  return new Date(date).toLocaleDateString('en-IN', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
+  return new Date(date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
 // Weserv Image Proxy Helper
 const getWeservUrl = (imageUrl) => {
   if (!imageUrl) return null;
-  
-  // If it's already a weserv URL, return as-is
   if (imageUrl.includes('images.weserv.nl')) return imageUrl;
-  
-  // Extract Google Drive file ID if it's a Drive URL
   let directUrl = imageUrl;
   const driveMatch = imageUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if (driveMatch) {
-    directUrl = `https://drive.google.com/uc?export=view&id=${driveMatch[1]}`;
-  }
-  
-  // Proxy through Weserv
+  if (driveMatch) directUrl = `https://drive.google.com/uc?export=view&id=${driveMatch[1]}`;
   return `https://images.weserv.nl/?url=${encodeURIComponent(directUrl)}&w=1400&h=1000&fit=outside&output=webp&q=90`;
 };
 
+/* -------------------------
+   Accept Return API helper
+   ------------------------- */
+const acceptReturnApi = async (productId, quantity) => {
+  const token = localStorage.getItem('token');
+  if (!token) throw new Error('Authentication token missing.');
+  const res = await fetch(`${BASE_URL}/api/stock/${productId}/accept-return`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    credentials: 'include',
+    body: JSON.stringify({ quantity })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `Accept return failed (${res.status})`);
+  return data;
+};
+
+/* ==========================
+   Main StockPage component
+   ========================== */
 function StockPage({ socket }) {
   const [stockItems, setStockItems] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -79,13 +85,7 @@ function StockPage({ socket }) {
   const [modalMode, setModalMode] = useState('create');
   const [selectedItem, setSelectedItem] = useState(null);
   const [formData, setFormData] = useState({
-    productName: '',
-    description: '',
-    productCode: '',
-    price: '',
-    stockQuantity: '',
-    qtyRequired: '',
-    location: ''
+    productName: '', description: '', productCode: '', price: '', stockQuantity: '', qtyRequired: '', returnableQty: '', location: ''
   });
   const [formErrors, setFormErrors] = useState({});
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
@@ -93,6 +93,9 @@ function StockPage({ socket }) {
   const [uploadingId, setUploadingId] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [acceptProduct, setAcceptProduct] = useState(null);
+
   const tableRef = useRef(null);
   const searchInputRef = useRef(null);
   const modalRef = useRef(null);
@@ -117,18 +120,15 @@ function StockPage({ socket }) {
 
     try {
       const token = localStorage.getItem('token');
-      if (!token) throw new Error("Authentication token missing. Please log in again.");
+      if (!token) throw new Error("Authentication token missing. Please log in.");
 
       const response = await fetch(`${BASE_URL}/api/stock?limit=5000&offset=0`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         signal: controller.signal
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to fetch stock data');
       }
 
@@ -139,18 +139,21 @@ function StockPage({ socket }) {
         ...item,
         price: item.price !== null ? Number(item.price) : 0,
         stockQuantity: item.stockQuantity !== null ? Number(item.stockQuantity) : 0,
-        qtyRequired: item.qtyRequired !== null ? Number(item.qtyRequired) : 0,
+        qtyRequired: (item.qtyRequired !== undefined && item.qtyRequired !== null) ? Number(item.qtyRequired)
+                    : (item.qty_required !== undefined && item.qty_required !== null) ? Number(item.qty_required) : 0,
+        returnableQty: item.returnable_qty !== undefined ? Number(item.returnable_qty)
+                      : (item.returnableQty !== undefined ? Number(item.returnableQty) : 0),
         description: item.description || '',
-        productCode: item.productCode || '',
-        productName: item.productName || '',
-        productId: item.productId,
-        createdAt: item.createdAt || null,
+        productCode: item.productCode || item.product_code || '',
+        productName: item.productName || item.product_name || '',
+        productId: item.productId || item.product_id,
+        createdAt: item.createdAt || item.created_at || null,
         location: item.location || '',
         imageUrl: item.imageUrl || item.image_url || null,
       }));
 
       setStockItems(normalizedData);
-      setTotalItems(total || 0);
+      setTotalItems(total || normalizedData.length || 0);
     } catch (err) {
       if (err.name !== 'AbortError') {
         setError(err.message);
@@ -164,7 +167,7 @@ function StockPage({ socket }) {
     return () => controller.abort();
   }, []);
 
-  // Socket Updates
+  // Socket Updates (safe: do not overwrite qtyRequired unless provided)
   useEffect(() => {
     if (!socket) return;
 
@@ -173,24 +176,34 @@ function StockPage({ socket }) {
     socket.on('disconnect', () => toast.warn('Real-time connection lost', { autoClose: 3000 }));
     socket.on('reconnect', () => { toast.success('Reconnected!', { autoClose: 2000 }); fetchStock(); });
 
-    socket.on('stockUpdate', ({ product_id, stock_quantity, location, image_url, status }) => {
+    socket.on('stockUpdate', (payload) => {
+      const {
+        product_id, stock_quantity, location, image_url,
+        returnable_qty, qty_required, qtyRequired, status
+      } = payload || {};
+
       setStockItems(prev => {
         if (!Array.isArray(prev)) return prev || [];
-        if (status === 'Deleted') {
+        if (status === 'deleted' || status === 'Deleted') {
           toast.info(`Product #${product_id} deleted`, { autoClose: 2000 });
           return prev.filter(item => item.productId !== product_id);
         }
         return prev.map(item =>
           item.productId === product_id
-            ? { 
-                ...item, 
-                stockQuantity: Number(stock_quantity), 
-                location: location || item.location, 
-                imageUrl: image_url || item.imageUrl 
+            ? {
+                ...item,
+                stockQuantity: stock_quantity !== undefined ? Number(stock_quantity) : item.stockQuantity,
+                location: location || item.location,
+                imageUrl: image_url || item.imageUrl,
+                returnableQty: returnable_qty !== undefined ? Number(returnable_qty)
+                              : (payload.returnableQty !== undefined ? Number(payload.returnableQty) : item.returnableQty),
+                qtyRequired: qty_required !== undefined ? Number(qty_required)
+                            : (qtyRequired !== undefined ? Number(qtyRequired) : item.qtyRequired)
               }
             : item
         );
       });
+
       if (tableRef.current) tableRef.current.focus();
     });
 
@@ -204,39 +217,23 @@ function StockPage({ socket }) {
   }, [socket, fetchStock]);
 
   // Initial Load
-  useEffect(() => {
-    let mounted = true;
-    fetchStock().then(cleanup => { if (!mounted && cleanup) cleanup(); });
-    return () => { mounted = false; };
-  }, [fetchStock]);
+  useEffect(() => { let mounted = true; fetchStock().then(cleanup => { if (!mounted && cleanup) cleanup(); }); return () => { mounted = false; }; }, [fetchStock]);
 
   // Search & Pagination
   useEffect(() => setSearchTerm(debouncedSearch), [debouncedSearch]);
   useEffect(() => setPage(0), [searchTerm]);
 
-  // Modal Focus Trap (focus Product Name, not part search)
+  // Modal Focus Trap
   useEffect(() => {
     if (showModal && modalRef.current) {
-      // Prefer productName input
-      const targetInput =
-        modalRef.current.querySelector('input[name="productName"]') ||
-        modalRef.current.querySelector('input:not([name="partSearch"])') ||
-        modalRef.current.querySelector('input');
-
+      const targetInput = modalRef.current.querySelector('input[name="productName"]') || modalRef.current.querySelector('input');
       targetInput?.focus();
-
       const handleTab = (e) => {
         if (e.key !== 'Tab') return;
         const focusable = modalRef.current.querySelectorAll('button, input, textarea');
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       };
       document.addEventListener('keydown', handleTab);
       return () => document.removeEventListener('keydown', handleTab);
@@ -251,16 +248,8 @@ function StockPage({ socket }) {
       const token = localStorage.getItem('token');
       if (!token) throw new Error('Authentication token missing.');
 
-      const res = await fetch(`${BASE_URL}/api/parts?limit=500&offset=0`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-        credentials: 'include',
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Failed to fetch parts (${res.status})`);
-      }
-
+      const res = await fetch(`${BASE_URL}/api/parts?limit=500&offset=0`, { headers: { 'Authorization': `Bearer ${token}` }, credentials: 'include' });
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || `Failed to fetch parts (${res.status})`); }
       const json = await res.json();
       const list = json.data || [];
       setAllParts(list);
@@ -268,65 +257,27 @@ function StockPage({ socket }) {
     } catch (err) {
       console.error('Failed to load parts:', err);
       toast.error(err.message || 'Failed to load parts', { autoClose: 3000 });
-    } finally {
-      setIsPartLoading(false);
-    }
+    } finally { setIsPartLoading(false); }
   }, [partsLoaded, isPartLoading]);
 
   useEffect(() => {
     const term = partSearch.toLowerCase().trim();
-    if (!term) {
-      setFilteredParts(allParts.slice(0, 20));
-    } else {
-      setFilteredParts(
-        allParts
-          .filter(p =>
-            (p.partCode || '').toLowerCase().includes(term) ||
-            (p.name || '').toLowerCase().includes(term) ||
-            (p.drawingNo || '').toLowerCase().includes(term)
-          )
-          .slice(0, 20)
-      );
-    }
+    if (!term) setFilteredParts(allParts.slice(0, 20));
+    else setFilteredParts(allParts.filter(p => (p.partCode || '').toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term) || (p.drawingNo || '').toLowerCase().includes(term)).slice(0, 20));
   }, [partSearch, allParts]);
 
   useEffect(() => {
     if (!showPartDropdown) return;
-
-    const handleClickOutside = (event) => {
-      if (partDropdownRef.current && !partDropdownRef.current.contains(event.target)) {
-        setShowPartDropdown(false);
-      }
-    };
-
+    const handleClickOutside = (event) => { if (partDropdownRef.current && !partDropdownRef.current.contains(event.target)) setShowPartDropdown(false); };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showPartDropdown]);
 
-  const handlePartSearchChange = (e) => {
-    const value = e.target.value;
-    setPartSearch(value);
-    // Do NOT auto-open here; dropdown only opens on focus
-    if (!partsLoaded && !isPartLoading) {
-      loadParts();
-    }
-  };
-
+  const handlePartSearchChange = (e) => { const value = e.target.value; setPartSearch(value); if (!partsLoaded && !isPartLoading) loadParts(); };
   const handlePartSelect = (part) => {
-    setFormData(prev => ({
-      ...prev,
-      productName: part.name || '',
-      productCode: part.partCode || '',
-      description: part.description || '',
-    }));
-    setFormErrors(prev => ({
-      ...prev,
-      productName: '',
-      productCode: '',
-      description: '',
-    }));
-    setPartSearch(`${part.partCode} — ${part.name}`);
-    setShowPartDropdown(false);
+    setFormData(prev => ({ ...prev, productName: part.name || '', productCode: part.partCode || '', description: part.description || '' }));
+    setFormErrors(prev => ({ ...prev, productName: '', productCode: '', description: '' }));
+    setPartSearch(`${part.partCode} — ${part.name}`); setShowPartDropdown(false);
   };
   // -----------------------------------------
 
@@ -337,11 +288,8 @@ function StockPage({ socket }) {
       items.sort((a, b) => {
         let aVal = a[sortConfig.key] ?? '';
         let bVal = b[sortConfig.key] ?? '';
-        if (['price', 'stockQuantity', 'qtyRequired'].includes(sortConfig.key)) {
-          aVal = Number(aVal); bVal = Number(bVal);
-        } else if (sortConfig.key === 'createdAt') {
-          aVal = new Date(aVal || 0); bVal = new Date(bVal || 0);
-        }
+        if (['price', 'stockQuantity', 'qtyRequired', 'returnableQty'].includes(sortConfig.key)) { aVal = Number(aVal); bVal = Number(bVal); }
+        else if (sortConfig.key === 'createdAt') { aVal = new Date(aVal || 0); bVal = new Date(bVal || 0); }
         return (aVal < bVal ? -1 : 1) * (sortConfig.direction === 'asc' ? 1 : -1);
       });
     }
@@ -360,7 +308,7 @@ function StockPage({ socket }) {
     return filteredStock.slice(start, start + itemsPerPage);
   }, [filteredStock, page, itemsPerPage]);
 
-  // Import Validation
+  // Import Validation (support Returnable Qty)
   const validateImportRow = useCallback((row, index) => {
     const errors = [];
     if (!row['Product Name']?.trim()) errors.push(`Row ${index + 1}: Product Name required`);
@@ -369,6 +317,8 @@ function StockPage({ socket }) {
     if (isNaN(price) || price < 0) errors.push(`Row ${index + 1}: Invalid price`);
     const stock = parseFloat(row['Stock Quantity'] || 0);
     if (isNaN(stock) || stock < 0) errors.push(`Row ${index + 1}: Invalid stock`);
+    const rq = row['Returnable Qty'] !== undefined ? parseFloat(row['Returnable Qty']) : 0;
+    if (row['Returnable Qty'] !== undefined && (isNaN(rq) || rq < 0)) errors.push(`Row ${index + 1}: Invalid Returnable Qty`);
     return errors;
   }, []);
 
@@ -376,7 +326,6 @@ function StockPage({ socket }) {
   const importFromExcel = useCallback(async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
@@ -384,7 +333,6 @@ function StockPage({ socket }) {
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(sheet);
-
         if (!json.length) throw new Error('Empty file');
 
         const errors = [], valid = [];
@@ -398,6 +346,7 @@ function StockPage({ socket }) {
               price: parseFloat(String(row['Price (₹)'] || '0').replace(/₹/g, '')),
               stockQuantity: parseFloat(row['Stock Quantity'] || 0),
               qtyRequired: parseInt(row['Qty Required'] || 0),
+              returnableQty: row['Returnable Qty'] !== undefined ? parseFloat(row['Returnable Qty']) : 0,
               description: String(row['Description'] || '').trim() || undefined,
               location: String(row['Location'] || '').trim() || undefined,
               productId: row['Product ID'] ? parseInt(row['Product ID']) : undefined
@@ -413,15 +362,14 @@ function StockPage({ socket }) {
 
         for (const row of valid) {
           try {
-            const { productId, ...body } = row;
+            const { productId, returnableQty, ...body } = row;
+            if (returnableQty !== undefined) body.returnableQty = returnableQty;
             const url = productId ? `${BASE_URL}/api/stock/${productId}` : `${BASE_URL}/api/stock`;
             const method = productId ? 'PUT' : 'POST';
-
             const res = await fetch(url, {
               method, headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify(body)
+              body: JSON.stringify(body), credentials: 'include'
             });
-
             if (!res.ok) throw new Error((await res.json()).error || 'Failed');
             productId ? updated++ : created++;
           } catch {
@@ -440,7 +388,7 @@ function StockPage({ socket }) {
     event.target.value = '';
   }, [fetchStock, validateImportRow]);
 
-  // Export Excel
+  // Export Excel (includes Returnable Qty)
   const exportToExcel = useCallback(() => {
     const data = filteredStock.map(item => ({
       'Product ID': item.productId,
@@ -448,12 +396,12 @@ function StockPage({ socket }) {
       'Product Code': item.productCode,
       'Location': item.location || 'N/A',
       'Stock Quantity': Number(item.stockQuantity),
+      'Returnable Qty': Number(item.returnableQty || 0),
       'Qty Required': Number(item.qtyRequired),
       'Price (₹)': `₹${Number(item.price).toFixed(2)}`,
       'Description': item.description || 'N/A',
       'Created At': item.createdAt ? formatDate(item.createdAt) : 'N/A'
     }));
-
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Raw Materials');
@@ -463,23 +411,15 @@ function StockPage({ socket }) {
 
   // Sorting
   const sortData = useCallback((key) => {
-    setSortConfig(prev => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
-    }));
+    setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }));
   }, []);
 
   // Modal Handlers
   const handleCreate = useCallback(() => {
     setModalMode('create');
     setSelectedItem(null);
-    setFormData({
-      productName: '', description: '', productCode: '', price: '', stockQuantity: '', qtyRequired: '', location: ''
-    });
-    setFormErrors({});
-    setPartSearch('');
-    setShowPartDropdown(false);
-    setShowModal(true);
+    setFormData({ productName: '', description: '', productCode: '', price: '', stockQuantity: '', qtyRequired: '', returnableQty: '', location: '' });
+    setFormErrors({}); setPartSearch(''); setShowPartDropdown(false); setShowModal(true);
   }, []);
 
   const handleEdit = useCallback((item) => {
@@ -489,39 +429,29 @@ function StockPage({ socket }) {
       productName: item.productName || '',
       description: item.description || '',
       productCode: item.productCode || '',
-      price: item.price || '',
-      stockQuantity: item.stockQuantity || '',
-      qtyRequired: item.qtyRequired || '',
+      price: item.price ?? '',
+      stockQuantity: item.stockQuantity ?? '',
+      qtyRequired: item.qtyRequired ?? '',
+      returnableQty: item.returnableQty ?? '',
       location: item.location || ''
     });
-    setFormErrors({});
-    setPartSearch('');
-    setShowPartDropdown(false);
-    setShowModal(true);
+    setFormErrors({}); setPartSearch(''); setShowPartDropdown(false); setShowModal(true);
   }, []);
 
   const handleDelete = useCallback(async (productId) => {
     if (!confirm(`Delete product #${productId}?`)) return;
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${BASE_URL}/api/stock/${productId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
+      const res = await fetch(`${BASE_URL}/api/stock/${productId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }, credentials: 'include' });
+      if (!res.ok) throw new Error((await res.json()).error || 'Delete failed');
       await fetchStock();
       toast.success(`Product #${productId} deleted`);
-    } catch (err) {
-      toast.error(err.message);
-    }
+    } catch (err) { toast.error(err.message); }
   }, [fetchStock]);
 
-  const showDescription = useCallback((desc) => {
-    setSelectedDescription(desc);
-    setShowDescriptionModal(true);
-  }, []);
+  const showDescription = useCallback((desc) => { setSelectedDescription(desc); setShowDescriptionModal(true); }, []);
 
-  // Form Validation
+  // Form Validation (includes returnableQty)
   const validateForm = useCallback(() => {
     const errors = {};
     if (!formData.productName.trim()) errors.productName = 'Required';
@@ -529,166 +459,142 @@ function StockPage({ socket }) {
     const price = parseFloat(formData.price);
     if (isNaN(price) || price < 0) errors.price = 'Must be ≥ 0';
     const stock = parseFloat(formData.stockQuantity);
-    if ((modalMode === 'create' || modalMode === 'edit') && (isNaN(stock) || stock < 0)) {
-      errors.stockQuantity = 'Must be ≥ 0';
+    // require stock for create and edit (keeps previous behavior)
+    if ((modalMode === 'create' || modalMode === 'edit') && (isNaN(stock) || stock < 0)) errors.stockQuantity = 'Must be ≥ 0';
+    if (formData.returnableQty !== '' && formData.returnableQty !== undefined) {
+      const r = parseInt(formData.returnableQty, 10);
+      if (!Number.isInteger(r) || r < 0) errors.returnableQty = 'Must be integer ≥ 0';
     }
     return errors;
   }, [formData, modalMode]);
 
-  // Submit
+  // Submit (create/update) - includes returnableQty and fixes edit stock bug
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     const errors = validateForm();
-    if (Object.keys(errors).length) {
-      setFormErrors(errors);
-      Object.values(errors).forEach(e => toast.error(e));
-      return;
-    }
+    if (Object.keys(errors).length) { setFormErrors(errors); Object.values(errors).forEach(e => toast.error(e)); return; }
 
     try {
       const token = localStorage.getItem('token');
       const isCreate = modalMode === 'create';
       const url = isCreate ? `${BASE_URL}/api/stock` : `${BASE_URL}/api/stock/${selectedItem.productId}`;
+
+      // Build body — include stockQuantity for both create and edit when provided
       const body = {
         productName: formData.productName,
         description: formData.description || undefined,
         productCode: formData.productCode,
         price: parseFloat(formData.price),
-        stockQuantity: isCreate ? parseFloat(formData.stockQuantity) : undefined,
         qtyRequired: parseInt(formData.qtyRequired) || 0,
         location: formData.location || undefined
       };
 
+      // include stockQuantity always when editing or creating (if present)
+      if (formData.stockQuantity !== '' && formData.stockQuantity !== undefined) {
+        body.stockQuantity = parseFloat(formData.stockQuantity);
+      } else if (isCreate) {
+        // ensure numeric 0 if empty on create
+        body.stockQuantity = 0;
+      }
+
+      if (formData.returnableQty !== '' && formData.returnableQty !== undefined) {
+        body.returnableQty = parseInt(formData.returnableQty, 10);
+      }
+
       const res = await fetch(url, {
         method: isCreate ? 'POST' : 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body), credentials: 'include'
       });
 
-      if (!res.ok) throw new Error((await res.json()).error);
-      await fetchStock();
-      setShowModal(false);
-      setPage(0);
+      if (!res.ok) {
+        const resp = await res.json().catch(() => ({}));
+        throw new Error(resp.error || resp.message || 'Save failed');
+      }
+
+      await fetchStock(); setShowModal(false); setPage(0);
       toast.success(isCreate ? 'Product created!' : 'Product updated!');
-    } catch (err) {
-      toast.error(err.message);
-    }
+    } catch (err) { toast.error(err.message || 'Save failed'); }
   }, [formData, modalMode, selectedItem, fetchStock, validateForm]);
 
-  // Upload Photo with Weserv
+  // Upload Photo
   const uploadPhoto = useCallback(async (productId, file) => {
     if (!file) return;
-    
-    console.log('UPLOAD STARTED', { productId, fileName: file.name });
     setUploadingId(productId);
     const toastId = toast.loading(`Uploading ${file.name}...`);
-    
     const formDataUpload = new FormData();
     formDataUpload.append('photo', file);
-
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${BASE_URL}/api/stock/${productId}/photo`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formDataUpload
+        method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formDataUpload, credentials: 'include'
       });
-
-      const result = await res.json();
-      console.log('Upload response:', result);
-
-      if (!res.ok) {
-        throw new Error(result.message || result.error || 'Upload failed');
-      }
-
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.message || result.error || 'Upload failed');
       const rawImageUrl = result.imageUrl || result.image_url || result.link || null;
       const weservImageUrl = getWeservUrl(rawImageUrl);
-      
-      setStockItems(prev => prev.map(item =>
-        item.productId === productId ? { ...item, imageUrl: weservImageUrl } : item
-      ));
-      
-      toast.update(toastId, { 
-        render: 'Image uploaded successfully!', 
-        type: 'success', 
-        isLoading: false, 
-        autoClose: 3000 
-      });
+      setStockItems(prev => prev.map(item => item.productId === productId ? { ...item, imageUrl: weservImageUrl } : item));
+      toast.update(toastId, { render: 'Image uploaded successfully!', type: 'success', isLoading: false, autoClose: 3000 });
     } catch (err) {
-      console.error('Upload error:', err);
-      toast.update(toastId, { 
-        render: `Upload failed: ${err.message}`, 
-        type: 'error', 
-        isLoading: false, 
-        autoClose: 5000 
-      });
-    } finally {
-      setUploadingId(null);
-    }
+      toast.update(toastId, { render: `Upload failed: ${err.message}`, type: 'error', isLoading: false, autoClose: 5000 });
+    } finally { setUploadingId(null); }
   }, []);
 
-  // Actions Dropdown
+  // Actions Dropdown (includes Accept Return)
   const ActionsDropdown = ({ item }) => {
     const [open, setOpen] = useState(false);
     const menuRef = useRef(null);
 
     useEffect(() => {
-      const handleOutside = (e) => {
-        if (menuRef.current && !menuRef.current.contains(e.target)) {
-          setOpen(false);
-        }
-      };
+      const handleOutside = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false); };
       document.addEventListener('mousedown', handleOutside);
       return () => document.removeEventListener('mousedown', handleOutside);
     }, []);
 
+    const openAccept = () => { setAcceptProduct(item); setShowAcceptModal(true); setOpen(false); };
+
     return (
       <div ref={menuRef} className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="p-2 hover:bg-gray-100 rounded-full transition"
-        >
-          <MoreVertical size={20} />
-        </button>
-        
+        <button type="button" onClick={() => setOpen(!open)} className="p-2 hover:bg-gray-100 rounded-full transition"><MoreVertical size={20} /></button>
+
         {open && (
-          <div className="absolute right-0 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5 z-10">
-            <button 
-              onClick={() => { handleEdit(item); setOpen(false); }} 
-              className="flex w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 items-center"
-            >
+          <div className="absolute right-0 mt-2 w-56 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5 z-10">
+            <button onClick={() => { handleEdit(item); setOpen(false); }} className="flex w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 items-center">
               <Edit2 size={16} className="mr-2" /> Edit
             </button>
-            
+
             <label className="flex w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 items-center cursor-pointer">
               <Upload size={16} className="mr-2" /> Upload Photo
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    console.log('FILE SELECTED:', file.name);
-                    uploadPhoto(item.productId, file);
-                  }
-                  setOpen(false);
-                }}
-              />
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadPhoto(item.productId, file); setOpen(false); }} />
             </label>
-            
-            <button 
-              onClick={() => { handleDelete(item.productId); setOpen(false); }} 
-              className="flex w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 items-center"
-            >
+
+            <button onClick={() => { handleDelete(item.productId); setOpen(false); }} className="flex w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 items-center">
               <XCircle size={16} className="mr-2" /> Delete
+            </button>
+
+            <button onClick={() => openAccept()} disabled={(item.returnableQty || 0) <= 0} className={`flex w-full px-4 py-2 text-sm items-center ${((item.returnableQty || 0) <= 0) ? 'text-gray-400 cursor-not-allowed' : 'text-green-700 hover:bg-green-50'}`}>
+              <CheckCircle size={16} className="mr-2" /> Accept Return
             </button>
           </div>
         )}
       </div>
     );
   };
+
+  // After accept: safe local update (does NOT overwrite qtyRequired unless server explicitly returns it)
+  const handleAfterAccept = useCallback((productId, acceptedQty, serverResp = {}) => {
+    setStockItems(prev => prev.map(it => {
+      if (it.productId !== productId) return it;
+      const newStock = serverResp.stock_quantity !== undefined ? Number(serverResp.stock_quantity) : Number((it.stockQuantity || 0) + acceptedQty);
+      const newReturnable = serverResp.returnable_qty !== undefined ? Number(serverResp.returnable_qty) : Math.max(0, (it.returnableQty || 0) - acceptedQty);
+      const newQtyRequired = serverResp.qty_required !== undefined ? Number(serverResp.qty_required)
+                         : (serverResp.qtyRequired !== undefined ? Number(serverResp.qtyRequired) : it.qtyRequired);
+      return { ...it, stockQuantity: newStock, returnableQty: newReturnable, qtyRequired: newQtyRequired };
+    }));
+    setShowAcceptModal(false);
+    setAcceptProduct(null);
+    toast.success('Accept processed (UI updated)', { autoClose: 2000 });
+  }, []);
 
   // Render
   if (isLoading && !stockItems.length) {
@@ -704,9 +610,7 @@ function StockPage({ socket }) {
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
         <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg text-center">
           <p className="mb-4">{error}</p>
-          <button onClick={() => { setError(null); fetchStock(); }} className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600">
-            Retry
-          </button>
+          <button onClick={() => { setError(null); fetchStock(); }} className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600">Retry</button>
         </div>
       </div>
     );
@@ -720,36 +624,15 @@ function StockPage({ socket }) {
           {/* Toolbar */}
           <div className="flex mb-8 gap-4 flex-wrap">
             <div className="relative flex-grow">
-              <input
-                id="search-stock"
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search by ID, Name, Code, or Location..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Escape' && (setSearchInput(''), setSearchTerm(''))}
-                className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
-              />
+              <input id="search-stock" ref={searchInputRef} type="text" placeholder="Search by ID, Name, Code, or Location..." value={searchInput} onChange={(e) => setSearchInput(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (setSearchInput(''), setSearchTerm(''))} className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md" />
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-              {searchInput && (
-                <button onClick={() => { setSearchInput(''); setSearchTerm(''); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  <X size={20} />
-                </button>
-              )}
+              {searchInput && <button onClick={() => { setSearchInput(''); setSearchTerm(''); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={20} /></button>}
             </div>
-            <button onClick={handleCreate} className="p-4 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center shadow-md">
-              <Plus size={20} className="mr-2" /> Create Product
-            </button>
-            <button onClick={fetchStock} disabled={isLoading} className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 flex items-center shadow-md">
-              <RefreshCw size={20} className="mr-2" /> {isLoading ? 'Refreshing...' : 'Refresh'}
-            </button>
-            <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md">
-              <Upload size={20} className="mr-2" /> Import Excel
-            </button>
+            <button onClick={() => { setModalMode('create'); handleCreate(); }} className="p-4 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center shadow-md"><Plus size={20} className="mr-2" /> Create Product</button>
+            <button onClick={fetchStock} disabled={isLoading} className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 flex items-center shadow-md"><RefreshCw size={20} className="mr-2" /> {isLoading ? 'Refreshing...' : 'Refresh'}</button>
+            <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md"><Upload size={20} className="mr-2" /> Import Excel</button>
             <input type="file" ref={fileInputRef} onChange={importFromExcel} accept=".xlsx,.xls" className="hidden" />
-            <button onClick={exportToExcel} disabled={!filteredStock.length} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md">
-              <Download size={20} className="mr-2" /> Export Excel
-            </button>
+            <button onClick={exportToExcel} disabled={!filteredStock.length} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md"><Download size={20} className="mr-2" /> Export Excel</button>
           </div>
 
           {/* Table */}
@@ -758,7 +641,7 @@ function StockPage({ socket }) {
               <Search className="mx-auto mb-4 text-gray-400" size={48} />
               <h2 className="text-2xl font-bold text-gray-800 mb-2">No Items Found</h2>
               <p className="text-gray-600 mb-6">{searchTerm ? 'Try adjusting your search.' : 'Start by creating a product!'}</p>
-              {!searchTerm && <button onClick={handleCreate} className="p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto"><Plus className="mr-2" /> Create First Product</button>}
+              {!searchTerm && <button onClick={() => { setModalMode('create'); handleCreate(); }} className="p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto"><Plus className="mr-2" /> Create First Product</button>}
             </div>
           ) : (
             <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
@@ -770,6 +653,7 @@ function StockPage({ socket }) {
                       { key: 'productName', label: 'Name' },
                       { key: 'location', label: 'Location' },
                       { key: 'stockQuantity', label: 'Stock' },
+                      { key: 'returnableQty', label: 'Returnable Qty' },
                       { key: 'qtyRequired', label: 'Req' },
                       { key: 'price', label: 'Price (₹)' },
                       { key: 'productCode', label: 'Code' },
@@ -777,19 +661,10 @@ function StockPage({ socket }) {
                       { key: 'createdAt', label: 'Created' },
                       { key: 'actions', label: 'Actions' }
                     ].map(({ key, label }) => (
-                      <th
-                        key={key}
-                        className={`py-5 px-3 text-gray-800 font-semibold text-base ${key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''}`}
-                        onClick={() => key !== 'actions' && sortData(key)}
-                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && key !== 'actions' && sortData(key)}
-                        tabIndex={key !== 'actions' ? 0 : -1}
-                        aria-sort={sortConfig.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
-                      >
+                      <th key={key} className={`py-5 px-3 text-gray-800 font-semibold text-base ${key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''}`} onClick={() => key !== 'actions' && sortData(key)} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && key !== 'actions' && sortData(key)} tabIndex={key !== 'actions' ? 0 : -1} aria-sort={sortConfig.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
                         <div className="flex items-center justify-between">
                           {label}
-                          {key !== 'actions' && (
-                            <ArrowDownUp size={16} className={`ml-2 text-gray-600 ${sortConfig.key === key ? 'text-gray-900' : 'opacity-50'}`} />
-                          )}
+                          {key !== 'actions' && <ArrowDownUp size={16} className={`ml-2 text-gray-600 ${sortConfig.key === key ? 'text-gray-900' : 'opacity-50'}`} />}
                         </div>
                       </th>
                     ))}
@@ -799,31 +674,14 @@ function StockPage({ socket }) {
                   {paginatedStock.map(item => {
                     const stockClass = item.stockQuantity >= item.qtyRequired ? 'text-green-600' : 'text-red-600';
                     const weservImageUrl = getWeservUrl(item.imageUrl);
-                    
                     return (
                       <tr key={item.productId} className="border-t hover:bg-amber-50">
                         <td className="py-4 px-3 text-gray-600">{item.productId}</td>
                         <td className="py-4 px-3 text-gray-600 font-medium">
                           <div className="flex items-center gap-3">
                             {weservImageUrl ? (
-                              <img 
-                                src={weservImageUrl} 
-                                alt={item.productName} 
-                                className="w-10 h-10 rounded-md object-cover border cursor-pointer hover:opacity-80 transition" 
-                                onClick={() => {
-                                  setSelectedImage({ url: weservImageUrl, name: item.productName });
-                                  setShowImageModal(true);
-                                }}
-                                onError={(e) => {
-                                  console.error('Image load failed:', weservImageUrl);
-                                  e.target.style.display = 'none';
-                                  e.target.nextElementSibling.style.display = 'flex';
-                                }}
-                              />
-                            ) : null}
-                            {!weservImageUrl && (
-                              <div className="w-10 h-10 rounded-md bg-gray-100 border flex items-center justify-center text-sm text-gray-400">No</div>
-                            )}
+                              <img src={weservImageUrl} alt={item.productName} className="w-10 h-10 rounded-md object-cover border cursor-pointer hover:opacity-80 transition" onClick={() => { setSelectedImage({ url: weservImageUrl, name: item.productName }); setShowImageModal(true); }} onError={(e) => { e.target.style.display = 'none'; }} />
+                            ) : <div className="w-10 h-10 rounded-md bg-gray-100 border flex items-center justify-center text-sm text-gray-400">No</div>}
                             <div>
                               <div className="font-medium">{item.productName}</div>
                               <div className="text-xs text-gray-500">{item.productCode}</div>
@@ -831,22 +689,19 @@ function StockPage({ socket }) {
                           </div>
                         </td>
                         <td className="py-4 px-3 text-gray-600">{item.location || <span className="text-gray-400 italic">Not set</span>}</td>
-                        <td className={`py-4 px-3 font-medium ${stockClass}`}>
-                          {item.stockQuantity}
-                          {item.stockQuantity < item.qtyRequired && (
-                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-800">Low</span>
-                          )}
+                        <td className={`py-4 px-3 font-medium ${stockClass}`}>{item.stockQuantity}{item.stockQuantity < item.qtyRequired && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-800">Low</span>}</td>
+
+                        {/* Returnable Qty (clickable -> opens edit modal) */}
+                        <td className="py-4 px-3">
+                          <button onClick={() => handleEdit(item)} title="Click to edit returnable qty" className={`px-3 py-1 rounded-full text-white text-sm ${item.returnableQty > 0 ? 'bg-indigo-600 hover:brightness-110' : 'bg-gray-400 hover:brightness-110'}`}>
+                            {item.returnableQty ?? 0}
+                          </button>
                         </td>
+
                         <td className="py-4 px-3 text-gray-600">{item.qtyRequired}</td>
                         <td className="py-4 px-3 text-gray-600">₹{Number(item.price).toFixed(2)}</td>
                         <td className="py-4 px-3 text-gray-600 font-mono">{item.productCode}</td>
-                        <td className="py-4 px-3">
-                          {item.description ? (
-                            <button onClick={() => showDescription(item.description)} className="text-amber-600 hover:text-amber-800 flex items-center">
-                              <Eye size={16} className="mr-1" /> View
-                            </button>
-                          ) : '-'}
-                        </td>
+                        <td className="py-4 px-3">{item.description ? (<button onClick={() => showDescription(item.description)} className="text-amber-600 hover:text-amber-800 flex items-center"><Eye size={16} className="mr-1" /> View</button>) : '-'}</td>
                         <td className="py-4 px-3 text-gray-600 text-sm">{formatDate(item.createdAt)}</td>
                         <td className="py-4 px-3">
                           <div className="flex items-center gap-2">
@@ -861,21 +716,15 @@ function StockPage({ socket }) {
               </table>
 
               <div className="flex justify-between items-center p-4 bg-gray-50">
-                <div className="text-gray-600">
-                  Showing {paginatedStock.length} of {filteredStock.length} (Total: {totalItems})
-                </div>
+                <div className="text-gray-600">Showing {paginatedStock.length} of {filteredStock.length} (Total: {totalItems})</div>
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-4">
                     <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-green-500 mr-1.5"></div> In Stock</div>
                     <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-red-500 mr-1.5"></div> Low</div>
                   </div>
                   <div className="flex space-x-2">
-                    <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100">
-                      <ChevronLeft size={20} />
-                    </button>
-                    <button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * itemsPerPage >= filteredStock.length} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100">
-                      <ChevronRight size={20} />
-                    </button>
+                    <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"><ChevronLeft size={20} /></button>
+                    <button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * itemsPerPage >= filteredStock.length} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"><ChevronRight size={20} /></button>
                   </div>
                 </div>
               </div>
@@ -887,146 +736,79 @@ function StockPage({ socket }) {
         {showModal && (
           <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50" role="dialog">
             <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto relative" ref={modalRef}>
-              <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-gray-700">
-                <XCircle size={24} />
-              </button>
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">
-                {modalMode === 'create' ? 'Create Product' : `Edit #${selectedItem?.productId}`}
-              </h2>
+              <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"><XCircle size={24} /></button>
+              <h2 className="text-2xl font-bold text-gray-800 mb-6">{modalMode === 'create' ? 'Create Product' : `Edit #${selectedItem?.productId}`}</h2>
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Part search (optional) */}
+                {/* Part search */}
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Search Part (optional)</label>
                   <div className="relative" ref={partDropdownRef}>
-                    <input
-                      name="partSearch"
-                      type="text"
-                      value={partSearch}
-                      onChange={handlePartSearchChange}
-                      onFocus={() => {
-                        setShowPartDropdown(true);
-                        if (!partsLoaded && !isPartLoading) {
-                          loadParts();
-                        }
-                      }}
-                      placeholder="Type part code or name..."
-                      className="w-full p-3 pl-9 border rounded-lg focus:ring-2 focus:ring-amber-300"
-                    />
+                    <input name="partSearch" type="text" value={partSearch} onChange={handlePartSearchChange} onFocus={() => { setShowPartDropdown(true); if (!partsLoaded && !isPartLoading) loadParts(); }} placeholder="Type part code or name..." className="w-full p-3 pl-9 border rounded-lg focus:ring-2 focus:ring-amber-300" />
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     {showPartDropdown && (
                       <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white border rounded-lg shadow-lg">
-                        {isPartLoading && (
-                          <div className="px-3 py-2 text-sm text-gray-500">Loading parts...</div>
-                        )}
-                        {!isPartLoading && filteredParts.length === 0 && (
-                          <div className="px-3 py-2 text-sm text-gray-500">No parts found.</div>
-                        )}
+                        {isPartLoading && (<div className="px-3 py-2 text-sm text-gray-500">Loading parts...</div>)}
+                        {!isPartLoading && filteredParts.length === 0 && (<div className="px-3 py-2 text-sm text-gray-500">No parts found.</div>)}
                         {!isPartLoading && filteredParts.map(part => (
-                          <button
-                            key={part.id}
-                            type="button"
-                            onClick={() => handlePartSelect(part)}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50"
-                          >
+                          <button key={part.id} type="button" onClick={() => handlePartSelect(part)} className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50">
                             <div className="font-medium">{part.partCode} — {part.name}</div>
-                            <div className="text-xs text-gray-500">
-                              {part.partTypeName}{part.drawingNo ? ` • Drawing: ${part.drawingNo}` : ''}
-                            </div>
+                            <div className="text-xs text-gray-500">{part.partTypeName}{part.drawingNo ? ` • Drawing: ${part.drawingNo}` : ''}</div>
                           </button>
                         ))}
                       </div>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Selecting a part will fill Product Name, Product Code and Description.
-                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Selecting a part will fill Product Name, Product Code and Description.</p>
                 </div>
 
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Product Name *</label>
-                  <input 
-                    name="productName"
-                    type="text" 
-                    value={formData.productName} 
-                    onChange={e => setFormData({ ...formData, productName: e.target.value })} 
-                    className={`w-full p-3 border rounded-lg ${formErrors.productName ? 'border-red-500' : ''}`} 
-                    required 
-                  />
+                  <input name="productName" type="text" value={formData.productName} onChange={e => setFormData({ ...formData, productName: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.productName ? 'border-red-500' : ''}`} required />
                   {formErrors.productName && <p className="text-red-500 text-sm mt-1">{formErrors.productName}</p>}
                 </div>
+
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Product Code *</label>
-                  <input 
-                    name="productCode"
-                    type="text" 
-                    value={formData.productCode} 
-                    onChange={e => setFormData({ ...formData, productCode: e.target.value })} 
-                    className={`w-full p-3 border rounded-lg ${formErrors.productCode ? 'border-red-500' : ''}`} 
-                    required 
-                  />
+                  <input name="productCode" type="text" value={formData.productCode} onChange={e => setFormData({ ...formData, productCode: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.productCode ? 'border-red-500' : ''}`} required />
                 </div>
+
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Location</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g., Warehouse A, Shelf 12" 
-                    value={formData.location} 
-                    onChange={e => setFormData({ ...formData, location: e.target.value })} 
-                    className="w-full p-3 border rounded-lg" 
-                  />
+                  <input type="text" placeholder="e.g., Warehouse A, Shelf 12" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} className="w-full p-3 border rounded-lg" />
                 </div>
+
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Price (₹) *</label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    min="0" 
-                    value={formData.price} 
-                    onChange={e => setFormData({ ...formData, price: e.target.value })} 
-                    className={`w-full p-3 border rounded-lg ${formErrors.price ? 'border-red-500' : ''}`} 
-                    required 
-                  />
+                  <input type="number" step="0.01" min="0" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.price ? 'border-red-500' : ''}`} required />
                   {formErrors.price && <p className="text-red-500 text-sm mt-1">{formErrors.price}</p>}
                 </div>
+
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">{modalMode === 'create' ? 'Initial Stock' : 'Stock Quantity'}</label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    min="0" 
-                    value={formData.stockQuantity} 
-                    onChange={e => setFormData({ ...formData, stockQuantity: e.target.value })} 
-                    className={`w-full p-3 border rounded-lg ${formErrors.stockQuantity ? 'border-red-500' : ''}`} 
-                    required={modalMode === 'create'} 
-                  />
+                  <input type="number" step="0.01" min="0" value={formData.stockQuantity} onChange={e => setFormData({ ...formData, stockQuantity: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.stockQuantity ? 'border-red-500' : ''}`} required={modalMode === 'create'} />
                   {formErrors.stockQuantity && <p className="text-red-500 text-sm mt-1">{formErrors.stockQuantity}</p>}
                 </div>
+
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Qty Required</label>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    value={formData.qtyRequired} 
-                    onChange={e => setFormData({ ...formData, qtyRequired: e.target.value })} 
-                    className="w-full p-3 border rounded-lg" 
-                  />
+                  <input type="number" min="0" value={formData.qtyRequired} onChange={e => setFormData({ ...formData, qtyRequired: e.target.value })} className="w-full p-3 border rounded-lg" />
                 </div>
+
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">Returnable Qty</label>
+                  <input type="number" min="0" value={formData.returnableQty} onChange={e => setFormData({ ...formData, returnableQty: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.returnableQty ? 'border-red-500' : ''}`} />
+                  {formErrors.returnableQty && <p className="text-red-500 text-sm mt-1">{formErrors.returnableQty}</p>}
+                  <p className="text-xs text-gray-500 mt-1">Set how many units are currently returnable for this product.</p>
+                </div>
+
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Description</label>
-                  <textarea 
-                    value={formData.description} 
-                    onChange={e => setFormData({ ...formData, description: e.target.value })} 
-                    className="w-full p-3 border rounded-lg" 
-                    rows="2" 
-                  />
+                  <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full p-3 border rounded-lg" rows="2" />
                 </div>
+
                 <div className="flex justify-end gap-3 mt-6">
-                  <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
-                    Cancel
-                  </button>
-                  <button type="submit" className="px-5 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold">
-                    {modalMode === 'create' ? 'Create' : 'Update'}
-                  </button>
+                  <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Cancel</button>
+                  <button type="submit" className="px-5 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold">{modalMode === 'create' ? 'Create' : 'Update'}</button>
                 </div>
               </form>
             </div>
@@ -1037,9 +819,7 @@ function StockPage({ socket }) {
         {showDescriptionModal && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
             <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative">
-              <button onClick={() => setShowDescriptionModal(false)} className="absolute top-4 right-4 hover:text-gray-700">
-                <XCircle size={24} />
-              </button>
+              <button onClick={() => setShowDescriptionModal(false)} className="absolute top-4 right-4 hover:text-gray-700"><XCircle size={24} /></button>
               <h2 className="text-2xl font-bold mb-4">Description</h2>
               <p className="text-gray-700 whitespace-pre-wrap">{selectedDescription || 'None'}</p>
             </div>
@@ -1048,28 +828,18 @@ function StockPage({ socket }) {
 
         {/* Image Modal */}
         {showImageModal && selectedImage && (
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
-            onClick={() => setShowImageModal(false)}
-          >
+          <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4" onClick={() => setShowImageModal(false)}>
             <div className="relative max-w-7xl max-h-full">
-              <button 
-                onClick={() => setShowImageModal(false)} 
-                className="absolute -top-12 right-0 text-white hover:text-gray-300 transition"
-              >
-                <XCircle size={32} />
-              </button>
-              <img 
-                src={selectedImage.url} 
-                alt={selectedImage.name} 
-                className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
-              />
-              <div className="text-white text-center mt-4 text-lg font-medium">
-                {selectedImage.name}
-              </div>
+              <button onClick={() => setShowImageModal(false)} className="absolute -top-12 right-0 text-white hover:text-gray-300 transition"><XCircle size={32} /></button>
+              <img src={selectedImage.url} alt={selectedImage.name} className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()} />
+              <div className="text-white text-center mt-4 text-lg font-medium">{selectedImage.name}</div>
             </div>
           </div>
+        )}
+
+        {/* Accept Return Modal (quantity only) */}
+        {showAcceptModal && acceptProduct && (
+          <AcceptReturnModal product={acceptProduct} onClose={() => { setShowAcceptModal(false); setAcceptProduct(null); }} onAccepted={handleAfterAccept} />
         )}
 
         <ToastContainer position="top-right" autoClose={3000} />
@@ -1077,5 +847,49 @@ function StockPage({ socket }) {
     </ErrorBoundary>
   );
 }
+
+/* ========= AcceptReturnModal (quantity-only, no notes) ========= */
+const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
+  const [qty, setQty] = useState(product.returnableQty ?? 0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleAccept = async () => {
+    const parsed = parseInt(qty, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) { toast.error('Please enter a positive integer quantity to accept.', { autoClose: 3000 }); return; }
+    if (parsed > (product.returnableQty ?? 0)) { toast.error(`Cannot accept more than ${product.returnableQty}`, { autoClose: 3000 }); return; }
+
+    try {
+      setIsSubmitting(true);
+      const data = await acceptReturnApi(product.productId, parsed);
+      if (onAccepted) onAccepted(product.productId, parsed, data || {});
+    } catch (err) {
+      console.error('Accept return failed', err);
+      toast.error(err.message || 'Accept return failed', { autoClose: 4000 });
+    } finally {
+      setIsSubmitting(false);
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-60">
+      <div className="bg-white p-6 rounded-2xl shadow-xl w-[420px] relative">
+        <button onClick={onClose} className="absolute top-3 right-3 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Close accept return modal"><XCircle size={22} /></button>
+        <h3 className="text-xl font-semibold mb-3">Accept Return — {product.productName}</h3>
+        <p className="text-sm text-gray-600 mb-4">Available to accept: <strong>{product.returnableQty}</strong></p>
+
+        <label className="text-sm font-medium">Quantity to accept</label>
+        <input type="number" min={1} max={product.returnableQty} value={qty} onChange={(e) => setQty(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300 mb-3" />
+
+        <div className="flex space-x-3 justify-end">
+          <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300" disabled={isSubmitting}>Cancel</button>
+          <button onClick={handleAccept} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center" disabled={isSubmitting}>
+            {isSubmitting ? 'Accepting...' : (<><CheckCircle className="mr-2" /> Accept</>)}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default StockPage;
