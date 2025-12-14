@@ -9,8 +9,8 @@ import "react-toastify/dist/ReactToastify.css";
 Modal.setAppElement("#root");
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || "";
-const MAX_FETCH_LIMIT = 5000; // fetch up to 5000 items for autocomplete lists
-const DISPLAY_LIMIT = 200; // render at most 200 matches
+const MAX_FETCH_LIMIT = 5000;
+const DISPLAY_LIMIT = 200;
 const DEBOUNCE_MS = 200;
 
 function formatDDMMYYYY(iso) {
@@ -40,11 +40,9 @@ function makeItem(overrides = {}) {
 
 export default function DeliveryChallanForm() {
   const DEFAULT_DATE = new Date().toISOString().slice(0, 10);
-
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const abortRef = useRef(null);
-
   const [form, setForm] = useState({
     challan_no: "",
     date: DEFAULT_DATE,
@@ -57,18 +55,15 @@ export default function DeliveryChallanForm() {
     items: [makeItem()],
   });
 
-  // full lists (kept in memory)
   const [inventoryList, setInventoryList] = useState([]);
   const [rawList, setRawList] = useState([]);
   const [loadingLists, setLoadingLists] = useState(false);
 
-  // per-item UI state (kept minimal)
-  const [productQueries, setProductQueries] = useState({}); // uid -> string
-  const [filteredProducts, setFilteredProducts] = useState({}); // uid -> array
-  const [dropdownOpen, setDropdownOpen] = useState({}); // uid -> bool
-  const [selectedIndexMap, setSelectedIndexMap] = useState({}); // uid -> number
+  const [productQueries, setProductQueries] = useState({});
+  const [filteredProducts, setFilteredProducts] = useState({});
+  const [dropdownOpen, setDropdownOpen] = useState({});
+  const [selectedIndexMap, setSelectedIndexMap] = useState({});
 
-  // debounce timers ref
   const debounceTimersRef = useRef({});
 
   /* ===========================
@@ -79,12 +74,9 @@ export default function DeliveryChallanForm() {
     try {
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
       const invUrl = `${API_URL}/api/inventory?limit=${MAX_FETCH_LIMIT}&offset=0`;
       const rawUrl = `${API_URL}/api/stock?limit=${MAX_FETCH_LIMIT}&offset=0`;
-
       const [invRes, rawRes] = await Promise.all([fetch(invUrl, { headers }), fetch(rawUrl, { headers })]);
-
       const invJson = invRes.ok ? await invRes.json() : null;
       const rawJson = rawRes.ok ? await rawRes.json() : null;
 
@@ -106,7 +98,6 @@ export default function DeliveryChallanForm() {
           product_name: p.product_name ?? p.productName ?? p.name ?? p.product_code ?? "Unnamed",
         }))
       );
-
       setRawList(
         rawArr.map((p) => ({
           product_id: p.product_id ?? p.productId ?? p.id ?? p.product_code ?? null,
@@ -114,7 +105,6 @@ export default function DeliveryChallanForm() {
         }))
       );
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error("Failed to load product lists:", err);
       toast.error("Failed to load inventory/raw lists.");
     } finally {
@@ -127,7 +117,7 @@ export default function DeliveryChallanForm() {
   }, [fetchLists]);
 
   /* ===========================
-     Small helpers (stable via useCallback)
+     Small helpers
   ============================ */
   const addItem = useCallback(() => {
     setForm((prev) => ({ ...prev, items: [...prev.items, makeItem()] }));
@@ -135,7 +125,6 @@ export default function DeliveryChallanForm() {
 
   const removeItemByUid = useCallback((uid) => {
     setForm((prev) => ({ ...prev, items: prev.items.filter((it) => it._uid !== uid) }));
-
     setProductQueries((p) => {
       const n = { ...p }; delete n[uid]; return n;
     });
@@ -148,7 +137,6 @@ export default function DeliveryChallanForm() {
     setSelectedIndexMap((p) => {
       const n = { ...p }; delete n[uid]; return n;
     });
-
     if (debounceTimersRef.current[uid]) {
       clearTimeout(debounceTimersRef.current[uid]);
       delete debounceTimersRef.current[uid];
@@ -162,12 +150,10 @@ export default function DeliveryChallanForm() {
         if (field === "source") {
           return { ...it, [field]: value, productId: null, productName: "" };
         }
-        // keep strings as-is (controlled)
         return { ...it, [field]: value };
       });
       return { ...prev, items };
     });
-
     if (field === "source") {
       setProductQueries((p) => ({ ...p, [uid]: "" }));
       setFilteredProducts((p) => ({ ...p, [uid]: [] }));
@@ -177,8 +163,7 @@ export default function DeliveryChallanForm() {
   }, []);
 
   /* ===========================
-     Filtering (debounced per uid)
-     Only produce DISPLAY_LIMIT items to render
+     Filtering (debounced)
   ============================ */
   const performFilter = useCallback((uid, query) => {
     const it = form.items.find((x) => x._uid === uid);
@@ -226,10 +211,16 @@ export default function DeliveryChallanForm() {
 
   const selectProduct = useCallback((uid, prod) => {
     if (!prod || prod.product_id == null) return;
+
     setForm((prev) => {
-      const items = prev.items.map((it) => (it._uid === uid ? { ...it, productId: prod.product_id, productName: prod.product_name } : it));
+      const items = prev.items.map((it) =>
+        it._uid === uid
+          ? { ...it, productId: prod.product_id, productName: prod.product_name }
+          : it
+      );
       return { ...prev, items };
     });
+
     setProductQueries((p) => ({ ...p, [uid]: prod.product_name }));
     setFilteredProducts((p) => ({ ...p, [uid]: [] }));
     setDropdownOpen((p) => ({ ...p, [uid]: false }));
@@ -242,10 +233,16 @@ export default function DeliveryChallanForm() {
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSelectedIndexMap((p) => ({ ...p, [uid]: (p[uid] ?? -1) < list.length - 1 ? (p[uid] ?? -1) + 1 : 0 }));
+      setSelectedIndexMap((p) => ({
+        ...p,
+        [uid]: (p[uid] ?? -1) < list.length - 1 ? (p[uid] ?? -1) + 1 : 0,
+      }));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setSelectedIndexMap((p) => ({ ...p, [uid]: (p[uid] ?? -1) > 0 ? (p[uid] ?? -1) - 1 : list.length - 1 }));
+      setSelectedIndexMap((p) => ({
+        ...p,
+        [uid]: (p[uid] ?? -1) > 0 ? (p[uid] ?? -1) - 1 : list.length - 1,
+      }));
     } else if (e.key === "Enter") {
       e.preventDefault();
       const idx = selectedIndexMap[uid] ?? -1;
@@ -262,17 +259,15 @@ export default function DeliveryChallanForm() {
   }, [filteredProducts, dropdownOpen, selectedIndexMap, selectProduct]);
 
   /* ===========================
-     Submit handler (unchanged logic)
+     Submit handler – FIXED PAYLOAD
   ============================ */
   const handleGenerate = useCallback(async (e) => {
     e.preventDefault();
     const token = localStorage.getItem("token");
-
     if (!token) {
       toast.error("Please login first.");
       return;
     }
-
     if (!form.challan_no) {
       toast.error("Challan No is required.");
       return;
@@ -281,7 +276,6 @@ export default function DeliveryChallanForm() {
       toast.error("Add at least one item.");
       return;
     }
-
     for (let i = 0; i < form.items.length; ++i) {
       const it = form.items[i];
       if (!it.productId) {
@@ -295,7 +289,6 @@ export default function DeliveryChallanForm() {
     }
 
     setLoading(true);
-
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -314,7 +307,7 @@ export default function DeliveryChallanForm() {
           sno: idx + 1,
           source: it.source || "inventory",
           productId: Number(it.productId),
-          description: it.description && String(it.description).trim() ? it.description : "",
+          productName: it.productName,   // ✅ ADDED – this is what the PDF uses
           qty: Number(it.qty),
           remarks: it.remarks || "",
           returnable: !!it.returnable,
@@ -330,14 +323,12 @@ export default function DeliveryChallanForm() {
       const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
-
       const cd = response.headers["content-disposition"];
       let filename = `DELIVERY_CHALLAN_${(form.challan_no || "challan").replace(/[^a-zA-Z0-9_\-]/g, "_")}.pdf`;
       if (cd) {
         const m = cd.match(/filename="?(.+)"?/);
         if (m && m[1]) filename = m[1];
       }
-
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
@@ -349,7 +340,6 @@ export default function DeliveryChallanForm() {
       setIsOpen(false);
       fetchLists();
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error("Generate challan error:", err);
       toast.error("Failed to generate delivery challan.");
     } finally {
@@ -360,7 +350,6 @@ export default function DeliveryChallanForm() {
 
   /* ===========================
      Memoized ItemRow
-     Accepts only necessary props to avoid extra rerenders
   ============================ */
   const ItemRow = useCallback(
     React.memo(function ItemRowInner({
@@ -381,7 +370,6 @@ export default function DeliveryChallanForm() {
       return (
         <div className="grid grid-cols-12 gap-2 items-start mb-3">
           <div className="col-span-1 text-center pt-2 text-sm">{index + 1}</div>
-
           <div className="col-span-2">
             <label className="text-xs text-gray-600">Source</label>
             <select
@@ -393,7 +381,6 @@ export default function DeliveryChallanForm() {
               <option value="raw">Raw Material</option>
             </select>
           </div>
-
           <div className="col-span-4 relative">
             <label className="text-xs text-gray-600">Product (select)</label>
             <div className="relative">
@@ -403,12 +390,9 @@ export default function DeliveryChallanForm() {
                 onChange={(e) => onQueryChange(uid, e.target.value)}
                 onKeyDown={(e) => onKeyDown(uid, e)}
                 onFocus={() => {
-                  // show preview on focus
                   if (!productQuery) {
                     if (!filtered || filtered.length === 0) {
                       onQueryChange(uid, "");
-                    } else {
-                      // keep current filtered (already set)
                     }
                   }
                 }}
@@ -419,7 +403,6 @@ export default function DeliveryChallanForm() {
                 <Search size={14} />
               </div>
             </div>
-
             {isOpen && filtered && filtered.length > 0 && (
               <ul className="absolute z-40 w-full mt-1 bg-white rounded shadow-lg border max-h-60 overflow-auto">
                 {filtered.map((p, pIndex) => (
@@ -441,7 +424,6 @@ export default function DeliveryChallanForm() {
               </ul>
             )}
           </div>
-
           <div className="col-span-2">
             <label className="text-xs text-gray-600">Qty</label>
             <input
@@ -453,7 +435,6 @@ export default function DeliveryChallanForm() {
               className="w-full border rounded px-2 py-1 text-sm"
             />
           </div>
-
           <div className="col-span-1 flex flex-col items-center">
             <label className="text-xs text-gray-600">Returnable</label>
             <input
@@ -464,7 +445,6 @@ export default function DeliveryChallanForm() {
               aria-label={`Returnable for item ${uid}`}
             />
           </div>
-
           <div className="col-span-2">
             <label className="text-xs text-gray-600">Remarks</label>
             <input
@@ -474,7 +454,6 @@ export default function DeliveryChallanForm() {
               placeholder="Remarks"
             />
           </div>
-
           <div className="col-span-12 text-right mt-1">
             <button type="button" onClick={() => onRemove(uid)} className="text-red-600 text-xs flex items-center gap-1 ml-auto">
               <Trash2 className="w-3 h-3" /> Remove row
@@ -483,12 +462,9 @@ export default function DeliveryChallanForm() {
         </div>
       );
     },
-    // custom comparator: re-render only when relevant props change
     (prev, next) => {
-      // quick checks
       if (prev.it !== next.it) return false;
       if (prev.productQuery !== next.productQuery) return false;
-      // shallow compare filtered arrays length and first/last ids (cheap)
       const a = prev.filtered || [];
       const b = next.filtered || [];
       if (a.length !== b.length) return false;
@@ -501,30 +477,21 @@ export default function DeliveryChallanForm() {
       if (prev.loadingLists !== next.loadingLists) return false;
       return true;
     })
-  , [
-    // dependencies array for useCallback (empty because React.memo handles internal re-renders based on props)
-  ]);
+  , []);
 
-  /* ===========================
-     Render & wiring
-  ============================ */
-  // stable handlers passed down to ItemRow
   const stableOnQueryChange = onProductQueryChange;
   const stableOnKeyDown = onProductKeyDown;
   const stableOnSelect = selectProduct;
   const stableOnUpdateField = updateItemFieldByUid;
   const stableOnRemove = removeItemByUid;
 
-  // memoize items to avoid recreating objects every render
   const itemsForRender = useMemo(() => form.items, [form.items]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-200 to-gray-300 p-6">
       <ToastContainer position="top-right" />
-
       <div className="max-w-5xl mx-auto text-center">
         <h1 className="text-3xl font-bold text-gray-800 mb-6 tracking-tight">Delivery Challan Generator</h1>
-
         <div className="flex justify-center mb-12">
           <button
             onClick={() => {
@@ -546,14 +513,12 @@ export default function DeliveryChallanForm() {
         overlayClassName="fixed inset-0 bg-black bg-opacity-40 flex items-start justify-center z-50 overflow-y-auto"
       >
         <h3 className="text-xl font-semibold mb-2 text-gray-800">Create Delivery Challan</h3>
-
         <div className="text-sm text-gray-600 mb-4">
           <span className="mr-6">
             Challan No.: <strong>{form.challan_no}</strong>
           </span>
           <span>Date: <strong>{formatDDMMYYYY(form.date || DEFAULT_DATE)}</strong></span>
         </div>
-
         <form onSubmit={handleGenerate} className="space-y-4">
           <div className="grid grid-cols-3 gap-4">
             <div>
@@ -569,7 +534,6 @@ export default function DeliveryChallanForm() {
               <input value={form.order_no} onChange={(e) => setForm((p) => ({ ...p, order_no: e.target.value }))} className="w-full border rounded px-3 py-2 mt-1" />
             </div>
           </div>
-
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm text-gray-600">Order Date</label>
@@ -584,7 +548,6 @@ export default function DeliveryChallanForm() {
               <input value={form.to_gst_number} onChange={(e) => setForm((p) => ({ ...p, to_gst_number: e.target.value }))} className="w-full border rounded px-3 py-2 mt-1" />
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-600">To (Name) / M/s.</label>
@@ -592,13 +555,11 @@ export default function DeliveryChallanForm() {
             </div>
             <div />
           </div>
-
           <div>
             <label className="block text-sm text-gray-600">To (Address)</label>
             <textarea rows={3} value={form.to_address} onChange={(e) => setForm((p) => ({ ...p, to_address: e.target.value }))} className="w-full border rounded px-3 py-2 mt-1" />
           </div>
 
-          {/* Items */}
           <div className="bg-gray-50 border rounded-lg p-3">
             <div className="flex justify-between items-center mb-2">
               <div className="font-semibold text-gray-800">Items</div>
@@ -621,7 +582,6 @@ export default function DeliveryChallanForm() {
                 </button>
               </div>
             </div>
-
             <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-gray-600 mb-1">
               <div className="col-span-1 text-center">No.</div>
               <div className="col-span-2">Source</div>
@@ -630,7 +590,6 @@ export default function DeliveryChallanForm() {
               <div className="col-span-1 text-center">Ret?</div>
               <div className="col-span-2">Remarks</div>
             </div>
-
             {itemsForRender.map((it, idx) => (
               <div key={it._uid}>
                 <ItemRow
@@ -652,12 +611,10 @@ export default function DeliveryChallanForm() {
             ))}
           </div>
 
-          {/* Buttons */}
           <div className="flex justify-end gap-3 mt-4">
             <button type="button" onClick={() => setIsOpen(false)} className="px-4 py-2 border rounded-lg text-gray-700">
               Cancel
             </button>
-
             <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow flex items-center">
               <Download className="w-4 h-4 mr-2" />
               {loading ? "Generating..." : "Generate PDF"}
