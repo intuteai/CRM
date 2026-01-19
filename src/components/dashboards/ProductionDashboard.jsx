@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React from "react";
+import { Link } from "react-router-dom";
 import {
   Truck,
   Package,
@@ -7,7 +7,8 @@ import {
   CheckSquare,
   BarChart,
   MessageSquare,
-} from 'lucide-react';
+  Wrench
+} from "lucide-react";
 
 function ProductionDashboard() {
   return (
@@ -32,7 +33,7 @@ function ProductionDashboard() {
             desc="Manage production queries"
           />
           <DashboardCard
-            to="/production-stock"
+            to="/stock"
             icon={<Package />}
             title="Raw Materials"
             desc="Monitor raw material levels"
@@ -67,6 +68,12 @@ function ProductionDashboard() {
             title="Bill of Materials (Unpriced)"
             desc="View unpriced BOMs"
           />
+          <DashboardCard
+            to="/work-orders"
+            icon={<Wrench />}
+            title="Work Orders"
+            desc="Manage work orders for production"
+          />
         </Section>
       </div>
     </div>
@@ -81,7 +88,7 @@ function DashboardCard({ to, icon, title, desc }) {
       aria-label={`Navigate to ${title}`}
     >
       <div className="flex items-center justify-center mb-3">
-        {React.cloneElement(icon, { className: 'w-9 h-9 text-gray-700' })}
+        {React.cloneElement(icon, { className: "w-9 h-9 text-gray-700" })}
       </div>
       <h2 className="text-xl font-semibold text-gray-800 text-center">
         {title}
