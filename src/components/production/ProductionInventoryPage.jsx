@@ -12,6 +12,7 @@ import {
   XCircle,
   Eye,
   Download,
+  Upload,
 } from 'lucide-react';
 import { debounce } from 'lodash';
 import { io } from 'socket.io-client';
@@ -23,6 +24,7 @@ import QRCode from 'qrcode';
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 
+/* ========= useFetchInventory Hook ========= */
 const useFetchInventory = ({ limit, offset }) => {
   const [inventory, setInventory] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -45,7 +47,7 @@ const useFetchInventory = ({ limit, offset }) => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `Inventory fetch failed: ${response.statusText}`);
       }
 
@@ -55,7 +57,7 @@ const useFetchInventory = ({ limit, offset }) => {
         const normalizedData = data.map(item => ({
           ...item,
           price: item.price !== null ? Number(item.price) : 0,
-          stock_quantity: item.stock_quantity || 0,
+          stock_quantity: item.stock_quantity ?? 0,
           description: item.description || '',
           product_code: item.product_code,
         }));
@@ -77,6 +79,7 @@ const useFetchInventory = ({ limit, offset }) => {
   return { inventory, totalItems, isLoading, error, refetchData: fetchData };
 };
 
+/* ========= ProductionInventoryPage Component ========= */
 function ProductionInventoryPage() {
   const [page, setPage] = useState(0);
   const [itemsPerPage] = useState(10);
@@ -95,10 +98,140 @@ function ProductionInventoryPage() {
   const [selectedProductDescription, setSelectedProductDescription] = useState('');
 
   const tableRef = useRef(null);
+  const fileInputRef = useRef(null);
 
-  // Fetch ALL items at once (limit 5000) for client-side search
   const { inventory: allInventory, totalItems, isLoading, error, refetchData } =
     useFetchInventory({ limit: 5000, offset: 0 });
+
+  // ────────────────────────────────────────────────────────────────
+  //                        EXCEL IMPORT FEATURE
+  // ────────────────────────────────────────────────────────────────
+
+  const validateImportRow = useCallback((row, index) => {
+    const errors = [];
+    if (!row['Product Name'] || !String(row['Product Name']).trim()) {
+      errors.push(`Row ${index + 1}: Product Name is required`);
+    }
+    if (!row['Product Code'] || String(row['Product Code']).trim().length !== 10) {
+      errors.push(`Row ${index + 1}: Product Code must be exactly 10 characters`);
+    }
+    const stock = row['Stock Quantity'];
+    if (stock === undefined || isNaN(parseInt(stock)) || !Number.isInteger(Number(stock))) {
+      errors.push(`Row ${index + 1}: Stock Quantity must be an integer`);
+    }
+    const price = parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, ''));
+    if (isNaN(price) || price < 0) {
+      errors.push(`Row ${index + 1}: Price must be a non-negative number`);
+    }
+    return errors;
+  }, []);
+
+  const importFromExcel = useCallback(async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        if (!jsonData.length) {
+          toast.error('Excel file is empty', { autoClose: 3000 });
+          return;
+        }
+
+        const errors = [];
+        const validRows = [];
+
+        jsonData.forEach((row, index) => {
+          const rowErrors = validateImportRow(row, index);
+          if (rowErrors.length > 0) {
+            errors.push(...rowErrors);
+          } else {
+            validRows.push({
+              product_name: String(row['Product Name'] || '').trim(),
+              product_code: String(row['Product Code'] || '').trim(),
+              stock_quantity: parseInt(row['Stock Quantity'] || 0),
+              price: parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, '')),
+              description: String(row['Description'] || '').trim() || undefined,
+              product_id: row['Product ID'] ? parseInt(row['Product ID']) : undefined,
+            });
+          }
+        });
+
+        if (errors.length > 0) {
+          errors.forEach(err => toast.error(err, { autoClose: 5000 }));
+        }
+
+        if (!validRows.length) {
+          toast.error('No valid rows found. Please fix the errors shown above.', { autoClose: 5000 });
+          return;
+        }
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+          toast.error('Authentication token missing. Please log in.', { autoClose: 5000 });
+          return;
+        }
+
+        let created = 0;
+        let updated = 0;
+        let failed = 0;
+
+        for (const row of validRows) {
+          try {
+            const { product_id, ...body } = row;
+            const url = product_id
+              ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory/${product_id}`
+              : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory`;
+            const method = product_id ? 'PUT' : 'POST';
+
+            const res = await fetch(url, {
+              method,
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify(body),
+              credentials: 'include',
+            });
+
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({}));
+              throw new Error(errorData.error || 'Operation failed');
+            }
+
+            product_id ? updated++ : created++;
+          } catch (err) {
+            failed++;
+            toast.error(`Row processing failed: ${err.message}`, { autoClose: 4000 });
+          }
+        }
+
+        if (created > 0 || updated > 0) {
+          await refetchData();
+          setPage(0);
+          toast.success(
+            `Import successful: ${created} new, ${updated} updated${failed ? ` (${failed} failed)` : ''}`,
+            { autoClose: 5000 }
+          );
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+      event.target.value = '';
+    } catch (err) {
+      toast.error(`Import process failed: ${err.message}`, { autoClose: 4000 });
+    }
+  }, [validateImportRow, refetchData]);
+
+  // ────────────────────────────────────────────────────────────────
+  //                     QR Code Generation
+  // ────────────────────────────────────────────────────────────────
 
   const generateQRCode = useCallback(async (productCode, productName, description, elementId) => {
     try {
@@ -134,7 +267,7 @@ function ProductionInventoryPage() {
 
     socket.on('stockUpdate', () => {
       refetchData();
-      toast.info('Inventory updated in real-time', { autoClose: 2000 });
+      toast.info('Inventory updated in real-time', { autoClose: 1200 });
       if (tableRef.current) tableRef.current.focus();
     });
 
@@ -152,12 +285,15 @@ function ProductionInventoryPage() {
     }
   }, [showBarcodeModal, selectedBarcode, selectedProductName, selectedProductDescription, generateQRCode]);
 
+  // ────────────────────────────────────────────────────────────────
+  //                     Search & Filtering
+  // ────────────────────────────────────────────────────────────────
+
   const debouncedSearch = useCallback(
     debounce((value) => setSearchTerm(value), 300),
     []
   );
 
-  // Reset page to 0 on search/filter change
   useEffect(() => {
     setPage(0);
   }, [searchTerm, filterStock]);
@@ -168,7 +304,10 @@ function ProductionInventoryPage() {
     debouncedSearch(value);
   };
 
-  // SORT full inventory
+  // ────────────────────────────────────────────────────────────────
+  //                     Sorting
+  // ────────────────────────────────────────────────────────────────
+
   const sortedInventory = useMemo(() => {
     const sortableInventory = [...allInventory];
     if (sortConfig.key) {
@@ -192,13 +331,16 @@ function ProductionInventoryPage() {
     return sortableInventory;
   }, [allInventory, sortConfig]);
 
-  // FILTER sorted inventory according to search and stock filter
+  // ────────────────────────────────────────────────────────────────
+  //                     Filtering
+  // ────────────────────────────────────────────────────────────────
+
   const filteredInventory = useMemo(() => {
     return sortedInventory.filter((item) => {
       const matchesSearch =
         item.product_id.toString().includes(searchTerm) ||
         item.product_name.toLowerCase().includes(searchTerm) ||
-        item.product_code.toLowerCase().includes(searchTerm);
+        (item.product_code || '').toLowerCase().includes(searchTerm);
 
       const matchesStock =
         filterStock === 'All' ||
@@ -209,11 +351,18 @@ function ProductionInventoryPage() {
     });
   }, [sortedInventory, searchTerm, filterStock]);
 
-  // PAGINATE filtered inventory client-side
+  // ────────────────────────────────────────────────────────────────
+  //                     Pagination
+  // ────────────────────────────────────────────────────────────────
+
   const paginatedInventory = useMemo(() => {
     const start = page * itemsPerPage;
     return filteredInventory.slice(start, start + itemsPerPage);
   }, [filteredInventory, page, itemsPerPage]);
+
+  // ────────────────────────────────────────────────────────────────
+  //                     Export to Excel
+  // ────────────────────────────────────────────────────────────────
 
   const exportToExcel = useCallback(() => {
     const data = filteredInventory.map((item) => ({
@@ -247,6 +396,10 @@ function ProductionInventoryPage() {
     XLSX.writeFile(workbook, 'Finished_Goods_Inventory.xlsx');
     toast.success('Finished Goods exported to Excel!', { autoClose: 2000 });
   }, [filteredInventory]);
+
+  // ────────────────────────────────────────────────────────────────
+  //                     CRUD Operations
+  // ────────────────────────────────────────────────────────────────
 
   const handleCreateItem = useCallback(
     async ({ product_name, stock_quantity, price, description, product_code }) => {
@@ -390,7 +543,6 @@ function ProductionInventoryPage() {
               <Edit2 size={16} className="mr-2" />
               Edit
             </button>
-            {/* Delete button intentionally removed for Production view */}
           </div>
         )}
       </div>
@@ -403,6 +555,10 @@ function ProductionInventoryPage() {
       direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc',
     }));
   }, []);
+
+  // ────────────────────────────────────────────────────────────────
+  //                        RENDERING LOGIC
+  // ────────────────────────────────────────────────────────────────
 
   if (isLoading && !allInventory.length)
     return (
@@ -461,8 +617,8 @@ function ProductionInventoryPage() {
               className="p-4 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md"
             >
               <option value="All">All Stock</option>
-              <option value="In Stock">In Stock</option>
-              <option value="Out of Stock">Out of Stock</option>
+              <option value="In Stock">In Stock (&gt;0)</option>
+              <option value="Out of Stock">Out of Stock (=0)</option>
             </select>
           </div>
 
@@ -484,6 +640,23 @@ function ProductionInventoryPage() {
             <PlusCircle className="mr-2" />
             Add Item
           </button>
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 flex items-center shadow-md"
+            disabled={isLoading}
+          >
+            <Upload className="mr-2" />
+            Import from Excel
+          </button>
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={importFromExcel}
+            accept=".xlsx,.xls"
+            className="hidden"
+          />
 
           <button
             onClick={exportToExcel}
@@ -561,7 +734,7 @@ function ProductionInventoryPage() {
                   role="row"
                 >
                   <td className="py-4 px-3">{item.product_id}</td>
-                  <td className="py-4 px-3">{item.product_code}</td>
+                  <td className="py-4 px-3">{item.product_code || '-'}</td>
                   <td className="py-4 px-3">
                     {item.product_name.replace(/<[^>]*>/g, '')}
                   </td>
@@ -582,7 +755,7 @@ function ProductionInventoryPage() {
                   <td className="py-4 px-3">
                     <span
                       className={`px-3 py-1 rounded-full text-white text-sm ${
-                        item.stock_quantity > 0 ? 'bg-green-600' : 'bg-red-600'
+                        item.stock_quantity > 0 ? 'bg-green-600' : item.stock_quantity === 0 ? 'bg-gray-500' : 'bg-red-600'
                       }`}
                     >
                       {item.stock_quantity}
@@ -816,7 +989,7 @@ function ProductionInventoryPage() {
   );
 }
 
-// CreateItemForm Component
+/* ========= CreateItemForm ========= */
 const CreateItemForm = ({ onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: '',
@@ -836,7 +1009,6 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Part search state
   const [partSearch, setPartSearch] = useState('');
   const [allParts, setAllParts] = useState([]);
   const [filteredParts, setFilteredParts] = useState([]);
@@ -847,11 +1019,8 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   const partDropdownRef = useRef(null);
 
   const validateField = (name, value) => {
-    if (name === 'product_name' && !value.trim())
-      return 'Product name is required';
-    if (name === 'product_code' && value.length !== 10)
-      return 'Product code must be exactly 10 characters';
-    // negative allowed for stock_quantity / price at this layer
+    if (name === 'product_name' && !value.trim()) return 'Product name is required';
+    if (name === 'product_code' && value.length !== 10) return 'Product code must be exactly 10 characters';
     return '';
   };
 
@@ -859,14 +1028,13 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     const { name, value } = e.target;
 
     if (name === 'stock_quantity' || name === 'price') {
-      // free text (so "-" works), validation later
-      setFormData((prev) => ({ ...prev, [name]: value }));
-      setErrors((prev) => ({ ...prev, [name]: '' }));
+      setFormData(prev => ({ ...prev, [name]: value }));
+      setErrors(prev => ({ ...prev, [name]: '' }));
       return;
     }
 
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }));
+    setFormData(prev => ({ ...prev, [name]: value }));
+    setErrors(prev => ({ ...prev, [name]: validateField(name, value) }));
   };
 
   const loadParts = useCallback(async () => {
@@ -906,11 +1074,10 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     } else {
       setFilteredParts(
         allParts
-          .filter(
-            (p) =>
-              (p.partCode || '').toLowerCase().includes(term) ||
-              (p.name || '').toLowerCase().includes(term) ||
-              (p.drawingNo || '').toLowerCase().includes(term)
+          .filter(p =>
+            (p.partCode || '').toLowerCase().includes(term) ||
+            (p.name || '').toLowerCase().includes(term) ||
+            (p.drawingNo || '').toLowerCase().includes(term)
           )
           .slice(0, 20)
       );
@@ -940,13 +1107,13 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   };
 
   const handlePartSelect = (part) => {
-    setFormData((prev) => ({
+    setFormData(prev => ({
       ...prev,
       product_name: part.name || '',
       product_code: part.partCode || '',
       description: part.description || '',
     }));
-    setErrors((prev) => ({
+    setErrors(prev => ({
       ...prev,
       product_name: '',
       product_code: '',
@@ -958,14 +1125,10 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
 
   const handleSave = async () => {
     const parsedQuantity =
-      formData.stock_quantity === '' || formData.stock_quantity === '-'
-        ? 0
-        : parseInt(formData.stock_quantity, 10);
+      formData.stock_quantity === '' || formData.stock_quantity === '-' ? 0 : parseInt(formData.stock_quantity, 10);
 
     const parsedPrice =
-      formData.price === '' || formData.price === '-'
-        ? 0
-        : parseFloat(formData.price);
+      formData.price === '' || formData.price === '-' ? 0 : parseFloat(formData.price);
 
     const fieldErrors = {
       product_name: validateField('product_name', formData.product_name),
@@ -976,7 +1139,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     };
     setErrors(fieldErrors);
 
-    if (Object.values(fieldErrors).some((err) => err)) return;
+    if (Object.values(fieldErrors).some(err => err)) return;
 
     try {
       setIsSubmitting(true);
@@ -991,7 +1154,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   };
 
   return (
-    <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+    <form className="space-y-4" onSubmit={e => e.preventDefault()}>
       <div>
         <label className="text-gray-700 font-medium">Search Part (optional)</label>
         <div className="relative" ref={partDropdownRef}>
@@ -1009,10 +1172,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
             className="w-full p-2 pl-8 border rounded-lg focus:ring-2 focus:ring-amber-300"
             disabled={isSubmitting}
           />
-          <Search
-            className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400"
-            size={16}
-          />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
 
           {showPartDropdown && (
             <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white border rounded-lg shadow-lg">
@@ -1023,7 +1183,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
                 <div className="px-3 py-2 text-sm text-gray-500">No parts found.</div>
               )}
               {!isPartLoading &&
-                filteredParts.map((part) => (
+                filteredParts.map(part => (
                   <button
                     key={part.id}
                     type="button"
@@ -1059,14 +1219,9 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_name}
-          aria-describedby={errors.product_name ? 'create-product-name-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.product_name && (
-          <p id="create-product-name-error" className="text-red-600 text-sm mt-1">
-            {errors.product_name}
-          </p>
-        )}
+        {errors.product_name && <p className="text-red-600 text-sm mt-1">{errors.product_name}</p>}
       </div>
 
       <div>
@@ -1082,14 +1237,9 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           maxLength={10}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_code}
-          aria-describedby={errors.product_code ? 'create-product-code-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.product_code && (
-          <p id="create-product-code-error" className="text-red-600 text-sm mt-1">
-            {errors.product_code}
-          </p>
-        )}
+        {errors.product_code && <p className="text-red-600 text-sm mt-1">{errors.product_code}</p>}
       </div>
 
       <div>
@@ -1118,16 +1268,9 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.stock_quantity}
-          aria-describedby={
-            errors.stock_quantity ? 'create-stock-quantity-error' : undefined
-          }
           disabled={isSubmitting}
         />
-        {errors.stock_quantity && (
-          <p id="create-stock-quantity-error" className="text-red-600 text-sm mt-1">
-            {errors.stock_quantity}
-          </p>
-        )}
+        {errors.stock_quantity && <p className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
       </div>
 
       <div>
@@ -1143,14 +1286,9 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           step="0.01"
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.price}
-          aria-describedby={errors.price ? 'create-price-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.price && (
-          <p id="create-price-error" className="text-red-600 text-sm mt-1">
-            {errors.price}
-          </p>
-        )}
+        {errors.price && <p className="text-red-600 text-sm mt-1">{errors.price}</p>}
       </div>
 
       <div className="flex justify-end space-x-4">
@@ -1175,6 +1313,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   );
 };
 
+/* ========= EditItemForm ========= */
 const EditItemForm = ({ item, onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: item.product_name,
@@ -1195,10 +1334,8 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validateField = (name, value) => {
-    if (name === 'product_name' && !value.trim())
-      return 'Product name is required';
-    if (name === 'product_code' && value.length !== 10)
-      return 'Product code must be exactly 10 characters';
+    if (name === 'product_name' && !value.trim()) return 'Product name is required';
+    if (name === 'product_code' && value.length !== 10) return 'Product code must be exactly 10 characters';
     return '';
   };
 
@@ -1206,25 +1343,21 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     const { name, value } = e.target;
 
     if (name === 'stock_quantity' || name === 'price') {
-      setFormData((prev) => ({ ...prev, [name]: value }));
-      setErrors((prev) => ({ ...prev, [name]: '' }));
+      setFormData(prev => ({ ...prev, [name]: value }));
+      setErrors(prev => ({ ...prev, [name]: '' }));
       return;
     }
 
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }));
+    setFormData(prev => ({ ...prev, [name]: value }));
+    setErrors(prev => ({ ...prev, [name]: validateField(name, value) }));
   };
 
   const handleSave = async () => {
     const parsedQuantity =
-      formData.stock_quantity === '' || formData.stock_quantity === '-'
-        ? 0
-        : parseInt(formData.stock_quantity, 10);
+      formData.stock_quantity === '' || formData.stock_quantity === '-' ? 0 : parseInt(formData.stock_quantity, 10);
 
     const parsedPrice =
-      formData.price === '' || formData.price === '-'
-        ? 0
-        : parseFloat(formData.price);
+      formData.price === '' || formData.price === '-' ? 0 : parseFloat(formData.price);
 
     const fieldErrors = {
       product_name: validateField('product_name', formData.product_name),
@@ -1235,7 +1368,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     };
     setErrors(fieldErrors);
 
-    if (Object.values(fieldErrors).some((err) => err)) return;
+    if (Object.values(fieldErrors).some(err => err)) return;
 
     try {
       setIsSubmitting(true);
@@ -1250,7 +1383,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   };
 
   return (
-    <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+    <form className="space-y-4" onSubmit={e => e.preventDefault()}>
       <div>
         <label htmlFor="edit-product-name" className="text-gray-700 font-medium">
           Product Name
@@ -1263,14 +1396,9 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_name}
-          aria-describedby={errors.product_name ? 'edit-product-name-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.product_name && (
-          <p id="edit-product-name-error" className="text-red-600 text-sm mt-1">
-            {errors.product_name}
-          </p>
-        )}
+        {errors.product_name && <p className="text-red-600 text-sm mt-1">{errors.product_name}</p>}
       </div>
 
       <div>
@@ -1286,14 +1414,9 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           maxLength={10}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_code}
-          aria-describedby={errors.product_code ? 'edit-product-code-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.product_code && (
-          <p id="edit-product-code-error" className="text-red-600 text-sm mt-1">
-            {errors.product_code}
-          </p>
-        )}
+        {errors.product_code && <p className="text-red-600 text-sm mt-1">{errors.product_code}</p>}
       </div>
 
       <div>
@@ -1322,16 +1445,9 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.stock_quantity}
-          aria-describedby={
-            errors.stock_quantity ? 'edit-stock-quantity-error' : undefined
-          }
           disabled={isSubmitting}
         />
-        {errors.stock_quantity && (
-          <p id="edit-stock-quantity-error" className="text-red-600 text-sm mt-1">
-            {errors.stock_quantity}
-          </p>
-        )}
+        {errors.stock_quantity && <p className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
       </div>
 
       <div>
@@ -1347,14 +1463,9 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           step="0.01"
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.price}
-          aria-describedby={errors.price ? 'edit-price-error' : undefined}
           disabled={isSubmitting}
         />
-        {errors.price && (
-          <p id="edit-price-error" className="text-red-600 text-sm mt-1">
-            {errors.price}
-          </p>
-        )}
+        {errors.price && <p className="text-red-600 text-sm mt-1">{errors.price}</p>}
       </div>
 
       <div className="flex justify-end space-x-4">

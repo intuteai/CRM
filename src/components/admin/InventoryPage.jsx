@@ -13,7 +13,7 @@ import QRCode from 'qrcode';
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 
-/* ========= useFetchInventory (reads returnable_qty) ========= */
+/* ========= useFetchInventory ========= */
 const useFetchInventory = ({ limit, offset }) => {
   const [inventory, setInventory] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -43,7 +43,7 @@ const useFetchInventory = ({ limit, offset }) => {
           ...item,
           price: item.price !== null ? Number(item.price) : 0,
           stock_quantity: item.stock_quantity ?? 0,
-          returnable_qty: item.returnable_qty ?? 0, // <-- new
+          returnable_qty: item.returnable_qty ?? 0,
           description: item.description || '',
           product_code: item.product_code,
         }));
@@ -64,7 +64,7 @@ const useFetchInventory = ({ limit, offset }) => {
   return { inventory, totalItems, isLoading, error, refetchData: fetchData };
 };
 
-/* ========= Accept Return API helper (no notes) ========= */
+/* ========= Accept Return API helper ========= */
 const acceptReturnApi = async (productId, qty) => {
   const token = localStorage.getItem('token');
   if (!token) throw new Error('Authentication token missing.');
@@ -85,7 +85,7 @@ const acceptReturnApi = async (productId, qty) => {
   return await res.json();
 };
 
-/* ========= InventoryPage ========= */
+/* ========= InventoryPage Component ========= */
 function InventoryPage({ userRole }) {
   const [page, setPage] = useState(0);
   const [itemsPerPage] = useState(10);
@@ -200,7 +200,68 @@ function InventoryPage({ userRole }) {
     return filteredInventory.slice(start, start + itemsPerPage);
   }, [filteredInventory, page, itemsPerPage]);
 
-  /* ========= Import/Export validation includes returnable_qty ========= */
+  // ── IMPROVED EXPORT FUNCTION ──
+  const exportToExcel = useCallback(() => {
+    if (filteredInventory.length === 0) {
+      toast.warning('No data to export', { autoClose: 2500 });
+      return;
+    }
+
+    const data = filteredInventory.map(item => ({
+      'Product ID': item.product_id,
+      'Product Code': item.product_code || 'N/A',
+      'Product Name': (item.product_name || '').replace(/<[^>]*>/g, '').trim() || 'N/A',
+      'Description': (item.description || 'N/A').replace(/<[^>]*>/g, '').trim(),
+      'Stock Quantity': Number(item.stock_quantity ?? 0),
+      'Returnable Qty': Number(item.returnable_qty ?? 0),
+      'Price (₹)': formatCurrency(Number(item.price ?? 0)),
+      'Created At': item.created_at
+        ? new Date(item.created_at).toLocaleString('en-IN', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          })
+        : 'N/A',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+
+    // Auto-calculate column widths with reasonable limits
+    const colWidths = [];
+    const headers = Object.keys(data[0] || {});
+    headers.forEach((header, i) => {
+      let maxWidth = header.length;
+      data.forEach(row => {
+        const val = String(row[header] ?? '');
+        maxWidth = Math.max(maxWidth, val.length);
+      });
+      colWidths[i] = { wch: Math.min(Math.max(maxWidth + 3, 12), 60) };
+    });
+    worksheet['!cols'] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+
+    // Fixed: Safe sheet name (no / : \ ? * [ ] allowed)
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Finished Goods');
+
+    // Modern filename with date
+    const today = new Date().toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).replace(/ /g, '_');
+
+    const filename = `FG_Inventory_${today}.xlsx`;
+
+    XLSX.writeFile(workbook, filename);
+    toast.success(`Exported ${filteredInventory.length} items successfully`, {
+      autoClose: 2200,
+    });
+  }, [filteredInventory]);
+
+  // ────────────────────────────────────────────────────────────────
+  // Rest of your code remains unchanged
+  // ────────────────────────────────────────────────────────────────
+
   const validateImportRow = useCallback((row, index) => {
     const errors = [];
     if (!row['Product Name'] || !String(row['Product Name']).trim()) {
@@ -336,39 +397,6 @@ function InventoryPage({ userRole }) {
     }
   }, [validateImportRow, refetchData]);
 
-  /* ========= Export includes returnable_qty ========= */
-  const exportToExcel = useCallback(() => {
-    const data = filteredInventory.map(item => ({
-      'Product ID': item.product_id,
-      'Product Code': item.product_code || 'N/A',
-      'Product Name': item.product_name.replace(/<[^>]*>/g, '') || 'N/A',
-      'Description': item.description || 'N/A',
-      'Stock Quantity': Number(item.stock_quantity),
-      'Returnable Qty': Number(item.returnable_qty ?? 0),
-      'Price (₹)': formatCurrency(Number(item.price)),
-      'Created At (IST)': item.created_at
-        ? `${new Date(item.created_at).toLocaleDateString('en-IN')} ${new Date(item.created_at).toLocaleTimeString('en-IN')}`
-        : 'N/A',
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Products/Finished Goods');
-
-    const colWidths = data.reduce((acc, row) => {
-      Object.keys(row).forEach((key, idx) => {
-        const value = String(row[key]).replace(/<[^>]*>/g, '');
-        acc[idx] = Math.max(acc[idx] || 10, value.length + 2);
-      });
-      return acc;
-    }, []);
-    worksheet['!cols'] = colWidths.map(width => ({ wch: width }));
-
-    XLSX.writeFile(workbook, 'Products_Finished_Goods_Inventory.xlsx');
-    toast.success('Products/Finished Goods exported to Excel!', { autoClose: 2000 });
-  }, [filteredInventory]);
-
-  /* ========= Create / Update handlers now send returnable_qty ========= */
   const handleCreateItem = useCallback(async ({ product_name, stock_quantity, price, description, product_code, returnable_qty = 0 }) => {
     const token = localStorage.getItem('token');
     try {
@@ -465,7 +493,6 @@ function InventoryPage({ userRole }) {
     setShowBarcodeModal(true);
   }, []);
 
-  /* ========= ActionsDropdown includes Accept Return (modal) ========= */
   const ActionsDropdown = ({ item, onEdit }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
@@ -563,7 +590,6 @@ function InventoryPage({ userRole }) {
     </div>
   );
 
-  /* ========= Render ========= */
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Products/Finished Goods Stocks</h1>
@@ -652,7 +678,7 @@ function InventoryPage({ userRole }) {
                   { key: 'product_name', label: 'Product Name' },
                   { key: 'description', label: 'Description' },
                   { key: 'stock_quantity', label: 'Stock Quantity' },
-                  { key: 'returnable_qty', label: 'Returnable Qty' }, // <-- new column
+                  { key: 'returnable_qty', label: 'Returnable Qty' },
                   { key: 'price', label: 'Price' },
                   { key: 'created_at', label: 'Created At (IST)' },
                   { key: 'qrcode', label: 'QR Code' },
@@ -716,8 +742,6 @@ function InventoryPage({ userRole }) {
                       {item.stock_quantity}
                     </span>
                   </td>
-
-                  {/* Returnable Qty cell */}
                   <td className="py-4 px-3">
                     <span
                       className={`px-3 py-1 rounded-full text-white text-sm ${
@@ -727,7 +751,6 @@ function InventoryPage({ userRole }) {
                       {item.returnable_qty}
                     </span>
                   </td>
-
                   <td className="py-4 px-3">{formatCurrency(item.price)}</td>
                   <td className="py-4 px-3">
                     <div className="flex flex-col">
@@ -907,12 +930,12 @@ function InventoryPage({ userRole }) {
   );
 }
 
-/* ========= CreateItemForm (includes returnable_qty) ========= */
+/* ========= CreateItemForm ========= */
 const CreateItemForm = ({ onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: '',
     stock_quantity: '0',
-    returnable_qty: '0', // <-- new
+    returnable_qty: '0',
     price: 0,
     description: '',
     product_code: '',
@@ -951,7 +974,6 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
 
     let processedValue;
     if (name === 'stock_quantity' || name === 'returnable_qty') {
-      // Keep raw string so "-" and "" are allowed while typing
       processedValue = value;
     } else if (name === 'price') {
       processedValue = parseFloat(value) || 0;
@@ -965,7 +987,6 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     }
   };
 
-  // ... loading parts logic identical to earlier (kept unchanged) ...
   const loadParts = useCallback(async () => {
     if (partsLoaded || isPartLoading) return;
     try {
@@ -1062,7 +1083,6 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
       description: '',
     };
 
-    // validate stock_quantity as integer (can be negative)
     const sq = formData.stock_quantity.trim();
     if (sq === '') {
       fieldErrors.stock_quantity = 'Stock quantity is required';
@@ -1255,12 +1275,12 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   );
 };
 
-/* ========= EditItemForm (includes returnable_qty) ========= */
+/* ========= EditItemForm ========= */
 const EditItemForm = ({ item, onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: item.product_name,
     stock_quantity: String(item.stock_quantity ?? 0),
-    returnable_qty: String(item.returnable_qty ?? 0), // <-- new
+    returnable_qty: String(item.returnable_qty ?? 0),
     price: item.price,
     description: item.description || '',
     product_code: item.product_code,
@@ -1290,7 +1310,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
 
     let processedValue;
     if (name === 'stock_quantity' || name === 'returnable_qty') {
-      processedValue = value; // keep string
+      processedValue = value;
     } else if (name === 'price') {
       processedValue = parseFloat(value) || 0;
     } else {
@@ -1458,7 +1478,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   );
 };
 
-/* ========= AcceptReturnModal component (NOTES REMOVED) ========= */
+/* ========= AcceptReturnModal ========= */
 const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
   const [qty, setQty] = useState(product.returnable_qty ?? 0);
   const [isSubmitting, setIsSubmitting] = useState(false);
