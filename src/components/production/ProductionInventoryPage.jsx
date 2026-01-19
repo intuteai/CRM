@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-  ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
-  Edit2, MoreVertical, Package, XCircle, Eye, Download, Upload
+  ArrowDownUp,
+  Filter,
+  PlusCircle,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Edit2,
+  MoreVertical,
+  Package,
+  XCircle,
+  Eye,
+  Download,
 } from 'lucide-react';
 import { debounce } from 'lodash';
 import { io } from 'socket.io-client';
@@ -25,16 +35,20 @@ const useFetchInventory = ({ limit, offset }) => {
       setIsLoading(true);
       const token = localStorage.getItem('token');
       if (!token) throw new Error("Authentication token missing. Please log in again.");
+
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       const url = `${backendUrl}/api/inventory?limit=${limit}&offset=${offset}&force_refresh=true`;
+
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
         credentials: 'include',
       });
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || `Inventory fetch failed: ${response.statusText}`);
       }
+
       const { data, total } = await response.json();
 
       if (isMounted) {
@@ -45,6 +59,7 @@ const useFetchInventory = ({ limit, offset }) => {
           description: item.description || '',
           product_code: item.product_code,
         }));
+
         setInventory(normalizedData);
         setTotalItems(total || 0);
         setError(null);
@@ -78,8 +93,8 @@ function ProductionInventoryPage() {
   const [selectedBarcode, setSelectedBarcode] = useState('');
   const [selectedProductName, setSelectedProductName] = useState('');
   const [selectedProductDescription, setSelectedProductDescription] = useState('');
+
   const tableRef = useRef(null);
-  const fileInputRef = useRef(null);
 
   // Fetch ALL items at once (limit 5000) for client-side search
   const { inventory: allInventory, totalItems, isLoading, error, refetchData } =
@@ -92,6 +107,7 @@ function ProductionInventoryPage() {
         product_name: productName,
         description: description || 'No description available',
       });
+
       await QRCode.toCanvas(document.getElementById(elementId), data, {
         width: 200,
         margin: 2,
@@ -109,16 +125,19 @@ function ProductionInventoryPage() {
       withCredentials: true,
       transports: ['websocket'],
     });
+
     socket.on('connect', () => console.log('Connected to Socket.IO'));
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
       toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
+
     socket.on('stockUpdate', () => {
       refetchData();
       toast.info('Inventory updated in real-time', { autoClose: 2000 });
       if (tableRef.current) tableRef.current.focus();
     });
+
     return () => socket.disconnect();
   }, [refetchData]);
 
@@ -156,6 +175,7 @@ function ProductionInventoryPage() {
       sortableInventory.sort((a, b) => {
         let aValue = a[sortConfig.key],
           bValue = b[sortConfig.key];
+
         if (sortConfig.key === 'price' || sortConfig.key === 'stock_quantity') {
           aValue = Number(aValue);
           bValue = Number(bValue);
@@ -163,6 +183,7 @@ function ProductionInventoryPage() {
           aValue = new Date(aValue || 0);
           bValue = new Date(bValue || 0);
         }
+
         if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
@@ -178,10 +199,12 @@ function ProductionInventoryPage() {
         item.product_id.toString().includes(searchTerm) ||
         item.product_name.toLowerCase().includes(searchTerm) ||
         item.product_code.toLowerCase().includes(searchTerm);
+
       const matchesStock =
         filterStock === 'All' ||
         (filterStock === 'In Stock' && item.stock_quantity > 0) ||
         (filterStock === 'Out of Stock' && item.stock_quantity === 0);
+
       return matchesSearch && matchesStock;
     });
   }, [sortedInventory, searchTerm, filterStock]);
@@ -191,164 +214,6 @@ function ProductionInventoryPage() {
     const start = page * itemsPerPage;
     return filteredInventory.slice(start, start + itemsPerPage);
   }, [filteredInventory, page, itemsPerPage]);
-
-  // Validation helper for import
-  const validateImportRow = useCallback((row, index) => {
-    const errors = [];
-    if (!row['Product Name'] || !String(row['Product Name']).trim()) {
-      errors.push(`Row ${index + 1}: Product Name is required`);
-    }
-    if (!row['Product Code'] || String(row['Product Code']).trim().length !== 10) {
-      errors.push(`Row ${index + 1}: Product Code must be exactly 10 characters`);
-    }
-
-    // Stock can be negative / positive, but must be integer
-    const stockQuantity = parseInt(row['Stock Quantity']);
-    if (isNaN(stockQuantity) || !Number.isInteger(Number(row['Stock Quantity']))) {
-      errors.push(`Row ${index + 1}: Stock Quantity must be an integer`);
-    }
-
-    const price = parseFloat(
-      String(row['Price (₹)'] || '0').replace(/[^0-9.\-]/g, '')
-    );
-    if (isNaN(price)) {
-      errors.push(`Row ${index + 1}: Price must be a number`);
-    }
-    return errors;
-  }, []);
-
-  const importFromExcel = useCallback(
-    async (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      try {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-          if (!jsonData.length) {
-            toast.error('Excel file is empty', { autoClose: 3000 });
-            return;
-          }
-
-          const errors = [];
-          const validRows = [];
-
-          jsonData.forEach((row, index) => {
-            const rowErrors = validateImportRow(row, index);
-            if (rowErrors.length > 0) {
-              errors.push(...rowErrors);
-            } else {
-              validRows.push({
-                product_name: String(row['Product Name'] || '').trim(),
-                product_code: String(row['Product Code'] || '').trim(),
-                stock_quantity: parseInt(row['Stock Quantity'] || 0),
-                price: parseFloat(
-                  String(row['Price (₹)'] || '0').replace(/[^0-9.\-]/g, '')
-                ),
-                description: String(row['Description'] || '').trim() || undefined,
-                product_id: row['Product ID'] ? parseInt(row['Product ID']) : undefined,
-              });
-            }
-          });
-
-          if (errors.length > 0) {
-            errors.forEach((error) => toast.error(error, { autoClose: 5000 }));
-          }
-          if (!validRows.length) {
-            toast.error('No valid rows to import. Check validation errors.', {
-              autoClose: 5000,
-            });
-            return;
-          }
-
-          const token = localStorage.getItem('token');
-          if (!token) {
-            toast.error('Authentication token missing. Please log in.', {
-              autoClose: 5000,
-            });
-            return;
-          }
-
-          let createdCount = 0;
-          let updatedCount = 0;
-          let failedCount = 0;
-
-          for (const row of validRows) {
-            try {
-              const { product_id, ...body } = row;
-              const url = product_id
-                ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory/${product_id}`
-                : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/inventory`;
-              const method = product_id ? 'PUT' : 'POST';
-
-              const response = await fetch(url, {
-                method,
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(body),
-                credentials: 'include',
-              });
-
-              if (!response.ok) {
-                const errorData = await response.json();
-                console.error(`Row ${validRows.indexOf(row) + 1} failed:`, {
-                  status: response.status,
-                  errorData,
-                });
-                throw new Error(
-                  errorData.error ||
-                    `Failed to ${product_id ? 'update' : 'create'} item (Status: ${response.status})`
-                );
-              }
-
-              if (product_id) {
-                updatedCount++;
-              } else {
-                createdCount++;
-              }
-            } catch (err) {
-              failedCount++;
-              console.error(`Row ${validRows.indexOf(row) + 1} error:`, err);
-              toast.error(`Row ${validRows.indexOf(row) + 1}: ${err.message}`, {
-                autoClose: 3000,
-              });
-            }
-          }
-
-          if (createdCount > 0 || updatedCount > 0) {
-            await refetchData();
-            setPage(0);
-            toast.success(
-              `Imported successfully: ${createdCount} created, ${updatedCount} updated${
-                failedCount > 0 ? `, ${failedCount} failed` : ''
-              }`,
-              { autoClose: 5000 }
-            );
-          } else {
-            toast.error(
-              `Import failed: ${failedCount} rows could not be processed`,
-              { autoClose: 5000 }
-            );
-          }
-        };
-
-        reader.readAsArrayBuffer(file);
-        event.target.value = '';
-      } catch (err) {
-        console.error('Import error:', err);
-        toast.error(`Import failed: ${err.message}`, { autoClose: 3000 });
-      }
-    },
-    [validateImportRow, refetchData]
-  );
 
   const exportToExcel = useCallback(() => {
     const data = filteredInventory.map((item) => ({
@@ -367,7 +232,7 @@ function ProductionInventoryPage() {
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Products/Finished Goods');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Finished Goods');
 
     const colWidths = data.reduce((acc, row) => {
       Object.keys(row).forEach((key, idx) => {
@@ -376,10 +241,11 @@ function ProductionInventoryPage() {
       });
       return acc;
     }, []);
+
     worksheet['!cols'] = colWidths.map((width) => ({ wch: width }));
 
-    XLSX.writeFile(workbook, 'Products_Finished_Goods_Inventory.xlsx');
-    toast.success('Products/Finished Goods exported to Excel!', { autoClose: 2000 });
+    XLSX.writeFile(workbook, 'Finished_Goods_Inventory.xlsx');
+    toast.success('Finished Goods exported to Excel!', { autoClose: 2000 });
   }, [filteredInventory]);
 
   const handleCreateItem = useCallback(
@@ -388,6 +254,7 @@ function ProductionInventoryPage() {
       try {
         if (!token) throw new Error('Authentication token missing.');
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
         const response = await fetch(`${backendUrl}/api/inventory`, {
           method: 'POST',
           headers: {
@@ -397,10 +264,12 @@ function ProductionInventoryPage() {
           body: JSON.stringify({ product_name, stock_quantity, price, description, product_code }),
           credentials: 'include',
         });
+
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Failed to create item');
         }
+
         setPage(0);
         setSearchInput('');
         setFilterStock('All');
@@ -421,6 +290,7 @@ function ProductionInventoryPage() {
       try {
         if (!token) throw new Error('Authentication token missing.');
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
         const response = await fetch(`${backendUrl}/api/inventory/${itemId}`, {
           method: 'PUT',
           headers: {
@@ -436,12 +306,14 @@ function ProductionInventoryPage() {
           }),
           credentials: 'include',
         });
+
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(
             errorData.error || `Failed to update item (Status: ${response.status})`
           );
         }
+
         setTimeout(() => refetchData(), 100);
         setShowEditForm(false);
         setSelectedItem(null);
@@ -505,6 +377,7 @@ function ProductionInventoryPage() {
         >
           <MoreVertical size={20} />
         </button>
+
         {isOpen && (
           <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
             <button
@@ -514,7 +387,8 @@ function ProductionInventoryPage() {
               }}
               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
             >
-              <Edit2 size={16} className="mr-2" /> Edit
+              <Edit2 size={16} className="mr-2" />
+              Edit
             </button>
             {/* Delete button intentionally removed for Production view */}
           </div>
@@ -555,6 +429,7 @@ function ProductionInventoryPage() {
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">
         Products/Finished Goods Stocks
       </h1>
+
       <div className="max-w-7xl mx-auto">
         <div className="flex mb-8 gap-6 flex-wrap">
           <div className="relative flex-grow">
@@ -574,6 +449,7 @@ function ProductionInventoryPage() {
               aria-hidden="true"
             />
           </div>
+
           <div>
             <label htmlFor="stock-filter" className="sr-only">
               Filter inventory by stock
@@ -589,6 +465,7 @@ function ProductionInventoryPage() {
               <option value="Out of Stock">Out of Stock</option>
             </select>
           </div>
+
           <button
             onClick={() => refetchData()}
             className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
@@ -597,37 +474,25 @@ function ProductionInventoryPage() {
           >
             Refresh
           </button>
+
           <button
             onClick={() => setShowCreateForm(true)}
             className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md"
             disabled={isLoading}
             aria-label="Create new item"
           >
-            <PlusCircle className="mr-2" /> Add Item
+            <PlusCircle className="mr-2" />
+            Add Item
           </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md"
-            disabled={isLoading}
-            aria-label="Import from Excel"
-          >
-            <Upload className="mr-2" /> Import from Excel
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={importFromExcel}
-            accept=".xlsx,.xls"
-            className="hidden"
-            aria-hidden="true"
-          />
+
           <button
             onClick={exportToExcel}
             className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md"
             disabled={isLoading || filteredInventory.length === 0}
             aria-label="Export to Excel"
           >
-            <Download className="mr-2" /> Export to Excel
+            <Download className="mr-2" />
+            Export to Excel
           </button>
         </div>
 
@@ -674,12 +539,8 @@ function ProductionInventoryPage() {
                         ? 'cursor-pointer hover:bg-amber-200 focus:outline-none focus:bg-amber-200'
                         : ''
                     }`}
-                    tabIndex={
-                      key !== 'actions' && key !== 'qrcode' ? 0 : undefined
-                    }
-                    aria-sort={
-                      sortConfig.key === key ? sortConfig.direction : 'none'
-                    }
+                    tabIndex={key !== 'actions' && key !== 'qrcode' ? 0 : undefined}
+                    aria-sort={sortConfig.key === key ? sortConfig.direction : 'none'}
                     role="columnheader"
                   >
                     <div className="flex items-center">
@@ -711,7 +572,8 @@ function ProductionInventoryPage() {
                         className="text-amber-600 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
                         aria-label={`View description for ${item.product_name}`}
                       >
-                        <Eye size={16} className="mr-1" aria-hidden="true" /> View
+                        <Eye size={16} className="mr-1" aria-hidden="true" />
+                        View
                       </button>
                     ) : (
                       '-'
@@ -729,9 +591,7 @@ function ProductionInventoryPage() {
                   <td className="py-4 px-3">{formatCurrency(item.price)}</td>
                   <td className="py-4 px-3">
                     <div className="flex flex-col">
-                      <span>
-                        {new Date(item.created_at).toLocaleDateString('en-IN')}
-                      </span>
+                      <span>{new Date(item.created_at).toLocaleDateString('en-IN')}</span>
                       <span className="text-sm text-gray-500">
                         {new Date(item.created_at).toLocaleTimeString('en-IN')}
                       </span>
@@ -740,16 +600,13 @@ function ProductionInventoryPage() {
                   <td className="py-4 px-3">
                     <button
                       onClick={() =>
-                        showBarcode(
-                          item.product_code,
-                          item.product_name,
-                          item.description
-                        )
+                        showBarcode(item.product_code, item.product_name, item.description)
                       }
                       className="text-amber-600 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
                       aria-label={`View QR code for ${item.product_name}`}
                     >
-                      <Eye size={16} className="mr-1" aria-hidden="true" /> QR Code
+                      <Eye size={16} className="mr-1" aria-hidden="true" />
+                      QR Code
                     </button>
                   </td>
                   <td className="py-4 px-3">
@@ -763,8 +620,8 @@ function ProductionInventoryPage() {
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600">
-                Showing {paginatedInventory.length} of {filteredInventory.length}{' '}
-                filtered items (Total: {totalItems})
+                Showing {paginatedInventory.length} of {filteredInventory.length} filtered
+                items (Total: {totalItems})
               </div>
               <div className="flex space-x-2">
                 <button
@@ -801,7 +658,8 @@ function ProductionInventoryPage() {
                   onClick={() => setShowCreateForm(true)}
                   className="mt-4 p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
                 >
-                  <PlusCircle className="mr-2" aria-hidden="true" /> Add Your First Item
+                  <PlusCircle className="mr-2" aria-hidden="true" />
+                  Add Your First Item
                 </button>
               )}
             </div>
@@ -938,7 +796,8 @@ function ProductionInventoryPage() {
                 }}
                 className="w-full p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center justify-center"
               >
-                <Download className="mr-2" aria-hidden="true" /> Download QR Code
+                <Download className="mr-2" aria-hidden="true" />
+                Download QR Code
               </button>
             </div>
           </div>
@@ -966,6 +825,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     description: '',
     product_code: '',
   });
+
   const [errors, setErrors] = useState({
     product_name: '',
     stock_quantity: '',
@@ -973,6 +833,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     description: '',
     product_code: '',
   });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Part search state
@@ -1060,10 +921,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     if (!showPartDropdown) return;
 
     const handleClickOutside = (event) => {
-      if (
-        partDropdownRef.current &&
-        !partDropdownRef.current.contains(event.target)
-      ) {
+      if (partDropdownRef.current && !partDropdownRef.current.contains(event.target)) {
         setShowPartDropdown(false);
       }
     };
@@ -1117,6 +975,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
       description: '',
     };
     setErrors(fieldErrors);
+
     if (Object.values(fieldErrors).some((err) => err)) return;
 
     try {
@@ -1154,17 +1013,14 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
             className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400"
             size={16}
           />
+
           {showPartDropdown && (
             <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white border rounded-lg shadow-lg">
               {isPartLoading && (
-                <div className="px-3 py-2 text-sm text-gray-500">
-                  Loading parts...
-                </div>
+                <div className="px-3 py-2 text-sm text-gray-500">Loading parts...</div>
               )}
               {!isPartLoading && filteredParts.length === 0 && (
-                <div className="px-3 py-2 text-sm text-gray-500">
-                  No parts found.
-                </div>
+                <div className="px-3 py-2 text-sm text-gray-500">No parts found.</div>
               )}
               {!isPartLoading &&
                 filteredParts.map((part) => (
@@ -1192,10 +1048,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
       </div>
 
       <div>
-        <label
-          htmlFor="create-product-name"
-          className="text-gray-700 font-medium"
-        >
+        <label htmlFor="create-product-name" className="text-gray-700 font-medium">
           Product Name
         </label>
         <input
@@ -1206,25 +1059,18 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_name}
-          aria-describedby={
-            errors.product_name ? 'create-product-name-error' : undefined
-          }
+          aria-describedby={errors.product_name ? 'create-product-name-error' : undefined}
           disabled={isSubmitting}
         />
         {errors.product_name && (
-          <p
-            id="create-product-name-error"
-            className="text-red-600 text-sm mt-1"
-          >
+          <p id="create-product-name-error" className="text-red-600 text-sm mt-1">
             {errors.product_name}
           </p>
         )}
       </div>
+
       <div>
-        <label
-          htmlFor="create-product-code"
-          className="text-gray-700 font-medium"
-        >
+        <label htmlFor="create-product-code" className="text-gray-700 font-medium">
           Product Code (10 chars)
         </label>
         <input
@@ -1236,25 +1082,18 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           maxLength={10}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_code}
-          aria-describedby={
-            errors.product_code ? 'create-product-code-error' : undefined
-          }
+          aria-describedby={errors.product_code ? 'create-product-code-error' : undefined}
           disabled={isSubmitting}
         />
         {errors.product_code && (
-          <p
-            id="create-product-code-error"
-            className="text-red-600 text-sm mt-1"
-          >
+          <p id="create-product-code-error" className="text-red-600 text-sm mt-1">
             {errors.product_code}
           </p>
         )}
       </div>
+
       <div>
-        <label
-          htmlFor="create-description"
-          className="text-gray-700 font-medium"
-        >
+        <label htmlFor="create-description" className="text-gray-700 font-medium">
           Description
         </label>
         <textarea
@@ -1266,11 +1105,9 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           disabled={isSubmitting}
         />
       </div>
+
       <div>
-        <label
-          htmlFor="create-stock-quantity"
-          className="text-gray-700 font-medium"
-        >
+        <label htmlFor="create-stock-quantity" className="text-gray-700 font-medium">
           Stock Quantity
         </label>
         <input
@@ -1287,14 +1124,12 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           disabled={isSubmitting}
         />
         {errors.stock_quantity && (
-          <p
-            id="create-stock-quantity-error"
-            className="text-red-600 text-sm mt-1"
-          >
+          <p id="create-stock-quantity-error" className="text-red-600 text-sm mt-1">
             {errors.stock_quantity}
           </p>
         )}
       </div>
+
       <div>
         <label htmlFor="create-price" className="text-gray-700 font-medium">
           Price (₹)
@@ -1317,6 +1152,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
           </p>
         )}
       </div>
+
       <div className="flex justify-end space-x-4">
         <button
           type="button"
@@ -1347,6 +1183,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     description: item.description || '',
     product_code: item.product_code,
   });
+
   const [errors, setErrors] = useState({
     product_name: '',
     stock_quantity: '',
@@ -1354,6 +1191,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     description: '',
     product_code: '',
   });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validateField = (name, value) => {
@@ -1396,6 +1234,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
       description: '',
     };
     setErrors(fieldErrors);
+
     if (Object.values(fieldErrors).some((err) => err)) return;
 
     try {
@@ -1413,10 +1252,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   return (
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div>
-        <label
-          htmlFor="edit-product-name"
-          className="text-gray-700 font-medium"
-        >
+        <label htmlFor="edit-product-name" className="text-gray-700 font-medium">
           Product Name
         </label>
         <input
@@ -1427,25 +1263,18 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           onChange={handleChange}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_name}
-          aria-describedby={
-            errors.product_name ? 'edit-product-name-error' : undefined
-          }
+          aria-describedby={errors.product_name ? 'edit-product-name-error' : undefined}
           disabled={isSubmitting}
         />
         {errors.product_name && (
-          <p
-            id="edit-product-name-error"
-            className="text-red-600 text-sm mt-1"
-          >
+          <p id="edit-product-name-error" className="text-red-600 text-sm mt-1">
             {errors.product_name}
           </p>
         )}
       </div>
+
       <div>
-        <label
-          htmlFor="edit-product-code"
-          className="text-gray-700 font-medium"
-        >
+        <label htmlFor="edit-product-code" className="text-gray-700 font-medium">
           Product Code (10 chars)
         </label>
         <input
@@ -1457,25 +1286,18 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           maxLength={10}
           className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           aria-invalid={!!errors.product_code}
-          aria-describedby={
-            errors.product_code ? 'edit-product-code-error' : undefined
-          }
+          aria-describedby={errors.product_code ? 'edit-product-code-error' : undefined}
           disabled={isSubmitting}
         />
         {errors.product_code && (
-          <p
-            id="edit-product-code-error"
-            className="text-red-600 text-sm mt-1"
-          >
+          <p id="edit-product-code-error" className="text-red-600 text-sm mt-1">
             {errors.product_code}
           </p>
         )}
       </div>
+
       <div>
-        <label
-          htmlFor="edit-description"
-          className="text-gray-700 font-medium"
-        >
+        <label htmlFor="edit-description" className="text-gray-700 font-medium">
           Description
         </label>
         <textarea
@@ -1487,11 +1309,9 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           disabled={isSubmitting}
         />
       </div>
+
       <div>
-        <label
-          htmlFor="edit-stock-quantity"
-          className="text-gray-700 font-medium"
-        >
+        <label htmlFor="edit-stock-quantity" className="text-gray-700 font-medium">
           Stock Quantity
         </label>
         <input
@@ -1508,14 +1328,12 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           disabled={isSubmitting}
         />
         {errors.stock_quantity && (
-          <p
-            id="edit-stock-quantity-error"
-            className="text-red-600 text-sm mt-1"
-          >
+          <p id="edit-stock-quantity-error" className="text-red-600 text-sm mt-1">
             {errors.stock_quantity}
           </p>
         )}
       </div>
+
       <div>
         <label htmlFor="edit-price" className="text-gray-700 font-medium">
           Price (₹)
@@ -1538,6 +1356,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           </p>
         )}
       </div>
+
       <div className="flex justify-end space-x-4">
         <button
           type="button"
