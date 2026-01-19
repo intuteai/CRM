@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React from "react";
+import { Link } from "react-router-dom";
 import {
   Truck,
   FileText,
@@ -8,8 +8,8 @@ import {
   Mail,
   Package,
   MapPin,
-  FilePlus
-} from 'lucide-react';
+  FilePlus,
+} from "lucide-react";
 
 function SalesDashboard({ socket }) {
   return (
@@ -62,10 +62,10 @@ function SalesDashboard({ socket }) {
         {/* Inventory & Pricing */}
         <Section title="Inventory & Pricing">
           <DashboardCard
-            to="/inventory" 
+            to="/sales-inventory"
             icon={<Package />}
-            title="Inventory"
-            desc="View finished goods inventory"
+            title="Finished Goods"
+            desc="Manage finished goods inventory"
           />
           <DashboardCard
             to="/price-list"
@@ -100,7 +100,9 @@ function DashboardCard({ to, icon, title, desc }) {
       <div className="flex items-center justify-center mb-3">
         {React.cloneElement(icon, { className: "w-9 h-9 text-gray-700" })}
       </div>
-      <h2 className="text-xl font-semibold text-gray-800 text-center">{title}</h2>
+      <h2 className="text-xl font-semibold text-gray-800 text-center">
+        {title}
+      </h2>
       <p className="text-gray-600 text-center mt-1 text-base">{desc}</p>
     </Link>
   );

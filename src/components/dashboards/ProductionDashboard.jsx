@@ -33,7 +33,7 @@ function ProductionDashboard() {
             desc="Manage production queries"
           />
           <DashboardCard
-            to="/stock"
+            to="/production-stock"
             icon={<Package />}
             title="Raw Materials"
             desc="Monitor raw material levels"

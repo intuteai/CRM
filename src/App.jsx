@@ -51,6 +51,7 @@ import SalesQueriesPage from "./components/sales/SalesQueriesPage";
 import SalesEnquiryPage from "./components/sales/SalesEnquiryPage";
 import SalesQuotationForm from "./components/sales/SalesQuotationForm";
 import SalesProformaForm from "./components/sales/SalesProformaForm";
+import SalesInventoryPage from "./components/sales/SalesInventoryPage";
 
 // design
 import DesignEnquiryPage from "./components/design/DesignEnquiryPage";
@@ -145,7 +146,7 @@ const allowedPathsByRole = {
   [ROLES.SALES]: [
     "/sales-dashboard",
     "/orders",
-    "/inventory",
+    "/sales-inventory",
     "/sales-queries",
     "/stock",
     "/price-list",
@@ -172,8 +173,7 @@ const allowedPathsByRole = {
     "/production-orders",
     "/orders",
     "/production-queries",
-    // "/production-stock",
-    "/stock",
+    "/production-stock",
     "/inventory",
     "/production-part-drawings",
     "/production-part-drawings-raw",
@@ -701,6 +701,18 @@ function App() {
           }
         />
         <Route
+          path="/sales-inventory"
+          element={
+            userRole === "sales" ? (
+              <ErrorBoundary>
+                <SalesInventoryPage socket={socket} userRole={userRole} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route
           path="/inventory"
           element={
             ["admin", "store", "production", "sales"].includes(userRole) ? (
@@ -734,12 +746,12 @@ function App() {
         <Route
           path="/stock"
           element={
-            ["admin", "sales", "dispatch", "store", "production"].includes(userRole) ? (
+            ["admin", "sales", "dispatch", "store"].includes(userRole) ? (
               <ErrorBoundary>
                 {userRole === "store" ? (
                   <StoreStockPage socket={socket} />
                 ) : userRole === "production" ? (
-                  <StoreStockPage socket={socket} />
+                  <ProductionStockPage socket={socket} />
                 ) : (
                   <StockPage socket={socket} />
                 )}
@@ -983,7 +995,7 @@ function App() {
             )
           }
         />
-        {/* <Route
+        <Route
           path="/production-stock"
           element={
             userRole === "production" ? (
@@ -994,7 +1006,7 @@ function App() {
               <Navigate to="/" replace />
             )
           }
-        /> */}
+        />
         <Route
           path="/production-part-drawings-raw"
           element={
