@@ -183,6 +183,8 @@ const allowedPathsByRole = {
     "/edit-profile",
     "/production-inventory",
     "/work-orders",
+    "/select-component/:orderId/:action",
+    "/processes/:orderId",
   ],
   [ROLES.STORE]: [
     "/store-dashboard",
@@ -926,7 +928,7 @@ function App() {
         <Route
           path="/select-component/:orderId/:action"
           element={
-            userRole === "admin" ? (
+            ["admin", "production"].includes(userRole) ? (
               <ErrorBoundary>
                 <SelectOrderPage />
               </ErrorBoundary>
@@ -935,10 +937,34 @@ function App() {
             )
           }
         />
-        <Route
+        {/* <Route
+          path="/select-component/:orderId/:action"
+          element={
+            userRole === "admin" ? (
+              <ErrorBoundary>
+                <SelectOrderPage />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        /> */}
+        {/* <Route
           path="/processes/:orderId"
           element={
             userRole === "admin" ? (
+              <ErrorBoundary>
+                <CreateMotorProcess socket={socket} />
+              </ErrorBoundary>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        /> */}
+        <Route
+          path="/processes/:orderId"
+          element={
+            ["admin", "production"].includes(userRole) ? (
               <ErrorBoundary>
                 <CreateMotorProcess socket={socket} />
               </ErrorBoundary>
