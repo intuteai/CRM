@@ -11,9 +11,21 @@ import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
-const formatDate = (dateString) => {
-  const date = new Date(dateString);
-  return `${date.toLocaleDateString('en-IN')} ${date.toLocaleTimeString('en-IN')}`;
+
+const formatDate = (value) => {
+  if (!value) return 'N/A';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+
+  return `${date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })} ${date.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
 };
 
 const useFetchStock = () => {
@@ -50,11 +62,11 @@ const useFetchStock = () => {
           stockQuantity: item.stockQuantity ?? 0,
           qtyRequired: item.qtyRequired ?? 0,
           description: item.description || '',
-          productCode: item.productCode || '',
+          productCode: item.productCode || item.product_code || '',
           productName: item.productName || '',
           productId: item.productId,
-          createdAt: item.createdAt,
-          location: item.location || '' // NEW
+          createdAt: item.createdAt || item.created_at || null,
+          location: item.location || ''
         }));
         setStockItems(normalizedData);
         setTotalItems(total || 0);
@@ -89,7 +101,7 @@ function ProductionStockPage() {
     stockQuantity: '',
     qtyRequired: '',
     price: '',
-    location: '' // NEW
+    location: ''
   });
   const [formErrors, setFormErrors] = useState({});
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
@@ -117,7 +129,7 @@ function ProductionStockPage() {
 
   useEffect(() => setPage(0), [searchTerm]);
 
-  // Socket
+  // Socket.IO connection
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
     const socket = io(backendUrl, { withCredentials: true, transports: ['websocket'] });
@@ -125,29 +137,18 @@ function ProductionStockPage() {
     socket.on('connect', () => toast.success('Connected to real-time updates!', { autoClose: 2000 }));
     socket.on('connect_error', () => toast.error('Failed to connect to real-time updates.', { autoClose: 3000 }));
 
-    socket.on('stockUpdate', ({ product_id, stock_quantity, location }) => {
-      setStockItems(prev => {
-        const index = prev.findIndex(item => item.productId === product_id);
-        if (index === -1) {
-          refetchData();
-          return prev;
-        }
-        const updated = [...prev];
-        updated[index] = {
-          ...updated[index],
-          stockQuantity: Number(stock_quantity),
-          location: location ?? updated[index].location
-        };
-        toast.info(`${updated[index].productName} → ${stock_quantity} @ ${updated[index].location || 'N/A'}`, { autoClose: 2000 });
-        return updated;
-      });
+    // ────────────────────────────────────────────────
+    // FIXED: safest approach — refetch full list on any update
+    // Avoids desync, duplicate items, missing items, stale data
+    socket.on('stockUpdate', () => {
+      refetchData();
       tableRef.current?.focus();
     });
 
     return () => socket.disconnect();
   }, [refetchData]);
 
-  // QR Code
+  // QR Code generation
   const generateQRCode = useCallback(async (productCode, productName, description, location, price, elementId) => {
     try {
       const data = JSON.stringify({
@@ -179,11 +180,17 @@ function ProductionStockPage() {
       items.sort((a, b) => {
         let aVal = a[sortConfig.key] ?? '';
         let bVal = b[sortConfig.key] ?? '';
+
         if (['stockQuantity', 'qtyRequired', 'productId', 'price'].includes(sortConfig.key)) {
-          aVal = Number(aVal); bVal = Number(bVal);
+          aVal = Number(aVal);
+          bVal = Number(bVal);
         } else if (sortConfig.key === 'createdAt') {
-          aVal = new Date(aVal || 0); bVal = new Date(bVal || 0);
+          const aDate = new Date(aVal);
+          const bDate = new Date(bVal);
+          aVal = Number.isNaN(aDate.getTime()) ? 0 : aDate.getTime();
+          bVal = Number.isNaN(bDate.getTime()) ? 0 : bDate.getTime();
         }
+
         return (aVal < bVal ? -1 : 1) * (sortConfig.direction === 'asc' ? 1 : -1);
       });
     }
@@ -204,21 +211,60 @@ function ProductionStockPage() {
     return filteredStock.slice(start, start + itemsPerPage);
   }, [filteredStock, page, itemsPerPage]);
 
-  // Import Validation
   const validateImportRow = useCallback((row, index) => {
     const errors = [];
-    if (!row['Product Name']?.trim()) errors.push(`Row ${index + 1}: Product Name required`);
-    if (!row['Product Code']?.trim() || String(row['Product Code']).trim().length !== 10) {
+
+    const productName = String(row['Product Name'] ?? '').trim();
+    const productCode = String(row['Product Code'] ?? '').trim();
+
+    if (!productName) {
+      errors.push(`Row ${index + 1}: Product Name required`);
+    }
+
+    if (!productCode || productCode.length !== 10) {
       errors.push(`Row ${index + 1}: Product Code must be 10 characters`);
     }
-    const stock = parseInt(row['Stock Quantity']);
-    if (isNaN(stock) || stock < 0) errors.push(`Row ${index + 1}: Stock Quantity must be non-negative`);
-    const price = parseFloat(String(row['Price (₹)'] || '0').replace(/[^0-9.]/g, ''));
-    if (isNaN(price) || price < 0) errors.push(`Row ${index + 1}: Price must be non-negative`);
+
+    const stock = Number(row['Stock Quantity']);
+    if (!Number.isFinite(stock) || stock < 0) {
+      errors.push(`Row ${index + 1}: Stock Quantity must be non-negative`);
+    }
+
+    const price = Number(
+      String(row['Price (₹)'] ?? '0').replace(/[^0-9.]/g, '')
+    );
+    if (!Number.isFinite(price) || price < 0) {
+      errors.push(`Row ${index + 1}: Price must be non-negative`);
+    }
+
     return errors;
   }, []);
 
-  // Import Excel
+  const exportToExcel = useCallback(() => {
+    const excelSorted = [...filteredStock].sort(
+      (a, b) => a.productId - b.productId
+    );
+
+    const data = excelSorted.map(item => ({
+      'Product ID': item.productId,
+      'Product Code': item.productCode,
+      'Product Name': item.productName,
+      'Location': item.location || 'N/A',
+      'Description': item.description || 'N/A',
+      'Stock Quantity': item.stockQuantity,
+      'Qty Required': item.qtyRequired,
+      'Price (₹)': formatCurrency(item.price),
+      'Created At (IST)': item.createdAt ? formatDate(item.createdAt) : 'N/A',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Raw Materials');
+    XLSX.writeFile(wb, 'Production_Raw_Material_Inventory.xlsx');
+
+    toast.success('Exported to Excel!');
+  }, [filteredStock]);
+
   const importFromExcel = useCallback(async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -288,28 +334,6 @@ function ProductionStockPage() {
     event.target.value = '';
   }, [validateImportRow, refetchData]);
 
-  // Export Excel
-  const exportToExcel = useCallback(() => {
-    const data = filteredStock.map(item => ({
-      'Product ID': item.productId,
-      'Product Code': item.productCode,
-      'Product Name': item.productName,
-      'Location': item.location || 'N/A',
-      'Description': item.description || 'N/A',
-      'Stock Quantity': item.stockQuantity,
-      'Qty Required': item.qtyRequired,
-      'Price (₹)': formatCurrency(item.price),
-      'Created At (IST)': item.createdAt ? formatDate(item.createdAt) : 'N/A'
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Raw Materials');
-    XLSX.writeFile(wb, 'Production_Raw_Material_Inventory.xlsx');
-    toast.success('Exported to Excel!');
-  }, [filteredStock]);
-
-  // Handlers
   const handleSort = useCallback((key) => {
     setSortConfig(prev => ({
       key,
@@ -437,7 +461,6 @@ function ProductionStockPage() {
     setShowModal(true);
   }, []);
 
-  // Focus Trap
   useEffect(() => {
     if (showModal && modalRef.current) {
       const first = modalRef.current.querySelector('input');
@@ -457,7 +480,6 @@ function ProductionStockPage() {
     }
   }, [showModal]);
 
-  // Render
   if (isLoading && !stockItems.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 flex items-center justify-center">
@@ -484,7 +506,6 @@ function ProductionStockPage() {
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Production Raw Material Inventory</h1>
       <div className="max-w-7xl mx-auto">
 
-        {/* Toolbar */}
         <div className="flex mb-8 gap-4 flex-wrap">
           <div className="relative flex-grow">
             <input
@@ -518,7 +539,6 @@ function ProductionStockPage() {
           </button>
         </div>
 
-        {/* Table */}
         {filteredStock.length === 0 && !isLoading ? (
           <div className="bg-white p-16 rounded-2xl shadow-lg text-center">
             <Package size={48} className="mx-auto mb-4 text-gray-400" />
@@ -624,7 +644,6 @@ function ProductionStockPage() {
         )}
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-[520px]" ref={modalRef}>
@@ -670,7 +689,6 @@ function ProductionStockPage() {
         </div>
       )}
 
-      {/* Description Modal */}
       {showDescriptionModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative">
@@ -681,7 +699,6 @@ function ProductionStockPage() {
         </div>
       )}
 
-      {/* QR Modal */}
       {showBarcodeModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative">
