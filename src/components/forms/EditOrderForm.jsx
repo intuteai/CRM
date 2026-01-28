@@ -251,8 +251,10 @@ function EditOrderForm({
             >
               <option value="Pending">Pending</option>
               <option value="Processing">Processing</option>
+              <option value="Testing">Testing</option> {/* ✅ ADDED */}
               <option value="Shipped">Shipped</option>
               <option value="Delivered">Delivered</option>
+              <option value="Cancelled">Cancelled</option>
             </select>
           </div>
 
@@ -260,17 +262,12 @@ function EditOrderForm({
           <div>
             <label className="text-gray-700 font-medium">Items</label>
             {editedOrder.items.map((item, idx) => (
-              <div
-                key={idx}
-                className="flex flex-wrap gap-2 mb-3 items-center"
-              >
+              <div key={idx} className="flex flex-wrap gap-2 mb-3 items-center">
                 {/* Product select – react-select with search & code */}
                 <div className="flex-[2] min-w-[380px]">
                   <Select
                     options={availableProducts
-                      .filter(
-                        (p) => p && typeof p.product_id !== "undefined",
-                      )
+                      .filter((p) => p && typeof p.product_id !== "undefined")
                       .map((p) => ({
                         value: String(p.product_id),
                         label: p.product_name,
@@ -290,11 +287,7 @@ function EditOrderForm({
                         }))[0] || null
                     }
                     onChange={(opt) =>
-                      handleItemChange(
-                        idx,
-                        "product_id",
-                        opt ? opt.value : "",
-                      )
+                      handleItemChange(idx, "product_id", opt ? opt.value : "")
                     }
                     isClearable
                     backspaceRemovesValue

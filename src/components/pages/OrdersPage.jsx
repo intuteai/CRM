@@ -41,7 +41,7 @@ const calculateTotalAmount = (items) =>
   items.reduce(
     (sum, item) =>
       sum + (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 0),
-    0
+    0,
   );
 
 // ✅ UPDATED: no stock restriction → overselling/backorders allowed
@@ -49,7 +49,7 @@ const validateOrderItems = (
   items,
   products,
   getAvailableStock, // kept for signature compatibility, not used now
-  editingOrderId = null
+  editingOrderId = null,
 ) => {
   const errors = [];
   const productIds = new Set();
@@ -63,7 +63,7 @@ const validateOrderItems = (
     productIds.add(item.product_id);
 
     const product = products.find(
-      (p) => String(p.product_id) === String(item.product_id)
+      (p) => String(p.product_id) === String(item.product_id),
     );
     const quantity = parseInt(item.quantity, 10) || 0;
     const price = parseFloat(item.price) || 0;
@@ -72,7 +72,7 @@ const validateOrderItems = (
       errors.push(
         product
           ? `Invalid quantity or price for ${product.product_name}`
-          : `Product not found: ${item.product_id}`
+          : `Product not found: ${item.product_id}`,
       );
       return false;
     }
@@ -151,7 +151,7 @@ const useFetchData = ({ limit, offset }) => {
             items: Array.isArray(order.items)
               ? order.items
                   .filter(
-                    (item) => item && typeof item.product_id !== "undefined"
+                    (item) => item && typeof item.product_id !== "undefined",
                   )
                   .map((item) => ({
                     ...item,
@@ -161,7 +161,7 @@ const useFetchData = ({ limit, offset }) => {
                     productName:
                       item.productName ||
                       productsData.find(
-                        (p) => String(p.product_id) === String(item.product_id)
+                        (p) => String(p.product_id) === String(item.product_id),
                       )?.product_name ||
                       "Unknown",
                   }))
@@ -171,18 +171,18 @@ const useFetchData = ({ limit, offset }) => {
         setTotalOrders(ordersData.total || 0);
         setProducts(
           (productsData || []).filter(
-            (p) => p && typeof p.product_id !== "undefined"
-          )
+            (p) => p && typeof p.product_id !== "undefined",
+          ),
         );
         setCustomers(
           (customersData || []).filter(
-            (c) => c && typeof c.user_id !== "undefined"
-          )
+            (c) => c && typeof c.user_id !== "undefined",
+          ),
         );
         setIsEmpty(
           validOrders.length === 0 &&
             productsData.length === 0 &&
-            customersData.length === 0
+            customersData.length === 0,
         );
         setError(null);
         console.log("Fetched orders:", validOrders);
@@ -261,13 +261,22 @@ const ActionsDropdown = ({
       visible: order.status === "Pending",
     },
     {
+      icon: <CheckCircle size={16} className="mr-2" />,
+      label: "Move to Testing",
+      action: () => {
+        onStatusChange(order.id, "Testing");
+        setIsOpen(false);
+      },
+      visible: order.status === "Processing",
+    },
+    {
       icon: <Truck size={16} className="mr-2" />,
       label: "Mark as Shipped",
       action: () => {
         onStatusChange(order.id, "Shipped");
         setIsOpen(false);
       },
-      visible: order.status === "Processing",
+      visible: order.status === "Testing",
     },
     {
       icon: <CheckCircle size={16} className="mr-2" />,
@@ -334,6 +343,10 @@ function OrdersPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+
+  const [filterMonth, setFilterMonth] = useState("All");
+  const [filterYear, setFilterYear] = useState("All");
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
@@ -392,7 +405,8 @@ function OrdersPage() {
                 items: Array.isArray(updatedOrder.items)
                   ? updatedOrder.items
                       .filter(
-                        (item) => item && typeof item.product_id !== "undefined"
+                        (item) =>
+                          item && typeof item.product_id !== "undefined",
                       )
                       .map((item) => ({
                         ...item,
@@ -403,14 +417,14 @@ function OrdersPage() {
                           item.productName ||
                           productsRef.current.find(
                             (p) =>
-                              String(p.product_id) === String(item.product_id)
+                              String(p.product_id) === String(item.product_id),
                           )?.product_name ||
                           "Unknown",
                       }))
                   : [],
               }
-            : o
-        )
+            : o,
+        ),
       );
       toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 2000 });
       if (tableRef.current) tableRef.current.focus();
@@ -427,12 +441,12 @@ function OrdersPage() {
 
   const debouncedSearch = useCallback(
     debounce((value) => setSearchTerm(value), 300),
-    []
+    [],
   );
 
   useEffect(() => {
     setPage(0);
-  }, [searchTerm, filterStatus]);
+  }, [searchTerm, filterStatus, filterMonth, filterYear]);
 
   const handleSearchChange = (e) => {
     const value = e.target.value.toLowerCase();
@@ -450,7 +464,7 @@ function OrdersPage() {
         ? products.filter((p) => p && typeof p.product_id !== "undefined")
         : [];
       const product = validProducts.find(
-        (p) => String(p.product_id) === String(productId)
+        (p) => String(p.product_id) === String(productId),
       );
       if (!product) {
         console.log("Product not found for ID:", productId);
@@ -467,7 +481,7 @@ function OrdersPage() {
             .filter((o) => o.status !== "Cancelled" && o.status !== "Delivered")
             .flatMap((o) => o.items)
             .filter(
-              (item) => item && String(item.product_id) === String(productId)
+              (item) => item && String(item.product_id) === String(productId),
             )
             .reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0) ||
           0;
@@ -477,7 +491,7 @@ function OrdersPage() {
           ": base=",
           baseStock,
           "reserved=",
-          reserved
+          reserved,
         );
         return (cache[cacheKey] = Math.max(0, baseStock - reserved));
       }
@@ -486,13 +500,13 @@ function OrdersPage() {
       const originalQty =
         originalOrder?.items
           ?.filter(
-            (item) => item && String(item.product_id) === String(productId)
+            (item) => item && String(item.product_id) === String(productId),
           )
           .reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0) || 0;
       const currentQty =
         selectedOrder?.items
           ?.filter(
-            (item) => item && String(item.product_id) === String(productId)
+            (item) => item && String(item.product_id) === String(productId),
           )
           .reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0) || 0;
       const available = Math.max(0, baseStock + originalQty - currentQty);
@@ -506,7 +520,7 @@ function OrdersPage() {
         "current=",
         currentQty,
         "available=",
-        available
+        available,
       );
       return (cache[cacheKey] = available);
     };
@@ -544,7 +558,7 @@ function OrdersPage() {
         });
       }
     },
-    [refetchData]
+    [refetchData],
   );
 
   const handleUpdateOrder = useCallback(
@@ -583,14 +597,14 @@ function OrdersPage() {
         });
       }
     },
-    [refetchData]
+    [refetchData],
   );
 
   const handleCancelOrder = useCallback(
     async (orderId) => {
       if (
         !window.confirm(
-          "Are you sure you want to cancel this order? This action cannot be undone."
+          "Are you sure you want to cancel this order? This action cannot be undone.",
         )
       )
         return;
@@ -617,14 +631,14 @@ function OrdersPage() {
         setIsCancelling(false);
       }
     },
-    [refetchData]
+    [refetchData],
   );
 
   const handleStatusChange = useCallback(
     async (orderId, newStatus) => {
       if (
         !window.confirm(
-          `Are you sure you want to change the status to ${newStatus}?`
+          `Are you sure you want to change the status to ${newStatus}?`,
         )
       )
         return;
@@ -660,7 +674,7 @@ function OrdersPage() {
         toast.error(error.message, { autoClose: 5000 });
       }
     },
-    [orders, refetchData]
+    [orders, refetchData],
   );
 
   const initiateEdit = useCallback((order) => {
@@ -702,19 +716,68 @@ function OrdersPage() {
     return sortableOrders;
   }, [orders, sortConfig]);
 
+  // const filteredOrders = useMemo(() => {
+  //   const validOrders = sortedOrders.filter(
+  //     (order) => order && typeof order.id !== "undefined",
+  //   );
+  //   return validOrders.filter((order) => {
+  //     const matchesSearch =
+  //       order.id.toString().includes(searchTerm) ||
+  //       (order.customerName || "").toLowerCase().includes(searchTerm);
+  //     const matchesStatus =
+  //       filterStatus === "All" || order.status === filterStatus;
+  //     return matchesSearch && matchesStatus;
+  //   });
+  // }, [sortedOrders, searchTerm, filterStatus]);
+
+  // const filteredOrders = useMemo(() => {
+  //   const validOrders = sortedOrders.filter(
+  //     (order) => order && typeof order.id !== "undefined",
+  //   );
+
+  //   return validOrders.filter((order) => {
+  //     const matchesSearch =
+  //       order.id.toString().includes(searchTerm) ||
+  //       (order.customerName || "").toLowerCase().includes(searchTerm);
+
+  //     const matchesStatus =
+  //       filterStatus === "All" || order.status === filterStatus;
+
+  //     const matchesMonth =
+  //       filterMonth === "All" ||
+  //       (order.createdAt &&
+  //         new Date(order.createdAt).getMonth() + 1 === Number(filterMonth));
+
+  //     return matchesSearch && matchesStatus && matchesMonth;
+  //   });
+  // }, [sortedOrders, searchTerm, filterStatus, filterMonth]);
+
   const filteredOrders = useMemo(() => {
-    const validOrders = sortedOrders.filter(
-      (order) => order && typeof order.id !== "undefined"
-    );
-    return validOrders.filter((order) => {
+    return sortedOrders.filter((order) => {
+      if (!order || !order.id) return false;
+
+      const createdDate = order.createdAt ? new Date(order.createdAt) : null;
+
       const matchesSearch =
         order.id.toString().includes(searchTerm) ||
-        (order.customerName || "").toLowerCase().includes(searchTerm);
+        (order.customerName || "")
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase());
+
       const matchesStatus =
         filterStatus === "All" || order.status === filterStatus;
-      return matchesSearch && matchesStatus;
+
+      const matchesMonth =
+        filterMonth === "All" ||
+        (createdDate && createdDate.getMonth() + 1 === Number(filterMonth));
+
+      const matchesYear =
+        filterYear === "All" ||
+        (createdDate && createdDate.getFullYear() === Number(filterYear));
+
+      return matchesSearch && matchesStatus && matchesMonth && matchesYear;
     });
-  }, [sortedOrders, searchTerm, filterStatus]);
+  }, [sortedOrders, searchTerm, filterStatus, filterMonth, filterYear]);
 
   const paginatedOrders = useMemo(() => {
     const start = page * ordersPerPage;
@@ -815,7 +878,7 @@ function OrdersPage() {
               placeholder="Search by Order ID or Customer Name..."
               value={searchInput}
               onChange={handleSearchChange}
-              className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
+              className="w-full p-3 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
             />
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
@@ -827,19 +890,53 @@ function OrdersPage() {
               id="status-filter"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
+              className="p-3 mx-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
             >
               <option value="All">All Status</option>
               <option value="Pending">Pending</option>
               <option value="Processing">Processing</option>
+              <option value="Testing">Testing</option>
               <option value="Shipped">Shipped</option>
               <option value="Delivered">Delivered</option>
               <option value="Cancelled">Cancelled</option>
             </select>
+            <select
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(e.target.value)}
+              className="p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
+            >
+              <option value="All">All Months</option>
+              {[...Array(12)].map((_, i) => (
+                <option key={i} value={i + 1}>
+                  {new Date(0, i).toLocaleString("en-IN", { month: "long" })}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filterYear}
+              onChange={(e) => setFilterYear(e.target.value)}
+              className="p-3 mx-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
+            >
+              <option value="All">All Years</option>
+              {[
+                ...new Set(
+                  orders.map((o) =>
+                    o.createdAt ? new Date(o.createdAt).getFullYear() : null,
+                  ),
+                ),
+              ]
+                .filter(Boolean)
+                .sort((a, b) => b - a)
+                .map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+            </select>
           </div>
           <button
             onClick={() => refetchData()}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
+            className="p-3 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
             disabled={isLoading}
             aria-label="Refresh orders"
           >
@@ -953,13 +1050,15 @@ function OrdersPage() {
                           ? "bg-amber-500"
                           : order.status === "Processing"
                             ? "bg-yellow-600"
-                            : order.status === "Shipped"
-                              ? "bg-blue-600"
-                              : order.status === "Delivered"
-                                ? "bg-green-600"
-                                : order.status === "Cancelled"
-                                  ? "bg-red-600"
-                                  : "bg-gray-500"
+                            : order.status === "Testing"
+                              ? "bg-purple-600"
+                              : order.status === "Shipped"
+                                ? "bg-blue-600"
+                                : order.status === "Delivered"
+                                  ? "bg-green-600"
+                                  : order.status === "Cancelled"
+                                    ? "bg-red-600"
+                                    : "bg-gray-500"
                       }`}
                     >
                       {order.status}
@@ -1016,9 +1115,7 @@ function OrdersPage() {
                 </button>
                 <button
                   onClick={() => setPage((p) => p + 1)}
-                  disabled={
-                    (page + 1) * ordersPerPage >= filteredOrders.length
-                  }
+                  disabled={(page + 1) * ordersPerPage >= filteredOrders.length}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Next page"
                 >
