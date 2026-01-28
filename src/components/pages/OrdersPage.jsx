@@ -238,7 +238,7 @@ const ActionsDropdown = ({
         setIsOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const actionItems = [
@@ -253,7 +253,7 @@ const ActionsDropdown = ({
     },
     {
       icon: <ShoppingCart size={16} className="mr-2" />,
-      label: "Process Order",
+      label: "Move to Processing",
       action: () => {
         onStatusChange(order.id, "Processing");
         setIsOpen(false);
@@ -271,7 +271,7 @@ const ActionsDropdown = ({
     },
     {
       icon: <Truck size={16} className="mr-2" />,
-      label: "Mark as Shipped",
+      label: "Move to Shipped",
       action: () => {
         onStatusChange(order.id, "Shipped");
         setIsOpen(false);
@@ -715,42 +715,6 @@ function OrdersPage() {
     }
     return sortableOrders;
   }, [orders, sortConfig]);
-
-  // const filteredOrders = useMemo(() => {
-  //   const validOrders = sortedOrders.filter(
-  //     (order) => order && typeof order.id !== "undefined",
-  //   );
-  //   return validOrders.filter((order) => {
-  //     const matchesSearch =
-  //       order.id.toString().includes(searchTerm) ||
-  //       (order.customerName || "").toLowerCase().includes(searchTerm);
-  //     const matchesStatus =
-  //       filterStatus === "All" || order.status === filterStatus;
-  //     return matchesSearch && matchesStatus;
-  //   });
-  // }, [sortedOrders, searchTerm, filterStatus]);
-
-  // const filteredOrders = useMemo(() => {
-  //   const validOrders = sortedOrders.filter(
-  //     (order) => order && typeof order.id !== "undefined",
-  //   );
-
-  //   return validOrders.filter((order) => {
-  //     const matchesSearch =
-  //       order.id.toString().includes(searchTerm) ||
-  //       (order.customerName || "").toLowerCase().includes(searchTerm);
-
-  //     const matchesStatus =
-  //       filterStatus === "All" || order.status === filterStatus;
-
-  //     const matchesMonth =
-  //       filterMonth === "All" ||
-  //       (order.createdAt &&
-  //         new Date(order.createdAt).getMonth() + 1 === Number(filterMonth));
-
-  //     return matchesSearch && matchesStatus && matchesMonth;
-  //   });
-  // }, [sortedOrders, searchTerm, filterStatus, filterMonth]);
 
   const filteredOrders = useMemo(() => {
     return sortedOrders.filter((order) => {
