@@ -14,7 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import "react-toastify/dist/ReactToastify.css";
-import AddNonMotorModal from "./AddNonMotorModal";
+import AddNonMotorModal from "./Addnonmotormodal";
 
 /* ---------- shared utils ---------- */
 const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
