@@ -1,1071 +1,1572 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useParams } from "react-router-dom";
+import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+import { toast, ToastContainer } from "react-toastify";
 import {
-  ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
-  Edit2, MoreVertical, Package, XCircle, Eye, Calendar, User, Hash,
-  Clock, CheckCircle2, AlertCircle, Activity, LayoutList, LayoutGrid
-} from 'lucide-react';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { debounce } from 'lodash';
-import { toast, ToastContainer } from 'react-toastify';
-import { useParams, useNavigate } from 'react-router-dom';
-import 'react-toastify/dist/ReactToastify.css'; 
+  Search,
+  Filter,
+  Plus,
+  Edit2,
+  Trash2,
+  X,
+  Calendar,
+  Package,
+  User,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  RefreshCw,
+} from "lucide-react";
+import "react-toastify/dist/ReactToastify.css";
 
-const formatDate = (date) =>
-  date ? new Date(date).toLocaleDateString('en-IN') : 'N/A'; 
+/* ========================================
+   UTILITIES & HELPERS
+   ======================================== */
 
-// Custom hook for fetching processes  
-const useFetchProcesses = ({ orderId, limit, offset }) => {
-  const [processes, setProcesses] = useState([]);
-  const [totalItems, setTotalItems] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const navigate = useNavigate();
+const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
 
-  const fetchData = useCallback(async () => {
-    let isMounted = true;
-    try {
-      setIsLoading(true);
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Authentication token missing. Please log in again.');
-      }
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const url = `${backendUrl}/api/process/${orderId}?limit=${limit}&offset=${offset}&force_refresh=true`;
-      const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }, 
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        let errorData = {};
-        try {
-          const text = await response.text();
-          errorData = text ? JSON.parse(text) : { error: 'No error details provided by server' };
-        } catch (e) {
-          errorData = { error: 'Failed to parse server error response' };
-        }
-        if (errorData.code === 'PERM_DENIED') {
-          throw new Error('You lack permission to view processes. Contact your administrator or try logging out and back in.');
-        }
-        if (errorData.code === 'AUTH_INVALID_TOKEN') {
-          localStorage.removeItem('token');
-          navigate('/');
-          throw new Error('Invalid token. You have been logged out.');
-        }
-        if (response.status === 500) {
-          throw new Error(
-            errorData.error ||
-            errorData.message ||
-            'Server error occurred while fetching processes. Please check backend logs for details or contact support.'
-          );
-        }
-        throw new Error(
-          errorData.error ||
-          `Process fetch failed: ${response.statusText} (${response.status})`
-        );
-      }
-      const { workOrders, total } = await response.json();
-      if (isMounted) {
-        setProcesses(workOrders || []);
-        setTotalItems(total || 0);
-        setError(null);
-      }
-    } catch (err) {
-      if (isMounted) setError(err.message);
-    } finally {
-      if (isMounted) setIsLoading(false);
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [orderId, limit, offset, navigate]);
+async function safeJson(res) {
+  const txt = await res.text();
+  try {
+    return txt ? JSON.parse(txt) : null;
+  } catch {
+    return null;
+  }
+}
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  return { processes, totalItems, isLoading, error, refetchData: fetchData };
+const tokenGuard = () => {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("Authentication token missing");
+  return token;
 };
 
-function MotorProcessPage({ userRole, socket }) {
-  const { orderId } = useParams();
-  const [page, setPage] = useState(0);
-  const [itemsPerPage] = useState(8);
-  const [searchInput, setSearchInput] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [quickFilter, setQuickFilter] = useState('');
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [showEditForm, setShowEditForm] = useState(false);
-  const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
-  const [showProcessesModal, setShowProcessesModal] = useState(false);
-  const [selectedProcesses, setSelectedProcesses] = useState([]);
-  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
-  const [viewMode, setViewMode] = useState('list');
-  const tableRef = useRef(null);
+const STATUS_COLUMNS = {
+  Pending: { label: "Yet To Start", color: "bg-gray-100 border-gray-300" },
+  "In Progress": { label: "In Progress", color: "bg-blue-100 border-blue-300" },
+  Completed: { label: "Completed", color: "bg-green-100 border-green-300" },
+};
 
-  const { processes: allProcesses, totalItems, isLoading, error, refetchData } = useFetchProcesses({ orderId, limit: 5000, offset: 0 });
+const STATUS_OPTIONS = ["Pending", "In Progress", "Completed"];
 
-  useEffect(() => {
-    if (!socket) return;
-    socket.on('connect', () => {});
-    socket.on('connect_error', (err) => {
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
-    });
-    socket.on('processUpdate', () => {
-      refetchData();
-      toast.info('Work orders updated in real-time', { autoClose: 2000 });
-      if (tableRef.current) tableRef.current.focus();
-    });
-    return () => {
-      socket.off('connect');
-      socket.off('connect_error');
-      socket.off('processUpdate');
-    };
-  }, [socket, refetchData]);
-
-  const debouncedSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);
-  useEffect(() => { setPage(0); }, [searchTerm, filterStatus, quickFilter]);
-  const handleSearchChange = (e) => {
-    const value = e.target.value.toLowerCase();
-    setSearchInput(value);
-    debouncedSearch(value);
-  };
-
-  const sortedProcesses = useMemo(() => {
-    const sortableProcesses = [...allProcesses];
-    if (sortConfig.key) {
-      sortableProcesses.sort((a, b) => {
-        let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
-        if (sortConfig.key === 'quantity') {
-          aValue = Number(aValue);
-          bValue = Number(bValue);
-        } else if (sortConfig.key === 'createdAt' || sortConfig.key === 'targetDate') {
-          aValue = new Date(aValue || 0);
-          bValue = new Date(bValue || 0);
-        }
-        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return sortableProcesses;
-  }, [allProcesses, sortConfig]);
-
-  const filteredProcesses = useMemo(() => {
-    return sortedProcesses.filter(item => {
-      const matchesSearch =
-        item.id?.toString().includes(searchTerm) ||
-        item.componentName?.toLowerCase().includes(searchTerm) ||
-        item.responsiblePerson?.toLowerCase().includes(searchTerm);
-      const matchesStatus =
-        filterStatus === 'All' ||
-        (filterStatus === 'Pending' && item.status === 'Pending') ||
-        (filterStatus === 'Completed' && item.status === 'Completed');
-      const matchesQuickFilter =
-        quickFilter === '' ||
-        (quickFilter === 'Overdue' && new Date(item.targetDate) < new Date() && item.status !== 'Completed') ||
-        (quickFilter === item.responsiblePerson);
-      return matchesSearch && matchesStatus && matchesQuickFilter;
-    });
-  }, [sortedProcesses, searchTerm, filterStatus, quickFilter]);
-
-  const paginatedProcesses = useMemo(() => {
-    if (viewMode === 'kanban') return filteredProcesses;
-    const start = page * itemsPerPage;
-    return filteredProcesses.slice(start, start + itemsPerPage);
-  }, [filteredProcesses, page, itemsPerPage, viewMode]);
-
-  const handleCreateWorkOrder = useCallback(async ({ order_id, component_id, quantity, responsible_person, target_date }) => {
-    const token = localStorage.getItem('token');
-    try {
-      if (!token) throw new Error("Authentication token missing.");
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const response = await fetch(`${backendUrl}/api/process`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ order_id, component_id, quantity, responsible_person, target_date }),
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create work order');
-      }
-      setPage(0);
-      setSearchInput('');
-      setFilterStatus('All');
-      setQuickFilter('');
-      setTimeout(() => refetchData(), 100);
-      setShowCreateForm(false);
-      toast.success('Work order created successfully');
-    } catch (err) {
-      toast.error(err.message);
-      throw err;
-    }
-  }, [refetchData]);
-
-  const handleUpdateProcessStatus = useCallback(async (workOrderId, { process_name, status, completion_date }) => {
-    const token = localStorage.getItem('token');
-    try {
-      if (!token) throw new Error("Authentication token missing.");
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-      const response = await fetch(`${backendUrl}/api/process/${workOrderId}/process-status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ process_name, status, completion_date }),
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update process status');
-      }
-      setTimeout(() => refetchData(), 100);
-      setShowEditForm(false);
-      setSelectedWorkOrder(null);
-      toast.success('Process status updated successfully');
-    } catch (err) {
-      toast.error(err.message);
-      throw err;
-    }
-  }, [refetchData]); 
-
-  const handleDragEnd = useCallback(async (result) => {
-    if (!result.destination) return;
-    const sourceStatus = result.source.droppableId;
-    const destStatus = result.destination.droppableId;
-    if (sourceStatus === destStatus) return;
-    const workOrder = filteredProcesses.find(item => item.id.toString() === result.draggableId);
-    if (!workOrder) return;
-    const completion_date = destStatus === 'Completed' ? new Date().toISOString().split('T')[0] : '';
-    await handleUpdateProcessStatus(workOrder.id, {
-      process_name: workOrder.processes?.name || '',
-      status: destStatus,
-      completion_date,
-    });
-  }, [filteredProcesses, handleUpdateProcessStatus]);
-
-  const confirmUpdate = useCallback((workOrderId, formData) => {
-    if (window.confirm("Are you sure you want to update this process status?")) return handleUpdateProcessStatus(workOrderId, formData);
-    return Promise.reject(new Error("Update cancelled."));
-  }, [handleUpdateProcessStatus]);
-
-  const initiateEdit = useCallback((workOrder) => {
-    setSelectedWorkOrder(workOrder);
-    setShowEditForm(true);
-  }, []);
-
-  const showProcesses = useCallback((processes) => {
-    setSelectedProcesses(processes);
-    setShowProcessesModal(true);
-  }, []);
-
-  const getProcessProgress = (processes) => {
-    const completed = processes.filter(p => p.status === 'Completed').length;
-    return { completed, total: processes.length, percentage: processes.length ? (completed / processes.length) * 100 : 0 };
-  };
-
-  const ActionsDropdown = ({ workOrder, onEdit }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const dropdownRef = useRef(null);
-    useEffect(() => {
-      const handleClickOutside = (event) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-          setIsOpen(false);
-        }
-      };
-      document.addEventListener('mousedown', handleClickOutside); 
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-    return (
-      <div ref={dropdownRef} className="relative">
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="p-2 hover:bg-amber-100 rounded-full focus:outline-none focus:ring-2 focus:ring-amber-300"
-          aria-label={`Actions for work order ${workOrder.id}`}
-          aria-haspopup="true"
-          aria-expanded={isOpen}
-        >
-          <MoreVertical size={18} className="text-gray-600" />
-        </button>
-        {isOpen && (
-          <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-xl rounded-lg ring-1 ring-black ring-opacity-5">
-            <button
-              onClick={() => { onEdit(workOrder); setIsOpen(false); }}
-              className="flex items-center w-full px-4 py-3 text-sm text-gray-700 hover:bg-amber-100 focus:outline-none focus:bg-amber-100 transition-colors"
-            >
-              <Edit2 size={16} className="mr-3 text-amber-600" /> Update Process Status
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const handleSort = useCallback((key) => {
-    setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
-  }, []);
-
-  const responsiblePersons = useMemo(() => {
-    const persons = [...new Set(allProcesses.map(item => item.responsiblePerson).filter(Boolean))];
-    return persons.sort();
-  }, [allProcesses]);
-
-  if (!userRole) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-gray-800 text-2xl" role="alert">
-        Checking permissions...
-      </div>
-    );
+const statusBadgeClass = (status) => {
+  switch (status) {
+    case "Completed":
+      return "bg-green-600 text-white";
+    case "In Progress":
+      return "bg-yellow-600 text-white";
+    case "Pending":
+    default:
+      return "bg-gray-400 text-white";
   }
-  if (userRole !== 'admin') return (
-    <div className="min-h-screen flex items-center justify-center text-gray-800 text-2xl" role="alert">
-      Access Denied
-    </div>
-  );
-  if (isLoading && !allProcesses.length) return (
-    <div className="min-h-screen flex items-center justify-center" aria-live="polite">
-      <div className="text-gray-600 text-xl animate-pulse">Loading work orders...</div>
-    </div>
-  );
-  if (error && !showEditForm && !showCreateForm) return (
-    <div className="min-h-screen flex flex-col items-center justify-center text-red-700" role="alert">
-      <p>{error}</p>
-      <div className="mt-4 flex space-x-4">
+};
+
+// Derive component status from its processes — only look at backend-provided status
+const deriveComponentStatus = (component) => {
+  if (!component?.processes?.length) return "Pending";
+  
+  const processes = component.processes;
+  const allCompleted = processes.every(p => p.status === "Completed");
+  const anyInProgress = processes.some(p => p.status === "In Progress");
+  
+  if (allCompleted) return "Completed";
+  if (anyInProgress) return "In Progress";
+  return "Pending";
+};
+
+/* ========================================
+   MODAL COMPONENT
+   ======================================== */
+
+const Modal = ({ title, onClose, children, widthClass = "max-w-2xl" }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className={`w-full ${widthClass}`}>
+      <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 max-h-[90vh] overflow-y-auto">
         <button
-          onClick={() => refetchData()}
-          className="px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          onClick={onClose}
+          className="sticky top-4 right-4 float-right text-gray-500 hover:text-gray-700 z-10"
+          aria-label="Close"
         >
-          Retry
+          <X size={22} />
         </button>
-        {(error.includes('permission') || error.includes('token') || error.includes('Server error')) && (
-          <button
-            onClick={() => {
-              localStorage.removeItem('token');
-              navigate('/');
-            }}
-            className="px-4 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-red-300"
-          >
-            Log Out
-          </button>
-        )}
+        <div className="p-6 border-b">
+          <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
+        </div>
+        <div className="p-6">{children}</div>
       </div>
     </div>
+  </div>
+);
+
+/* ========================================
+   CREATE WORK ORDER FORM
+   ======================================== */
+
+function CreateWorkOrderForm({ orderId, instanceGroups, onClose, onCreated }) {
+  const [instanceGroupId, setInstanceGroupId] = useState("");
+  const [targetDate, setTargetDate] = useState(
+    new Date().toISOString().split("T")[0]
   );
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!instanceGroupId) {
+      toast.error("Please select a motor/instance");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const token = tokenGuard();
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}/work-orders`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            instance_group_id: instanceGroupId,
+            target_date: targetDate,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const data = await safeJson(res);
+        throw new Error(data?.error || `Failed to create work order (${res.status})`);
+      }
+
+      const workOrder = await res.json();
+      toast.success("Work order created successfully");
+      onCreated(workOrder);
+      onClose();
+    } catch (error) {
+      toast.error(error.message || "Failed to create work order");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      {/* Header */}
-      <div className="bg-white rounded-2xl shadow-lg px-8 py-6 mb-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-800">Work Order Board</h1>
-              <p className="text-gray-500 text-sm mt-1">Order #{orderId} • {totalItems} work orders</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setViewMode(viewMode === 'list' ? 'kanban' : 'list')}
-                className="p-2 bg-amber-100 text-gray-700 rounded-lg hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                aria-label={`Switch to ${viewMode === 'list' ? 'Kanban' : 'List'} view`}
-              >
-                {viewMode === 'list' ? <LayoutGrid size={20} /> : <LayoutList size={20} />}
-              </button>
-              <button
-                onClick={() => setShowCreateForm(true)}
-                className="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center font-medium transition-colors"
-                disabled={isLoading}
-                aria-label="Create new work order"
-              >
-                <PlusCircle className="mr-2" size={20} /> New Work Order
-              </button>
-            </div>
-          </div>
-        </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Motor / Instance *
+        </label>
+        <select
+          value={instanceGroupId}
+          onChange={(e) => setInstanceGroupId(e.target.value)}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+          required
+        >
+          <option value="">Select Motor/Instance</option>
+          {instanceGroups.map((ig) => (
+            <option key={ig.instanceGroupId} value={ig.instanceGroupId}>
+              {ig.instanceName} ({ig.instanceType})
+            </option>
+          ))}
+        </select>
       </div>
-      <div className="max-w-7xl mx-auto">
-        {/* Controls Bar */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 mb-8">
-          <div className="flex flex-wrap gap-6 items-center">
-            <div className="relative flex-grow min-w-64">
-              <label htmlFor="search-input" className="sr-only">Search work orders</label>
-              <input
-                id="search-input"
-                type="text"
-                placeholder="Search work orders by ID, component, or person..."
-                value={searchInput}
-                onChange={handleSearchChange}
-                className="w-full p-4 pl-12 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md"
-                aria-label="Search work orders"
-              />
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Target Date
+        </label>
+        <input
+          type="date"
+          value={targetDate}
+          onChange={(e) => setTargetDate(e.target.value)}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+        />
+      </div>
+
+      <div className="flex justify-end gap-3 pt-4">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={loading}
+          className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? "Creating..." : "Create Work Order"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/* ========================================
+   ADD COMPONENT TO WORK ORDER FORM
+   ======================================== */
+
+function AddComponentForm({ workOrder, components, onClose, onAdded }) {
+  const [componentId, setComponentId] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!componentId) {
+      toast.error("Please select a component");
+      return;
+    }
+
+    if (!Number.isInteger(Number(quantity)) || Number(quantity) <= 0) {
+      toast.error("Quantity must be a positive integer");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const token = tokenGuard();
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/work-orders/${workOrder.workOrderId}/components`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            component_id: componentId,
+            quantity: Number(quantity),
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const data = await safeJson(res);
+        throw new Error(data?.error || `Failed to add component (${res.status})`);
+      }
+
+      const component = await res.json();
+      toast.success("Component added to work order");
+      onAdded(component);
+      onClose();
+    } catch (error) {
+      toast.error(error.message || "Failed to add component");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Component *
+        </label>
+        <select
+          value={componentId}
+          onChange={(e) => setComponentId(e.target.value)}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+          required
+        >
+          <option value="">Select Component</option>
+          {components.map((comp) => (
+            <option key={comp.componentId} value={comp.componentId}>
+              {comp.componentName} ({comp.productType})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Quantity *
+        </label>
+        <input
+          type="number"
+          min="1"
+          step="1"
+          value={quantity}
+          onChange={(e) => setQuantity(e.target.value)}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+          required
+        />
+      </div>
+
+      <div className="flex justify-end gap-3 pt-4">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={loading}
+          className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? "Adding..." : "Add Component"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/* ========================================
+   ENHANCED PROCESS DETAIL MODAL WITH IN_USE AND COMPLETED
+   ======================================== */
+
+function ProcessDetailModal({ workOrderComponent, onClose, onUpdate }) {
+  const [processes, setProcesses] = useState(workOrderComponent.processes || []);
+  const [materials, setMaterials] = useState(workOrderComponent.materials || []);
+  const [availableStock, setAvailableStock] = useState([]);
+  const [activeTab, setActiveTab] = useState("materials");
+  
+  const [editingProcess, setEditingProcess] = useState(null);
+  const [showAddMaterial, setShowAddMaterial] = useState(false);
+  
+  const [processFormData, setProcessFormData] = useState({
+    completedQuantity: 0,
+    inUseQuantity: 0,
+    completionDate: "",
+    responsiblePerson: "",
+  });
+
+  const [materialFormData, setMaterialFormData] = useState({
+    rawMaterialId: "",
+    quantity: 1,
+  });
+
+  const totalPlannedMaterial = useMemo(() => 
+    materials.reduce((sum, m) => sum + m.quantity, 0), 
+    [materials]
+  );
+
+  const canEditProcesses = materials.length > 0;
+
+  useEffect(() => {
+    if (!materials.length) {
+      toast.error("⚠️ REQUIRED: Please add raw materials first before updating processes!", {
+        autoClose: false,
+        closeButton: true,
+      });
+    }
+  }, [materials]);
+
+  useEffect(() => {
+    fetchMaterials();
+    fetchAvailableStock();
+  }, [workOrderComponent.workOrderComponentId]);
+
+  const fetchMaterials = async () => {
+    try {
+      const token = tokenGuard();
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/components/${workOrderComponent.workOrderComponentId}/materials`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        setMaterials(data || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch materials:", err);
+    }
+  };
+
+  const fetchAvailableStock = async () => {
+    try {
+      const token = tokenGuard();
+      const res = await fetch(`${getBackendUrl()}/api/stock`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableStock(data.stock || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch stock:", error);
+    }
+  };
+
+  const startEditProcess = (process) => {
+    if (!canEditProcesses) {
+      toast.error("❌ Cannot edit process: Please add raw materials first in the 'Raw Materials' tab");
+      setActiveTab("materials");
+      return;
+    }
+
+    setEditingProcess(process);
+    setProcessFormData({
+      completedQuantity: process.completedQuantity || 0,
+      inUseQuantity: process.inUseQuantity || 0,
+      completionDate: process.completionDate || "",
+      responsiblePerson: process.responsiblePerson || "",
+    });
+  };
+
+  const handleSaveProcess = async () => {
+    if (!editingProcess) return;
+
+    const completedQty = Number(processFormData.completedQuantity);
+    const inUseQty = Number(processFormData.inUseQuantity);
+
+    if (!Number.isInteger(completedQty) || completedQty < 0) {
+      toast.error("Completed quantity must be a non-negative integer");
+      return;
+    }
+
+    if (!Number.isInteger(inUseQty) || inUseQty < 0) {
+      toast.error("In-use quantity must be a non-negative integer");
+      return;
+    }
+
+    if (!canEditProcesses) {
+      toast.error("Cannot update process without raw materials assigned");
+      return;
+    }
+
+    if (completedQty > totalPlannedMaterial) {
+      toast.error(
+        `Completed quantity (${completedQty}) cannot exceed planned material (${totalPlannedMaterial} units)`
+      );
+      return;
+    }
+
+    try {
+      const token = tokenGuard();
+
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/components/${workOrderComponent.workOrderComponentId}/process-status`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            process_id: editingProcess.processId,
+            completed_quantity: completedQty,
+            in_use_quantity: inUseQty,
+            completion_date: processFormData.completionDate || null,
+            responsible_person: processFormData.responsiblePerson || null,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const data = await safeJson(res);
+        throw new Error(data?.error || `Failed to update process (${res.status})`);
+      }
+
+      const updated = await res.json();
+
+      setProcesses((prev) =>
+        prev.map((p) =>
+          p.processId === editingProcess.processId
+            ? {
+                ...p,
+                status: updated.status,
+                completedQuantity: updated.completed_quantity,
+                inUseQuantity: updated.in_use_quantity,
+                completionDate: updated.completion_date,
+                responsiblePerson: updated.responsible_person,
+              }
+            : p
+        )
+      );
+
+      toast.success("Process updated successfully");
+      setEditingProcess(null);
+      if (onUpdate) onUpdate();
+    } catch (error) {
+      toast.error(error.message || "Failed to update process");
+    }
+  };
+
+  const handleAddMaterial = async (e) => {
+    e.preventDefault();
+
+    const rawMaterialId = Number(materialFormData.rawMaterialId);
+    const quantity = Number(materialFormData.quantity);
+
+    if (!rawMaterialId || !Number.isInteger(quantity) || quantity <= 0) {
+      toast.error("Please select a material and enter a valid quantity");
+      return;
+    }
+
+    try {
+      const token = tokenGuard();
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/components/${workOrderComponent.workOrderComponentId}/materials`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            raw_material_id: rawMaterialId,
+            quantity: quantity,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const data = await safeJson(res);
+        throw new Error(data?.error || "Failed to add material");
+      }
+
+      const newMaterial = await res.json();
+      
+      const stockItem = availableStock.find(s => s.productId === rawMaterialId);
+      
+      setMaterials((prev) => [
+        ...prev.filter(m => m.rawMaterialId !== rawMaterialId),
+        {
+          workOrderMaterialId: newMaterial.workOrderMaterialId,
+          rawMaterialId: newMaterial.rawMaterialId,
+          rawMaterialName: stockItem?.productName || "Unknown",
+          quantity: newMaterial.quantity,
+        },
+      ]);
+
+      toast.success("✅ Material added! You can now update processes.", {
+        autoClose: 3000,
+      });
+      setShowAddMaterial(false);
+      setMaterialFormData({ rawMaterialId: "", quantity: 1 });
+      if (onUpdate) onUpdate();
+    } catch (error) {
+      toast.error(error.message || "Failed to add material");
+    }
+  };
+
+  const handleDeleteMaterial = async (materialId) => {
+    if (!window.confirm("Are you sure you want to delete this material?")) {
+      return;
+    }
+
+    try {
+      const token = tokenGuard();
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/components/${workOrderComponent.workOrderComponentId}/materials/${materialId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to delete material");
+      }
+
+      setMaterials((prev) => prev.filter(m => m.workOrderMaterialId !== materialId));
+      toast.success("Material deleted successfully");
+      if (onUpdate) onUpdate();
+    } catch (error) {
+      toast.error(error.message || "Failed to delete material");
+    }
+  };
+
+  return (
+    <Modal
+      title={`${workOrderComponent.componentName} - Details`}
+      onClose={onClose}
+      widthClass="max-w-5xl"
+    >
+      <div className="space-y-4">
+        {/* Component Info */}
+        <div className="bg-gray-50 p-4 rounded-lg">
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <span className="text-gray-600">Component:</span>{" "}
+              <span className="font-medium">{workOrderComponent.componentName}</span>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setQuickFilter(quickFilter === 'Overdue' ? '' : 'Overdue')}
-                className={`px-3 py-1 text-sm rounded-full ${quickFilter === 'Overdue' ? 'bg-amber-500 text-white' : 'bg-amber-100 text-gray-700 hover:bg-amber-200'}`}
-                aria-label="Filter overdue work orders"
-              >
-                Overdue
-              </button>
-              {responsiblePersons.map(person => (
-                <button
-                  key={person}
-                  onClick={() => setQuickFilter(quickFilter === person ? '' : person)}
-                  className={`px-3 py-1 text-sm rounded-full ${quickFilter === person ? 'bg-amber-500 text-white' : 'bg-amber-100 text-gray-700 hover:bg-amber-200'}`}
-                  aria-label={`Filter by ${person}`}
-                >
-                  {person}
-                </button>
-              ))}
+            <div>
+              <span className="text-gray-600">Type:</span>{" "}
+              <span className="font-medium">{workOrderComponent.productType}</span>
             </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="p-4 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md"
-              aria-label="Filter work orders by status"
-            >
-              <option value="All">All Statuses</option>
-              <option value="Pending">Pending</option>
-              <option value="Completed">Completed</option>
-            </select>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-600">Sort:</span>
-              <select
-                value={sortConfig.key}
-                onChange={(e) => handleSort(e.target.value)}
-                className="p-4 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md text-sm"
-                aria-label="Sort work orders"
-              >
-                <option value="createdAt">Created Date</option>
-                <option value="id">Work Order ID</option>
-                <option value="componentName">Component Name</option>
-                <option value="targetDate">Target Date</option>
-                <option value="status">Status</option>
-                <option value="quantity">Quantity</option>
-              </select>
-              <button
-                onClick={() => setSortConfig(prev => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
-                className="p-2 border border-gray-300 rounded-lg hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                aria-label="Toggle sort direction"
-              >
-                <ArrowDownUp size={16} className="text-gray-600" />
-              </button>
+            <div>
+              <span className="text-gray-600">Quantity:</span>{" "}
+              <span className="font-medium">{workOrderComponent.quantity}</span>
             </div>
-            <button
-              onClick={() => refetchData()}
-              className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-colors shadow-md text-lg"
-              disabled={isLoading}
-              aria-label="Refresh work orders"
-            >
-              Refresh
-            </button>
           </div>
         </div>
-        {isLoading && allProcesses.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center bg-amber-50 py-2 rounded-lg" aria-live="polite">
-            Refreshing data...
-          </div>
-        )}
-        {/* Work Orders Display */}
-        {viewMode === 'list' ? (
-          <div className="space-y-4">
-            {paginatedProcesses.map(workOrder => {
-              const progress = getProcessProgress(workOrder.processes);
-              const isOverdue = new Date(workOrder.targetDate) < new Date() && workOrder.status !== 'Completed';
-              return (
-                <div key={workOrder.id} className="bg-white rounded-2xl shadow-lg border border-gray-200 hover:shadow-xl transition-shadow" role="region" aria-label={`Work order ${workOrder.id}`}>
-                  <div className="p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="flex items-center space-x-2">
-                          <Hash size={18} className="text-amber-600" />
-                          <span className="text-lg font-semibold text-gray-900">WO-{workOrder.id}</span>
-                        </div>
-                        <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          workOrder.status === 'Completed'
-                            ? 'bg-green-100 text-green-800'
-                            : isOverdue
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {workOrder.status === 'Completed' ? (
-                            <div className="flex items-center">
-                              <CheckCircle2 size={12} className="mr-1" />
-                              Completed
-                            </div>
-                          ) : isOverdue ? (
-                            <div className="flex items-center">
-                              <AlertCircle size={12} className="mr-1" />
-                              Overdue
-                            </div>
-                          ) : (
-                            <div className="flex items-center">
-                              <Clock size={12} className="mr-1" />
-                              In Progress
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <ActionsDropdown workOrder={workOrder} onEdit={initiateEdit} />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <h3 className="text-base font-medium text-gray-900">{workOrder.componentName}</h3>
-                        <p className="text-gray-500 mt-1">Quantity: {workOrder.quantity} units</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Responsible</p>
-                        <p className="font-medium text-gray-900 flex items-center">
-                          <User size={14} className="mr-1 text-amber-600" />
-                          {workOrder.responsiblePerson}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Target Date</p>
-                        <p className={`font-medium ${isOverdue ? 'text-red-600' : 'text-gray-900'} flex items-center`}>
-                          <Calendar size={14} className="mr-1 text-amber-600" />
-                          {formatDate(workOrder.targetDate)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-sm font-medium text-gray-900 flex items-center">
-                          <Activity size={14} className="mr-1 text-amber-600" />
-                          Process Status
-                        </h4>
-                        <button
-                          onClick={() => showProcesses(workOrder.processes)}
-                          className="text-amber-600 hover:text-amber-800 text-xs font-medium flex items-center"
-                          aria-label={`View process details for work order ${workOrder.id}`}
-                        >
-                          <Eye size={12} className="mr-1" /> Details
-                        </button>
-                      </div>
-                      <div className="flex justify-between text-xs text-gray-600 mb-1">
-                        <span>{progress.completed} of {progress.total} completed</span>
-                        <span>{Math.round(progress.percentage)}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-1.5">
-                        <div
-                          className="bg-amber-600 h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${progress.percentage}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {['Pending', 'In Progress', 'Completed'].map(status => (
-                <Droppable droppableId={status} key={status}>
-                  {(provided) => (
-                    <div
-                      className="bg-gray-50 rounded-2xl p-4"
-                      {...provided.droppableProps}
-                      ref={provided.innerRef}
-                    >
-                      <h3 className="text-lg font-semibold text-gray-900 mb-3">{status}</h3>
-                      {filteredProcesses
-                        .filter(item => item.status === status || (status === 'In Progress' && new Date(item.targetDate) < new Date() && item.status !== 'Completed'))
-                        .map((workOrder, index) => (
-                          <Draggable key={workOrder.id} draggableId={workOrder.id.toString()} index={index}>
-                            {(provided) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className="bg-white rounded-2xl shadow-lg border border-gray-200 mb-3 p-3"
-                                role="region"
-                                aria-label={`Work order ${workOrder.id}`}
-                              >
-                                <div className="flex justify-between items-start mb-2">
-                                  <div className="flex items-center space-x-2">
-                                    <Hash size={16} className="text-amber-600" />
-                                    <span className="text-base font-semibold text-gray-900">WO-{workOrder.id}</span>
-                                  </div>
-                                  <ActionsDropdown workOrder={workOrder} onEdit={initiateEdit} />
-                                </div>
-                                <h4 className="text-sm font-medium text-gray-900">{workOrder.componentName}</h4>
-                                <div className="text-xs text-gray-600 mt-1">
-                                  <p>Quantity: {workOrder.quantity} units</p>
-                                  <p className="flex items-center">
-                                    <User size={12} className="mr-1 text-amber-600" />
-                                    {workOrder.responsiblePerson}
-                                  </p>
-                                  <p className={`flex items-center ${new Date(workOrder.targetDate) < new Date() && workOrder.status !== 'Completed' ? 'text-red-600' : ''}`}>
-                                    <Calendar size={12} className="mr-1 text-amber-600" />
-                                    {formatDate(workOrder.targetDate)}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              ))}
-            </div>
-          </DragDropContext>
-        )}
-        {/* Pagination for List View */}
-        {viewMode === 'list' && totalItems > 0 && (
-          <div className="flex justify-between items-center mt-6 bg-white rounded-2xl shadow-lg border border-gray-200 p-4">
-            <div className="text-gray-600 text-sm">
-              Showing {paginatedProcesses.length} of {filteredProcesses.length} filtered work orders
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setPage(p => (p > 0 ? p - 1 : 0))}
-                disabled={page === 0}
-                className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                aria-label="Previous page"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <span className="px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm font-medium text-amber-800">
-                Page {page + 1} of {Math.ceil(filteredProcesses.length / itemsPerPage)}
-              </span>
-              <button
-                onClick={() => setPage(p => p + 1)}
-                disabled={(page + 1) * itemsPerPage >= filteredProcesses.length}
-                className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                aria-label="Next page"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
-          </div>
-        )}
-        {/* Empty State */}
-        {filteredProcesses.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-2xl shadow-lg border border-gray-200" role="alert">
-            <Package size={48} className="mx-auto mb-4 text-gray-400" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No work orders found</h3>
-            {searchTerm || filterStatus !== 'All' || quickFilter ? (
-              <p className="text-gray-600 mb-4">Try adjusting your search criteria or filters.</p>
-            ) : (
-              <p className="text-gray-600 mb-4">Get started by creating your first work order.</p>
-            )}
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center mx-auto"
-              aria-label="Create new work order"
-            >
-              <PlusCircle className="mr-2" size={18} /> Create Work Order
-            </button>
-          </div>
-        )}
-        {/* Create Work Order Modal */}
-        {showCreateForm && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="create-form-title">
-              <button
-                onClick={() => setShowCreateForm(false)}
-                className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                aria-label="Close create form"
-              >
-                <XCircle size={24} />
-              </button>
-              <h2 id="create-form-title" className="text-2xl font-bold mb-6 text-gray-800">Create New Work Order</h2>
-              <CreateWorkOrderForm orderId={orderId} onSubmit={handleCreateWorkOrder} onClose={() => setShowCreateForm(false)} />
-            </div>
-          </div>
-        )}
-        {/* Edit Process Status Modal */}
-        {showEditForm && selectedWorkOrder && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="edit-form-title">
-              <button
-                onClick={() => setShowEditForm(false)}
-                className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                aria-label="Close edit form"
-              >
-                <XCircle size={24} />
-              </button>
-              <h2 id="edit-form-title" className="text-2xl font-bold mb-6 text-gray-800">Update Process Status</h2>
-              <EditProcessStatusForm workOrder={selectedWorkOrder} onSubmit={confirmUpdate} onClose={() => setShowEditForm(false)} />
-            </div>
-          </div>
-        )}
-        {/* Processes Detail Modal */}
-        {showProcessesModal && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden relative" role="dialog" aria-labelledby="processes-modal-title">
-              <button
-                onClick={() => setShowProcessesModal(false)}
-                className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                aria-label="Close processes modal"
-              >
-                <XCircle size={24} />
-              </button>
-              <h2 id="processes-modal-title" className="text-2xl font-bold mb-6 text-gray-800 p-4 border-b border-gray-200">Process Timeline</h2>
-              <div className="p-4 overflow-y-auto max-h-96">
-                <div className="space-y-4">
-                  {selectedProcesses.map((process, index) => (
-                    <div key={process.name} className="relative">
-                      {index < selectedProcesses.length - 1 && (
-                        <div className="absolute left-5 top-10 w-0.5 h-12 bg-gray-300"></div>
-                      )}
-                      <div className="flex items-start space-x-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                          process.status === 'Completed' ? 'bg-green-500' : 'bg-gray-400'
-                        }`}>
-                          {process.sequence}
-                        </div>
-                        <div className="flex-1 bg-gray-50 rounded-lg p-3">
-                          <div className="flex justify-between items-start mb-2">
-                            <h3 className="text-base font-medium text-gray-900">{process.name}</h3>
-                            <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              process.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {process.status}
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                            <div>
-                              <p className="text-gray-500">Responsible</p>
-                              <p className="font-medium text-gray-900">{process.responsible}</p>
-                            </div>
-                            <div>
-                              <p className="text-gray-500">Completion Date</p>
-                              <p className="font-medium text-gray-900">{formatDate(process.completion_date)}</p>
-                            </div>
-                            <div className="md:col-span-2">
-                              <p className="text-gray-500">Description</p>
-                              <p className="font-medium text-gray-900">{process.description}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+
+        {/* Warning Banner */}
+        {!canEditProcesses && (
+          <div className="bg-red-50 border-2 border-red-300 p-4 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={24} />
+              <div>
+                <h4 className="font-bold text-red-900 mb-1">Action Required: Add Raw Materials</h4>
+                <p className="text-sm text-red-800">
+                  You must assign raw materials before you can update process status. 
+                  Click the <strong>"Raw Materials"</strong> tab below and add at least one material.
+                </p>
               </div>
             </div>
           </div>
         )}
-        <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
+
+        {/* Material Summary */}
+        {canEditProcesses && (
+          <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-blue-900">
+                ✅ Total Planned Material: {totalPlannedMaterial} units
+              </span>
+              <div className="text-xs text-blue-700">
+                <span className="font-semibold">
+                  {processes.reduce((sum, p) => sum + (p.completedQuantity || 0), 0)} completed
+                </span>
+                {" • "}
+                <span className="font-semibold">
+                  {processes.reduce((sum, p) => sum + (p.inUseQuantity || 0), 0)} in use
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="border-b">
+          <div className="flex gap-4">
+            <button
+              onClick={() => setActiveTab("materials")}
+              className={`px-4 py-2 border-b-2 font-medium transition-colors ${
+                activeTab === "materials"
+                  ? "border-blue-600 text-blue-600"
+                  : !canEditProcesses 
+                    ? "border-red-500 text-red-600 animate-pulse" 
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Raw Materials ({materials.length})
+              {!canEditProcesses && (
+                <span className="ml-2 px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">
+                  Required
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("processes")}
+              className={`px-4 py-2 border-b-2 font-medium transition-colors ${
+                activeTab === "processes"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              } ${!canEditProcesses ? "opacity-50" : ""}`}
+              disabled={!canEditProcesses}
+            >
+              Processes ({processes.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Materials Tab */}
+        {activeTab === "materials" && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h4 className="font-semibold text-gray-700">Planned Raw Materials</h4>
+              <button
+                onClick={() => setShowAddMaterial(true)}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
+              >
+                <Plus size={16} />
+                Add Material
+              </button>
+            </div>
+
+            {materials.length ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-600 border-b">
+                      <th className="py-2 pr-4">Material Name</th>
+                      <th className="py-2 pr-4">Quantity Required</th>
+                      <th className="py-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {materials.map((material) => (
+                      <tr key={material.workOrderMaterialId} className="border-b hover:bg-gray-50">
+                        <td className="py-2 pr-4 font-medium">{material.rawMaterialName}</td>
+                        <td className="py-2 pr-4">{material.quantity}</td>
+                        <td className="py-2">
+                          <button
+                            onClick={() => handleDeleteMaterial(material.workOrderMaterialId)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete material"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <Package className="mx-auto mb-3 text-gray-400" size={48} />
+                <p className="text-gray-600 font-medium mb-2">No materials assigned yet</p>
+                <p className="text-sm text-gray-500 mb-4">
+                  Add raw materials to enable process tracking
+                </p>
+                <button
+                  onClick={() => setShowAddMaterial(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center gap-2"
+                >
+                  <Plus size={18} />
+                  Add Your First Material
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Processes Tab */}
+        {activeTab === "processes" && (
+          <div className="space-y-4">
+            {!canEditProcesses && (
+              <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg text-sm text-yellow-800">
+                <p className="font-medium">⚠️ Processes are locked</p>
+                <p>Add raw materials in the "Raw Materials" tab to unlock process editing.</p>
+              </div>
+            )}
+            
+            {processes.length ? (
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="min-w-[1100px] text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-600 border-b">
+                      <th className="py-2 pr-4">Seq</th>
+                      <th className="py-2 pr-4">Process Name</th>
+                      <th className="py-2 pr-4">Status</th>
+                      <th className="py-2 pr-4">In Use</th>
+                      <th className="py-2 pr-4">Completed</th>
+                      <th className="py-2 pr-4">Responsible</th>
+                      <th className="py-2 pr-4">Target Date</th>
+                      <th className="py-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {processes.map((process) => (
+                      <tr key={process.processId} className="border-b hover:bg-gray-50">
+                        <td className="py-2 pr-4">{process.sequence}</td>
+                        <td className="py-2 pr-4 font-medium">{process.processName}</td>
+                        <td className="py-2 pr-4">
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs ${statusBadgeClass(
+                              process.status
+                            )}`}
+                          >
+                            {process.status || "Pending"}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4">
+                          {canEditProcesses ? (
+                            <span className="font-medium text-blue-600">{process.inUseQuantity || 0}</span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-4">
+                          {canEditProcesses ? (
+                            <>
+                              <span className="font-medium">{process.completedQuantity || 0}</span>
+                              <span className="text-gray-500"> / {totalPlannedMaterial}</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-4">{process.responsiblePerson || "—"}</td>
+                        <td className="py-2 pr-4">{process.completionDate || "—"}</td>
+                        <td className="py-2">
+                          <button
+                            onClick={() => startEditProcess(process)}
+                            disabled={!canEditProcesses}
+                            className={`${
+                              canEditProcesses 
+                                ? "text-blue-600 hover:text-blue-800" 
+                                : "text-gray-300 cursor-not-allowed"
+                            }`}
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-8">
+                No processes defined for this component
+              </p>
+            )}
+          </div>
+        )}
       </div>
-    </div>
+
+      {/* Edit Process Modal */}
+      {editingProcess && (
+        <Modal
+          title={`Edit: ${editingProcess.processName}`}
+          onClose={() => setEditingProcess(null)}
+          widthClass="max-w-lg"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                In-Use Quantity *
+                <span className="text-xs text-gray-500 ml-2">
+                  (Materials currently being worked on)
+                </span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={processFormData.inUseQuantity}
+                onChange={(e) =>
+                  setProcessFormData({ ...processFormData, inUseQuantity: e.target.value })
+                }
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Completed Quantity *
+                <span className="text-xs text-gray-500 ml-2">
+                  (Max: {totalPlannedMaterial} units)
+                </span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                max={totalPlannedMaterial}
+                step="1"
+                value={processFormData.completedQuantity}
+                onChange={(e) =>
+                  setProcessFormData({ ...processFormData, completedQuantity: e.target.value })
+                }
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Responsible Person
+              </label>
+              <input
+                type="text"
+                value={processFormData.responsiblePerson}
+                onChange={(e) =>
+                  setProcessFormData({ ...processFormData, responsiblePerson: e.target.value })
+                }
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+                placeholder="e.g., John Doe"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Completion Date
+              </label>
+              <input
+                type="date"
+                value={processFormData.completionDate}
+                onChange={(e) =>
+                  setProcessFormData({ ...processFormData, completionDate: e.target.value })
+                }
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <button
+                onClick={() => setEditingProcess(null)}
+                className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveProcess}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Add Material Modal */}
+      {showAddMaterial && (
+        <Modal
+          title="Add Raw Material"
+          onClose={() => {
+            setShowAddMaterial(false);
+            setMaterialFormData({ rawMaterialId: "", quantity: 1 });
+          }}
+          widthClass="max-w-lg"
+        >
+          <form onSubmit={handleAddMaterial} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Raw Material *
+              </label>
+              <select
+                value={materialFormData.rawMaterialId}
+                onChange={(e) =>
+                  setMaterialFormData({ ...materialFormData, rawMaterialId: e.target.value })
+                }
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+                required
+              >
+                <option value="">Select Raw Material</option>
+                {availableStock.map((stock) => (
+                  <option key={stock.productId} value={stock.productId}>
+                    {stock.productName} (Stock: {stock.stockQuantity})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Quantity Required *
+              </label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={materialFormData.quantity}
+                onChange={(e) =>
+                  setMaterialFormData({ ...materialFormData, quantity: e.target.value })
+                }
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+                required
+              />
+            </div>
+
+            <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">
+              <p className="font-medium mb-1">Note:</p>
+              <p>
+                This material will be assigned to this specific component instance. 
+                The quantity represents how much of this material is needed for this work order component.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddMaterial(false);
+                  setMaterialFormData({ rawMaterialId: "", quantity: 1 });
+                }}
+                className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Add Material
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </Modal>
   );
 }
 
-const CreateWorkOrderForm = ({ orderId, onSubmit, onClose }) => {
-  const [formData, setFormData] = useState({
-    order_id: orderId,
-    component_id: '',
-    quantity: 0,
-    responsible_person: '',
-    target_date: '',
-  });
-  const [errors, setErrors] = useState({
-    component_id: '',
-    quantity: '',
-    responsible_person: '',
-    target_date: '',
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+/* ========================================
+   KANBAN BOARD
+   ======================================== */
 
-  const validateField = (name, value) => {
-    if (name === 'component_id' && !value) return 'Component ID is required';
-    if (name === 'quantity' && value <= 0) return 'Quantity must be greater than 0';
-    if (name === 'responsible_person' && !value.trim()) return 'Responsible person is required';
-    if (name === 'target_date' && !value) return 'Target date is required';
-    return '';
-  };
+function KanbanBoard({ workOrders, onRefresh }) {
+  const allComponents = useMemo(() => {
+    const components = [];
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    const processedValue = name === 'quantity' ? parseInt(value) || 0
-      : name === 'component_id' ? parseInt(value) || '' : value;
-    setFormData(prev => ({ ...prev, [name]: processedValue }));
-    setErrors(prev => ({ ...prev, [name]: validateField(name, processedValue) }));
-  };
+    // Only process Motor type work orders
+    workOrders
+      .filter(wo => wo.instanceType === "Motor")
+      .forEach((wo) => {
+        wo.components.forEach((comp) => {
+          components.push({
+            ...comp,
+            workOrderId: wo.workOrderId,
+            instanceName: wo.instanceName,
+            instanceType: wo.instanceType,
+            derivedStatus: deriveComponentStatus(comp),
+          });
+        });
+      });
 
-  const handleSave = async () => {
-    const fieldErrors = {
-      component_id: validateField('component_id', formData.component_id),
-      quantity: validateField('quantity', formData.quantity),
-      responsible_person: validateField('responsible_person', formData.responsible_person),
-      target_date: validateField('target_date', formData.target_date),
-    };
-    setErrors(fieldErrors);
-    if (Object.values(fieldErrors).some(err => err)) return;
+    return components;
+  }, [workOrders]);
+
+  const [selectedComponent, setSelectedComponent] = useState(null);
+
+  const handleDragEnd = async (result) => {
+    const { destination, source, draggableId } = result;
+
+    if (!destination) return;
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    ) {
+      return;
+    }
+
+    const newStatus = destination.droppableId;
+    const workOrderComponentId = draggableId;
+
     try {
-      setIsSubmitting(true);
-      await onSubmit(formData);
-    } finally {
-      setIsSubmitting(false);
+      const token = tokenGuard();
+      const component = allComponents.find(
+        (c) => c.workOrderComponentId === Number(workOrderComponentId)
+      );
+
+      if (!component) {
+        toast.error("Component not found");
+        return;
+      }
+
+      if (!component.materials || component.materials.length === 0) {
+        toast.error("❌ Cannot update status: Please add raw materials to this component first");
+        return;
+      }
+
+      const targetProcess =
+        component.processes.find((p) => p.status !== "Completed") ||
+        component.processes[0];
+
+      if (!targetProcess) {
+        toast.error("No processes found for this component");
+        return;
+      }
+
+      const totalPlannedMaterial = component.materials.reduce((s, m) => s + m.quantity, 0);
+      
+      let completedQty = targetProcess.completedQuantity || 0;
+      let inUseQty   = targetProcess.inUseQuantity || 0;
+      
+      if (newStatus === "Completed") {
+        completedQty = totalPlannedMaterial;
+        inUseQty = 0;
+      }
+
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/components/${workOrderComponentId}/process-status`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            process_id: targetProcess.processId,
+            completed_quantity: completedQty,
+            in_use_quantity: inUseQty,
+            completion_date: targetProcess.completionDate || null,
+            responsible_person: targetProcess.responsiblePerson || null,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const data = await safeJson(res);
+        throw new Error(data?.error || "Failed to update status");
+      }
+
+      toast.success("Status updated");
+      onRefresh();
+    } catch (error) {
+      toast.error(error.message || "Failed to update status");
     }
   };
 
-  return (
-    <form className="space-y-4" onSubmit={e => e.preventDefault()}>
-      <div>
-        <label htmlFor="create-order-id" className="text-gray-700 font-medium">
-          Order ID
-        </label>
-        <input
-          id="create-order-id"
-          type="number"
-          name="order_id"
-          value={formData.order_id}
-          disabled
-          className="w-full p-2 border rounded-lg bg-gray-100 text-sm"
-          aria-readonly="true"
-        />
-      </div>
-      <div>
-        <label htmlFor="create-component-id" className="text-gray-700 font-medium">
-          Component ID
-        </label>
-        <input
-          id="create-component-id"
-          type="number"
-          name="component_id"
-          value={formData.component_id}
-          onChange={handleChange}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.component_id}
-          aria-describedby={errors.component_id ? 'create-component-id-error' : undefined}
-          disabled={isSubmitting}
-        />
-        {errors.component_id && (
-          <p id="create-component-id-error" className="text-red-600 text-sm mt-1">
-            {errors.component_id}
-          </p>
-        )}
-      </div>
-      <div>
-        <label htmlFor="create-quantity" className="text-gray-700 font-medium">
-          Quantity
-        </label>
-        <input
-          id="create-quantity"
-          type="number"
-          name="quantity"
-          value={formData.quantity}
-          onChange={handleChange}
-          min="1"
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.quantity}
-          aria-describedby={errors.quantity ? 'create-quantity-error' : undefined}
-          disabled={isSubmitting}
-        />
-        {errors.quantity && (
-          <p id="create-quantity-error" className="text-red-600 text-sm mt-1">
-            {errors.quantity}
-          </p>
-        )}
-      </div>
-      <div>
-        <label htmlFor="create-responsible-person" className="text-gray-700 font-medium">
-          Responsible Person
-        </label>
-        <input
-          id="create-responsible-person"
-          type="text"
-          name="responsible_person"
-          value={formData.responsible_person}
-          onChange={handleChange}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.responsible_person}
-          aria-describedby={errors.responsible_person ? 'create-responsible-person-error' : undefined}
-          disabled={isSubmitting}
-        />
-        {errors.responsible_person && (
-          <p id="create-responsible-person-error" className="text-red-600 text-sm mt-1">
-            {errors.responsible_person}
-          </p>
-        )}
-      </div>
-      <div>
-        <label htmlFor="create-target-date" className="text-gray-700 font-medium">
-          Target Date
-        </label>
-        <input
-          id="create-target-date"
-          type="date"
-          name="target_date"
-          value={formData.target_date}
-          onChange={handleChange}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.target_date}
-          aria-describedby={errors.target_date ? 'create-target-date-error' : undefined}
-          disabled={isSubmitting}
-        />
-        {errors.target_date && (
-          <p id="create-target-date-error" className="text-red-600 text-sm mt-1">
-            {errors.target_date}
-          </p>
-        )}
-      </div>
-      <div className="flex justify-end space-x-4">
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          disabled={isSubmitting}
-          aria-label="Cancel"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
-          disabled={isSubmitting}
-          aria-label={isSubmitting ? 'Creating...' : 'Create'}
-        >
-          {isSubmitting ? 'Creating...' : 'Create'}
-        </button>
-      </div>
-    </form>
-  );
-};
-
-const EditProcessStatusForm = ({ workOrder, onSubmit, onClose }) => {
-  const [formData, setFormData] = useState({
-    process_name: workOrder.processes[0]?.name || '',
-    status: workOrder.processes?.status || 'Pending',
-    completion_date: workOrder.processes?.completion_date || '',
-  });
-  const [errors, setErrors] = useState({
-    process_name: '',
-    status: '',
-    completion_date: '',
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const validateField = (name, value) => {
-    if (name === 'process_name' && !value) return 'Process name is required';
-    if (name === 'status' && !['Pending', 'Completed'].includes(value)) return 'Status must be Pending or Completed';
-    if (name === 'completion_date' && value && isNaN(new Date(value))) return 'Invalid completion date';
-    return '';
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    setErrors(prev => ({ ...prev, [name]: validateField(name, value) }));
-  };
-
-  const handleSave = async () => {
-    const fieldErrors = {
-      process_name: validateField('process_name', formData.process_name),
-      status: validateField('status', formData.status),
-      completion_date: validateField('completion_date', formData.completion_date),
+  const componentsByStatus = useMemo(() => {
+    const grouped = {
+      Pending: [],
+      "In Progress": [],
+      Completed: [],
     };
-    setErrors(fieldErrors);
-    if (Object.values(fieldErrors).some(err => err)) return;
-    try {
-      setIsSubmitting(true);
-      await onSubmit(workOrder.id, formData);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+
+    allComponents.forEach((comp) => {
+      const status = comp.derivedStatus;
+      if (grouped[status]) {
+        grouped[status].push(comp);
+      }
+    });
+
+    return grouped;
+  }, [allComponents]);
 
   return (
-    <form className="space-y-4" onSubmit={e => e.preventDefault()}>
-      <div>
-        <label htmlFor="edit-process-name" className="text-gray-700 font-medium">
-          Process Name
-        </label>
-        <select
-          id="edit-process-name"
-          name="process_name"
-          value={formData.process_name}
-          onChange={handleChange}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.process_name}
-          aria-describedby={errors.process_name ? 'edit-process-name-error' : undefined}
-          disabled={isSubmitting}
-        >
-          {workOrder.processes.map((process) => (
-            <option key={process.name} value={process.name}>
-              {process.name}
-            </option>
+    <>
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {Object.entries(STATUS_COLUMNS).map(([status, config]) => (
+            <div key={status} className="flex flex-col">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-1">
+                  {config.label}
+                </h3>
+                <p className="text-sm text-gray-500">
+                  {componentsByStatus[status].length} components
+                </p>
+              </div>
+
+              <Droppable droppableId={status}>
+                {(provided, snapshot) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className={`flex-1 p-4 rounded-lg border-2 ${
+                      config.color
+                    } ${
+                      snapshot.isDraggingOver ? "bg-blue-50" : ""
+                    } min-h-[400px]`}
+                  >
+                    <div className="space-y-3">
+                      {componentsByStatus[status].map((component, index) => {
+                        const totalPlanned = component.materials?.reduce((s, m) => s + m.quantity, 0) || 0;
+                        const totalCompleted = component.processes?.reduce((s, p) => s + (p.completedQuantity || 0), 0) || 0;
+                        const totalInUse = component.processes?.reduce((s, p) => s + (p.inUseQuantity || 0), 0) || 0;
+                        const progressPercent = totalPlanned > 0 ? (totalCompleted / totalPlanned) * 100 : 0;
+
+                        return (
+                          <Draggable
+                            key={component.workOrderComponentId}
+                            draggableId={String(component.workOrderComponentId)}
+                            index={index}
+                          >
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`bg-white p-4 rounded-lg shadow-sm border ${
+                                  snapshot.isDragging ? "shadow-lg" : ""
+                                } cursor-pointer hover:shadow-md transition-shadow`}
+                                onClick={() => setSelectedComponent(component)}
+                              >
+                                <div className="flex justify-between items-start mb-2">
+                                  <h4 className="font-semibold text-gray-800">
+                                    {component.componentName}
+                                  </h4>
+                                  <span className="text-xs bg-gray-100 px-2 py-1 rounded">
+                                    Qty: {component.quantity}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 mb-2">
+                                  {component.instanceName} ({component.instanceType})
+                                </p>
+                                <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                                  <User size={12} />
+                                  {component.processes[0]?.responsiblePerson || "Unassigned"}
+                                </div>
+                                <div className="mt-2 space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                      <div
+                                        className="bg-blue-600 h-2 rounded-full transition-all"
+                                        style={{ width: `${progressPercent}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-xs text-gray-500">
+                                      {totalPlanned > 0 ? `${totalCompleted}/${totalPlanned}` : "—"}
+                                    </span>
+                                  </div>
+                                  {totalInUse > 0 && (
+                                    <div className="text-xs text-blue-600">
+                                      🔄 {totalInUse} in use
+                                    </div>
+                                  )}
+                                </div>
+                                {!component.materials?.length && (
+                                  <div className="mt-2 flex items-center gap-1 text-xs text-orange-600">
+                                    <AlertCircle size={12} />
+                                    <span>No materials</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </Draggable>
+                        );
+                      })}
+                      {provided.placeholder}
+                    </div>
+                  </div>
+                )}
+              </Droppable>
+            </div>
           ))}
-        </select>
-        {errors.process_name && (
-          <p id="edit-process-name-error" className="text-red-600 text-sm mt-1">
-            {errors.process_name}
-          </p>
-        )}
-      </div>
-      <div>
-        <label htmlFor="edit-status" className="text-gray-700 font-medium">
-          Status
-        </label>
-        <select
-          id="edit-status"
-          name="status"
-          value={formData.status}
-          onChange={handleChange}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.status}
-          aria-describedby={errors.status ? 'edit-status-error' : undefined}
-          disabled={isSubmitting}
-        >
-          <option value="Pending">Pending</option>
-          <option value="Completed">Completed</option>
-        </select>
-        {errors.status && (
-          <p id="edit-status-error" className="text-red-600 text-sm mt-1">
-            {errors.status}
-          </p>
-        )}
-      </div>
-      <div>
-        <label htmlFor="edit-completion-date" className="text-gray-700 font-medium">
-          Completion Date
-        </label>
-        <input
-          id="edit-completion-date"
-          type="date"
-          name="completion_date"
-          value={formData.completion_date}
-          onChange={handleChange}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          aria-invalid={!!errors.completion_date}
-          aria-describedby={errors.completion_date ? 'edit-completion-date-error' : undefined}
-          disabled={isSubmitting}
-        />
-        {errors.completion_date && (
-          <p id="edit-completion-date-error" className="text-red-600 text-sm mt-1">
-            {errors.completion_date}
-          </p>
-        )}
-      </div>
-      <div className="flex justify-end space-x-4">
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          disabled={isSubmitting}
-          aria-label="Cancel"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
-          disabled={isSubmitting}
-          aria-label={isSubmitting ? 'Saving...' : 'Save'}
-        >
-          {isSubmitting ? 'Saving...' : 'Save'}
-        </button>
-      </div>
-    </form>
-  );
-};
+        </div>
+      </DragDropContext>
 
-export default MotorProcessPage;
+      {selectedComponent && (
+        <ProcessDetailModal
+          workOrderComponent={selectedComponent}
+          onClose={() => setSelectedComponent(null)}
+          onUpdate={onRefresh}
+        />
+      )}
+    </>
+  );
+}
+
+/* ========================================
+   MAIN COMPONENT
+   ======================================== */
+
+export default function ProcessManagement({ socket }) {
+  const { orderId } = useParams();
+
+  const [workOrders, setWorkOrders] = useState([]);
+  const [components, setComponents] = useState([]);
+  const [instanceGroups, setInstanceGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [showCreateWorkOrder, setShowCreateWorkOrder] = useState(false);
+  const [showAddComponent, setShowAddComponent] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState("kanban");
+
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on("processUpdate", () => {
+      console.log("Process update received");
+      fetchWorkOrders();
+    });
+
+    return () => {
+      socket.off("processUpdate");
+    };
+  }, [socket]);
+
+  const fetchWorkOrders = useCallback(async () => {
+    try {
+      const token = tokenGuard();
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}?force_refresh=true`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch work orders");
+      }
+
+      const data = await res.json();
+      // ── Only keep Motor type work orders ──
+      setWorkOrders(
+        (data.workOrders || []).filter(
+          wo => wo.instanceType === "Motor"
+        )
+      );
+    } catch (error) {
+      toast.error(error.message || "Failed to load work orders");
+    }
+  }, [orderId]);
+
+  const fetchComponents = useCallback(async () => {
+    try {
+      const token = tokenGuard();
+      const res = await fetch(`${getBackendUrl()}/api/process/components`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+
+      if (res.ok) {
+        setComponents(await res.json());
+      }
+    } catch (error) {
+      console.error("Failed to fetch components:", error);
+    }
+  }, []);
+
+  const fetchInstanceGroups = useCallback(async () => {
+    try {
+      const token = tokenGuard();
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}/instance-groups`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        // ── Only keep Motor type instances ──
+        setInstanceGroups(
+          data.filter(ig => ig.instanceType === "Motor")
+        );
+      }
+    } catch (error) {
+      console.error("Failed to fetch instance groups:", error);
+    }
+  }, [orderId]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchWorkOrders();
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await Promise.all([
+        fetchWorkOrders(),
+        fetchComponents(),
+        fetchInstanceGroups(),
+      ]);
+      setLoading(false);
+    })();
+  }, [fetchWorkOrders, fetchComponents, fetchInstanceGroups]);
+
+  const filteredWorkOrders = useMemo(() => {
+    // Only consider Motor work orders
+    const motorWOs = workOrders.filter(
+      wo => wo.instanceType === "Motor"
+    );
+
+    if (!searchQuery.trim()) return motorWOs;
+
+    const q = searchQuery.toLowerCase();
+    return motorWOs.filter(
+      wo =>
+        wo.instanceName?.toLowerCase().includes(q) ||
+        wo.components.some(c =>
+          c.componentName?.toLowerCase().includes(q)
+        )
+    );
+  }, [workOrders, searchQuery]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="animate-spin mx-auto mb-4" size={48} />
+          <p className="text-gray-600">Loading processes...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 p-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">
+            Process Management
+          </h1>
+          <p className="text-gray-600">Order #{orderId}</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
+          <div className="flex flex-wrap gap-4 items-center justify-between">
+            <div className="flex gap-4 items-center flex-1">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  type="text"
+                  placeholder="Search motors or components..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+                />
+              </div>
+
+              <div className="flex gap-2 border rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode("kanban")}
+                  className={`px-4 py-2 rounded ${
+                    viewMode === "kanban"
+                      ? "bg-blue-600 text-white"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  Kanban
+                </button>
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`px-4 py-2 rounded ${
+                    viewMode === "list"
+                      ? "bg-blue-600 text-white"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  List
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="px-4 py-2 rounded-lg border hover:bg-gray-50 flex items-center gap-2"
+              >
+                <RefreshCw size={18} className={refreshing ? "animate-spin" : ""} />
+                Refresh
+              </button>
+              <button
+                onClick={() => setShowCreateWorkOrder(true)}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2"
+              >
+                <Plus size={18} />
+                New Work Order
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {viewMode === "kanban" ? (
+          <KanbanBoard workOrders={filteredWorkOrders} onRefresh={handleRefresh} />
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    <th className="text-left p-4 font-semibold">Work Order</th>
+                    <th className="text-left p-4 font-semibold">Motor/Instance</th>
+                    <th className="text-left p-4 font-semibold">Components</th>
+                    <th className="text-left p-4 font-semibold">Target Date</th>
+                    <th className="text-left p-4 font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredWorkOrders.map((wo) => (
+                    <tr key={wo.workOrderId} className="border-b hover:bg-gray-50">
+                      <td className="p-4">
+                        <span className="font-mono text-sm">WO-{wo.workOrderId}</span>
+                      </td>
+                      <td className="p-4">
+                        <div>
+                          <p className="font-medium">{wo.instanceName}</p>
+                          <p className="text-sm text-gray-500">{wo.instanceType}</p>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <div className="space-y-1">
+                          {wo.components.map((comp) => (
+                            <div
+                              key={comp.workOrderComponentId}
+                              className="flex items-center gap-2"
+                            >
+                              <span className="text-sm">{comp.componentName}</span>
+                              <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">
+                                Qty: {comp.quantity}
+                              </span>
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded ${statusBadgeClass(
+                                  deriveComponentStatus(comp)
+                                )}`}
+                              >
+                                {deriveComponentStatus(comp)}
+                              </span>
+                            </div>
+                          ))}
+                          {wo.components.length === 0 && (
+                            <span className="text-sm text-gray-400">No components yet</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span className="text-sm">{wo.targetDate || "—"}</span>
+                      </td>
+                      <td className="p-4">
+                        <button
+                          onClick={() => setShowAddComponent(wo)}
+                          className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+                        >
+                          <Plus size={14} />
+                          Add Component
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredWorkOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-gray-500">
+                        No work orders found. Create one to get started.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {showCreateWorkOrder && (
+        <Modal title="Create Work Order" onClose={() => setShowCreateWorkOrder(false)}>
+          <CreateWorkOrderForm
+            orderId={orderId}
+            instanceGroups={instanceGroups}
+            onClose={() => setShowCreateWorkOrder(false)}
+            onCreated={handleRefresh}
+          />
+        </Modal>
+      )}
+
+      {showAddComponent && (
+        <Modal
+          title={`Add Component - ${showAddComponent.instanceName}`}
+          onClose={() => setShowAddComponent(null)}
+        >
+          <AddComponentForm
+            workOrder={showAddComponent}
+            components={components}
+            onClose={() => setShowAddComponent(null)}
+            onAdded={handleRefresh}
+          />
+        </Modal>
+      )}
+
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        closeOnClick
+        pauseOnHover
+        draggable
+      />
+    </div>
+  );
+}

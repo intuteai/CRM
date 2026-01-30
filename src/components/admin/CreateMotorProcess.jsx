@@ -9,14 +9,17 @@ import {
   X,
   Calendar,
   Package,
-  AlertCircle,
   User,
+  Plus,
+  Trash2,
+  AlertCircle,
 } from "lucide-react";
 import "react-toastify/dist/ReactToastify.css";
-import AddMotorModal from "./AddMotorModal"; // Added import
+import AddMotorModal from "./AddMotorModal";
 
 /* ---------- shared utils ---------- */
 const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
+
 async function safeJson(res) {
   const txt = await res.text();
   try {
@@ -25,9 +28,9 @@ async function safeJson(res) {
     return null;
   }
 }
+
 const STAGE_LIST = ["Assembly", "Testing", "PDI", "Packing", "Dispatch"];
 
-// the ordered columns you asked for
 const DESIRED_COMPONENT_ORDER = [
   "Shell",
   "Stack",
@@ -38,13 +41,12 @@ const DESIRED_COMPONENT_ORDER = [
   "Bearing Plate",
   "Front Flange",
   "Rear Flange",
-  ...STAGE_LIST, // appended at the end
+  ...STAGE_LIST,
 ];
 
 const normalizeNameKey = (s = "") =>
   s.toLowerCase().replace(/\s+/g, " ").trim();
 
-// Normalize instance group objects to a consistent shape the UI expects
 const normalizeMotor = (m) => ({
   ...m,
   instance_group_id:
@@ -54,7 +56,7 @@ const normalizeMotor = (m) => ({
   instance_type: m?.instance_type ?? m?.instanceType ?? m?.type ?? "",
 });
 
-// Status helpers (used only for work orders/components, not stages)
+// Status helpers
 const DISPLAY_STATUS = {
   Pending: "Yet To Start",
   "In Progress": "In Progress",
@@ -77,10 +79,10 @@ const statusToBadgeClass = (status) => {
 const Modal = ({ title, onClose, children, widthClass = "max-w-2xl" }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
     <div className={`w-full ${widthClass}`}>
-      <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200">
+      <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 text-gray-500 hover:text-gray-700"
+          className="sticky top-4 right-4 float-right text-gray-500 hover:text-gray-700 z-10"
           aria-label="Close"
         >
           <X size={22} />
@@ -100,25 +102,47 @@ function ProcessRowEditor({
   onChange,
   onCancel,
   onSave,
-  workOrderQuantity,
+  maxAllowedQty,
   processes,
 }) {
   const [error, setError] = useState("");
+
+  const otherProcessesInUse = useMemo(() => {
+    return processes
+      .filter((p) => p.id !== row.id)
+      .reduce((sum, p) => sum + Number(p.inUseQuantity || 0), 0);
+  }, [processes, row.id]);
+
   const handleSave = () => {
     const completedQty = Number(row.completedQuantity || 0);
-    const rawQty = Number(row.rawQtyUsed || 0);
+    const inUseQty = Number(row.inUseQuantity || 0);
+
     if (!Number.isInteger(completedQty) || completedQty < 0) {
       setError("Completed quantity must be a non-negative integer");
       return;
     }
-    if (!Number.isInteger(rawQty) || rawQty < 0) {
-      setError("Raw quantity used must be a non-negative integer");
+
+    if (!Number.isInteger(inUseQty) || inUseQty < 0) {
+      setError("In-use quantity must be a non-negative integer");
       return;
     }
-    if (completedQty > rawQty) {
-      setError("Completed quantity cannot exceed raw quantity used");
+
+    if (completedQty > maxAllowedQty) {
+      setError(
+        `Completed quantity (${completedQty}) cannot exceed available material (${maxAllowedQty})`
+      );
       return;
     }
+
+    const totalInUse = otherProcessesInUse + inUseQty;
+    if (totalInUse > maxAllowedQty) {
+      setError(
+        `Total in-use across all processes (${totalInUse}) would exceed available material (${maxAllowedQty}). ` +
+        `Other processes are using ${otherProcessesInUse}.`
+      );
+      return;
+    }
+
     if (
       row.responsiblePerson &&
       (typeof row.responsiblePerson !== "string" ||
@@ -127,21 +151,39 @@ function ProcessRowEditor({
       setError("Responsible person must be a string with max length 255");
       return;
     }
-    const totalCompletedQty = processes
-      .filter((p) => p.id !== row.id)
-      .reduce((sum, p) => sum + Number(p.completedQuantity || 0), 0);
-    const newTotalCompletedQty = totalCompletedQty + completedQty;
-    if (newTotalCompletedQty > workOrderQuantity) {
-      setError(
-        `Total completed quantity (${newTotalCompletedQty}) cannot exceed work order quantity (${workOrderQuantity})`
-      );
-      return;
-    }
+
     setError("");
     onSave();
   };
+
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium text-blue-900">📊 Material Status</span>
+        </div>
+        <div className="mt-2 space-y-1 text-sm text-blue-800">
+          <div>
+            Total Available: <span className="font-semibold">{maxAllowedQty}</span>
+          </div>
+          <div>
+            Other Processes In-Use:{" "}
+            <span className="font-semibold">{otherProcessesInUse}</span>
+          </div>
+          <div>
+            This Process In-Use:{" "}
+            <span className="font-semibold">{row.inUseQuantity || 0}</span>
+          </div>
+          <div className="pt-1 border-t border-blue-300">
+            Total In-Use:{" "}
+            <span className="font-semibold">
+              {otherProcessesInUse + Number(row.inUseQuantity || 0)}
+            </span>{" "}
+            / {maxAllowedQty}
+          </div>
+        </div>
+      </div>
+
       <div>
         <label className="block text-sm text-gray-700 mb-1">
           Responsible Person
@@ -149,13 +191,12 @@ function ProcessRowEditor({
         <input
           type="text"
           value={row.responsiblePerson || ""}
-          onChange={(e) =>
-            onChange({ ...row, responsiblePerson: e.target.value })
-          }
+          onChange={(e) => onChange({ ...row, responsiblePerson: e.target.value })}
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
           placeholder="e.g., Asha"
         />
       </div>
+
       <div>
         <label className="block text-sm text-gray-700 mb-1">Target Date</label>
         <input
@@ -165,37 +206,52 @@ function ProcessRowEditor({
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm text-gray-700 mb-1">
-            Raw Quantity Used
-          </label>
-          <input
-            type="number"
-            value={row.rawQtyUsed ?? ""}
-            onChange={(e) => onChange({ ...row, rawQtyUsed: e.target.value })}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-            min="0"
-            step="1"
-          />
-        </div>
-        <div>
-          <label className="block text-sm text-gray-700 mb-1">
-            Completed Quantity
-          </label>
-          <input
-            type="number"
-            value={row.completedQuantity ?? ""}
-            onChange={(e) =>
-              onChange({ ...row, completedQuantity: e.target.value })
-            }
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-            min="0"
-            step="1"
-          />
-        </div>
+
+      <div>
+        <label className="block text-sm text-gray-700 mb-1">
+          In-Use Quantity
+          <span className="ml-2 text-xs text-gray-500">
+            (Materials currently being worked on - shared globally)
+          </span>
+        </label>
+        <input
+          type="number"
+          value={row.inUseQuantity ?? ""}
+          onChange={(e) => onChange({ ...row, inUseQuantity: e.target.value })}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          min="0"
+          step="1"
+          placeholder="0"
+        />
       </div>
-      {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
+
+      <div>
+        <label className="block text-sm text-gray-700 mb-1">
+          Completed Quantity
+          <span className="ml-2 text-xs text-gray-500">
+            (Finished work - independent per process)
+          </span>
+        </label>
+        <input
+          type="number"
+          value={row.completedQuantity ?? ""}
+          onChange={(e) => onChange({ ...row, completedQuantity: e.target.value })}
+          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          min="0"
+          step="1"
+          placeholder="0"
+        />
+      </div>
+
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={18} />
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-end gap-3">
         <button
           onClick={onCancel}
@@ -215,56 +271,33 @@ function ProcessRowEditor({
 }
 
 function MaterialEditor({ material, onCancel, onSave }) {
-  const [quantityPerUnit, setQuantityPerUnit] = useState(
-    material.quantityPerUnit || 0
-  );
-  const [requiredQuantity, setRequiredQuantity] = useState(
-    material.requiredQuantity || 0
-  );
+  const [quantity, setQuantity] = useState(material.quantity || 0);
   const [error, setError] = useState("");
+
   const handleSave = () => {
-    const qtyPerUnit = Number(quantityPerUnit);
-    const reqQty = Number(requiredQuantity);
-    if (!Number.isInteger(qtyPerUnit) || qtyPerUnit < 0) {
-      setError("Quantity per unit must be a non-negative integer");
+    const qty = Number(quantity);
+
+    if (!Number.isInteger(qty) || qty <= 0) {
+      setError("Quantity must be a positive integer");
       return;
     }
-    if (!Number.isInteger(reqQty) || reqQty < 0) {
-      setError("Required quantity must be a non-negative integer");
-      return;
-    }
-    if (qtyPerUnit < reqQty) {
-      setError("Required quantity cannot exceed quantity per unit");
-      return;
-    }
+
     setError("");
-    onSave(qtyPerUnit, reqQty);
+    onSave(qty);
   };
+
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
       <div>
         <label className="block text-sm text-gray-700 mb-1">
-          Quantity per Unit (Raw Material ID: {material.rawMaterialId})
+          Quantity (Raw Material ID: {material.rawMaterialId})
         </label>
         <input
           type="number"
-          value={quantityPerUnit}
-          onChange={(e) => setQuantityPerUnit(e.target.value)}
+          value={quantity}
+          onChange={(e) => setQuantity(e.target.value)}
           className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          min="0"
-          step="1"
-        />
-      </div>
-      <div>
-        <label className="block text-sm text-gray-700 mb-1">
-          Required Quantity (Raw Material ID: {material.rawMaterialId})
-        </label>
-        <input
-          type="number"
-          value={requiredQuantity}
-          onChange={(e) => setRequiredQuantity(e.target.value)}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
-          min="0"
+          min="1"
           step="1"
         />
       </div>
@@ -287,7 +320,255 @@ function MaterialEditor({ material, onCancel, onSave }) {
   );
 }
 
-/* Stage editor (for order-level stages like Assembly/Testing/...) */
+function AddMaterialModal({ wocId, onClose, onAdded }) {
+  const [stockItems, setStockItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [quantity, setQuantity] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) throw new Error("No auth token");
+
+        const res = await fetch(`${getBackendUrl()}/api/stock?limit=10000&offset=0`, {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        });
+
+        if (!res.ok) throw new Error(`Stock API failed: ${res.status}`);
+
+        const data = await res.json();
+
+        if (!mounted) return;
+
+        let items = Array.isArray(data)
+          ? data
+          : data?.items || data?.data || [];
+
+        const normalizedItems = items.map((item) => ({
+          productId: item.productId || item.product_id || item.id,
+          productName:
+            item.productName || item.product_name || item.name || item.description,
+          productCode: item.productCode || item.product_code,
+          stockQuantity: item.stockQuantity || item.stock_quantity || 0,
+          price: item.price || 0,
+          location: item.location || "",
+          imageUrl: item.imageUrl || item.image_url || null,
+        }));
+
+        setStockItems(normalizedItems);
+      } catch (err) {
+        console.error("Failed to load stock items:", err);
+        if (mounted) toast.error("Could not load raw materials list");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const filteredItems = useMemo(() => {
+    if (!searchTerm.trim()) return stockItems;
+    const q = searchTerm.toLowerCase();
+    return stockItems.filter(
+      (item) =>
+        (item.productName || "").toLowerCase().includes(q) ||
+        (item.productCode || "").toLowerCase().includes(q)
+    );
+  }, [stockItems, searchTerm]);
+
+  const handleSelectItem = (item) => {
+    setSelectedItem(item);
+    setSearchTerm(item.productName || `Product ${item.productId}`);
+    setShowDropdown(false);
+  };
+
+  const handleAdd = async () => {
+    if (!selectedItem) {
+      toast.error("Please select a raw material");
+      return;
+    }
+
+    const qty = Number(quantity);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      toast.error("Please enter a positive integer quantity");
+      return;
+    }
+
+    setAddBusy(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/components/${wocId}/materials`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            raw_material_id: Number(selectedItem.productId),
+            quantity: qty,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const errData = await safeJson(res);
+        throw new Error(errData?.error || `HTTP ${res.status}`);
+      }
+
+      toast.success("Material added successfully");
+      onAdded();
+      onClose();
+    } catch (err) {
+      console.error("Add material failed:", err);
+      toast.error(`Failed to add material: ${err.message}`);
+    } finally {
+      setAddBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Add Raw Material" onClose={onClose} widthClass="max-w-md">
+      <div className="space-y-5">
+        <div className="relative">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Raw Material
+          </label>
+
+          {loading ? (
+            <div className="py-3 text-gray-500 text-center">Loading materials…</div>
+          ) : stockItems.length === 0 ? (
+            <div className="py-3 text-amber-700 text-center">
+              No raw materials available in stock
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setShowDropdown(true);
+                  setSelectedItem(null);
+                }}
+                onFocus={() => setShowDropdown(true)}
+                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-300"
+                placeholder="Search materials..."
+                disabled={addBusy}
+              />
+
+              {showDropdown && filteredItems.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {filteredItems.map((item) => {
+                    const name = item.productName || `Product ${item.productId}`;
+                    const code = item.productCode ? ` [${item.productCode}]` : "";
+                    const stock = item.stockQuantity;
+                    const location = item.location ? ` • ${item.location}` : "";
+
+                    return (
+                      <div
+                        key={item.productId}
+                        onClick={() => handleSelectItem(item)}
+                        className="px-4 py-3 hover:bg-amber-50 cursor-pointer border-b last:border-0"
+                      >
+                        <div className="font-medium text-gray-800">
+                          {name}
+                          {code}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Stock: <span className="font-semibold">{stock}</span>
+                          {location}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {showDropdown && filteredItems.length === 0 && searchTerm && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg p-4 text-center text-gray-500">
+                  No materials found matching "{searchTerm}"
+                </div>
+              )}
+
+              {selectedItem && (
+                <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-amber-900">
+                        {selectedItem.productName}
+                      </div>
+                      <div className="text-sm text-amber-700">
+                        Available: {selectedItem.stockQuantity}
+                        {selectedItem.location && ` • ${selectedItem.location}`}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedItem(null);
+                        setSearchTerm("");
+                      }}
+                      className="text-amber-600 hover:text-amber-800"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Quantity
+          </label>
+          <input
+            type="number"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            min="1"
+            step="1"
+            className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-300"
+            placeholder="e.g. 150"
+            disabled={addBusy || loading || stockItems.length === 0}
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            onClick={onClose}
+            disabled={addBusy}
+            className="px-5 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleAdd}
+            disabled={addBusy || loading || stockItems.length === 0 || !selectedItem}
+            className="px-5 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-60"
+          >
+            {addBusy ? "Adding…" : "Add Material"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function StageEditor({ stage, onCancel, onSave }) {
   const [targetDate, setTargetDate] = useState(
     stage.targetDate ?? stage.stageDate ?? ""
@@ -301,9 +582,7 @@ function StageEditor({ stage, onCancel, onSave }) {
     >
       <div className="space-y-4">
         <div>
-          <label className="block text-sm text-gray-700 mb-1">
-            Target Date
-          </label>
+          <label className="block text-sm text-gray-700 mb-1">Target Date</label>
           <input
             type="date"
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
@@ -330,47 +609,119 @@ function StageEditor({ stage, onCancel, onSave }) {
 /* ---------- Component Detail Modal ---------- */
 function ComponentDetailModal({
   orderId,
-  motor, // { instance_group_id, instance_name, ... }
-  component, // { componentId, componentName, ... }
-  existingWorkOrder, // may be null
+  motor,
+  component,
+  existingWorkOrderComponent,
   onClose,
-  onAfterChange, // refetch hook from parent
+  onAfterChange,
 }) {
-  const [workOrder, setWorkOrder] = useState(existingWorkOrder || null);
+  const [workOrderComponent, setWorkOrderComponent] = useState(
+    existingWorkOrderComponent || null
+  );
   const [materials, setMaterials] = useState([]);
   const [processRows, setProcessRows] = useState([]);
-  const [workOrderQuantity, setWorkOrderQuantity] = useState(0);
+  const [maxAllowedQty, setMaxAllowedQty] = useState(0);
   const [editRow, setEditRow] = useState(null);
   const [editMaterial, setEditMaterial] = useState(null);
+  const [showAddMaterial, setShowAddMaterial] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const ensureWorkOrder = useCallback(async () => {
-    if (workOrder) return workOrder;
+  const calculateMaxAllowedQty = useCallback((mats = []) => {
+    return mats.reduce((sum, m) => sum + Number(m.quantity || 0), 0);
+  }, []);
+
+  const totalInUse = useMemo(() => {
+    return processRows.reduce((sum, p) => sum + Number(p.inUseQuantity || 0), 0);
+  }, [processRows]);
+
+  const loadMaterialsAndProcesses = useCallback(
+    async (wocId) => {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      try {
+        const matRes = await fetch(
+          `${getBackendUrl()}/api/process/components/${wocId}/materials`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }
+        );
+        if (matRes.ok) {
+          const mats = await matRes.json();
+          const safeMats = Array.isArray(mats) ? mats : [];
+          setMaterials(safeMats);
+          setMaxAllowedQty(calculateMaxAllowedQty(safeMats));
+        }
+
+        const procRes = await fetch(
+          `${getBackendUrl()}/api/process/components/${wocId}/processes`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }
+        );
+        if (procRes.ok) {
+          const procs = await procRes.json();
+          const safeProcs = Array.isArray(procs) ? procs : [];
+          setProcessRows(
+            safeProcs.map((p) => ({
+              id: p.processId,
+              sequence: p.sequence,
+              name: p.processName,
+              responsiblePerson: p.responsiblePerson || "",
+              targetDate: p.completionDate || "",
+              inUseQuantity: p.inUseQuantity ?? 0,
+              completedQuantity: p.completedQuantity ?? 0,
+              status: p.status || "Pending",
+            }))
+          );
+        }
+      } catch (err) {
+        console.error("Error loading materials/processes:", err);
+      }
+    },
+    [calculateMaxAllowedQty]
+  );
+
+  const ensureWorkOrderComponent = useCallback(async () => {
+    if (workOrderComponent) return workOrderComponent;
     setBusy(true);
     try {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("Authentication token missing");
 
-      // get required_quantity from component materials (fallback 1)
-      let requiredQuantity = 1;
-      const mRes = await fetch(
-        `${getBackendUrl()}/api/process/components/${
-          component.componentId
-        }/materials`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        }
+      let wo = null;
+      const woRes = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}?force_refresh=true`,
+        { headers: { Authorization: `Bearer ${token}` }, credentials: "include" }
       );
-      if (mRes.ok) {
-        const mats = await mRes.json();
-        const found = (mats || []).find((m) => m.requiredQuantity);
-        requiredQuantity = found?.requiredQuantity || 1;
+      if (woRes.ok) {
+        const data = await woRes.json();
+        wo = (data.workOrders || []).find(
+          (w) => Number(w.instanceGroupId) === Number(motor.instance_group_id)
+        );
       }
 
-      // create work order bound to this motor (instance group)
-      const createRes = await fetch(
-        `${getBackendUrl()}/api/process/${orderId}`,
+      if (!wo) {
+        const createRes = await fetch(
+          `${getBackendUrl()}/api/process/${orderId}/work-orders`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            credentials: "include",
+            body: JSON.stringify({ instance_group_id: motor.instance_group_id }),
+          }
+        );
+        if (!createRes.ok) throw new Error("Failed to create work order");
+        wo = await createRes.json();
+      }
+
+      const addCompRes = await fetch(
+        `${getBackendUrl()}/api/process/work-orders/${wo.workOrderId}/components`,
         {
           method: "POST",
           headers: {
@@ -380,109 +731,62 @@ function ComponentDetailModal({
           credentials: "include",
           body: JSON.stringify({
             component_id: component.componentId,
-            instance_group_id: motor.instance_group_id,
-            quantity: requiredQuantity,
-            target_date: new Date().toISOString().split("T")[0],
+            quantity: 1,
           }),
         }
       );
-      if (!createRes.ok) {
-        const data = await safeJson(createRes);
-        throw new Error(
-          data?.error || `Failed to create work order (${createRes.status})`
-        );
-      }
-      const wo = await createRes.json();
-      setWorkOrder(wo);
-      setWorkOrderQuantity(wo.quantity || 0);
-      setProcessRows(
-        (wo.processes || []).map((p) => ({
-          id: p.processId,
-          sequence: p.sequence,
-          name: p.processName,
-          responsiblePerson: p.responsiblePerson || "",
-          targetDate: p.completionDate || "",
-          completedQuantity: p.completedQuantity ?? 0,
-          rawQtyUsed: p.rawQuantityUsed ?? 0,
-        }))
-      );
 
-      // load materials
-      const mats2 = await fetch(
-        `${getBackendUrl()}/api/process/components/${
-          component.componentId
-        }/materials`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        }
-      );
-      setMaterials(mats2.ok ? await mats2.json() : []);
+      if (!addCompRes.ok) throw new Error("Failed to add component");
+      const newWOC = await addCompRes.json();
 
-      toast.success("Work order created");
+      setWorkOrderComponent(newWOC);
+      await loadMaterialsAndProcesses(newWOC.workOrderComponentId);
+
+      toast.success("Component added to work order");
       if (onAfterChange) onAfterChange();
-      return wo;
-    } catch (e) {
-      toast.error(e.message || "Failed to create work order");
+      return newWOC;
+    } catch (err) {
+      toast.error(err.message || "Failed to initialize component");
       return null;
     } finally {
       setBusy(false);
     }
-  }, [workOrder, orderId, component, motor, onAfterChange]);
+  }, [workOrderComponent, orderId, motor, component, onAfterChange, loadMaterialsAndProcesses]);
 
   const hydrateExisting = useCallback(async () => {
-    if (!existingWorkOrder) return;
-    const wo = existingWorkOrder;
-    setWorkOrder(wo);
-    setWorkOrderQuantity(wo.quantity || 0);
-    setProcessRows(
-      (wo.processes || []).map((p) => ({
-        id: p.processId,
-        sequence: p.sequence,
-        name: p.processName,
-        responsiblePerson: p.responsiblePerson || "",
-        targetDate: p.completionDate || "",
-        completedQuantity: p.completedQuantity ?? 0,
-        rawQtyUsed: p.rawQuantityUsed ?? 0,
-      }))
-    );
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(
-        `${getBackendUrl()}/api/process/components/${
-          component.componentId
-        }/materials`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        }
-      );
-      setMaterials(res.ok ? await res.json() : []);
-    } catch {
-      setMaterials([]);
-    }
-  }, [existingWorkOrder, component]);
+    if (!existingWorkOrderComponent) return;
+    setWorkOrderComponent(existingWorkOrderComponent);
+    await loadMaterialsAndProcesses(existingWorkOrderComponent.workOrderComponentId);
+  }, [existingWorkOrderComponent, loadMaterialsAndProcesses]);
 
   useEffect(() => {
-    if (existingWorkOrder) hydrateExisting();
-  }, [hydrateExisting, existingWorkOrder]);
+    if (existingWorkOrderComponent) hydrateExisting();
+  }, [hydrateExisting, existingWorkOrderComponent]);
+
+  const guardMaterialsExist = useCallback(() => {
+    if (materials.length === 0) {
+      toast.error("Please add at least one raw material first");
+      return false;
+    }
+    return true;
+  }, [materials]);
 
   const saveRowEdits = async () => {
     if (!editRow) return;
+    if (!guardMaterialsExist()) return;
+
     const token = localStorage.getItem("token");
     if (!token) {
       toast.error("Authentication token missing");
       return;
     }
+
     try {
-      const completedQty = editRow.completedQuantity
-        ? Number(editRow.completedQuantity)
-        : 0;
-      const rawQty = editRow.rawQtyUsed ? Number(editRow.rawQtyUsed) : 0;
+      const completedQty = Number(editRow.completedQuantity || 0);
+      const inUseQty = Number(editRow.inUseQuantity || 0);
+
       const res = await fetch(
-        `${getBackendUrl()}/api/process/${
-          workOrder.workOrderId
-        }/process-status`,
+        `${getBackendUrl()}/api/process/components/${workOrderComponent.workOrderComponentId}/process-status`,
         {
           method: "PUT",
           headers: {
@@ -492,201 +796,181 @@ function ComponentDetailModal({
           credentials: "include",
           body: JSON.stringify({
             process_id: Number(editRow.id),
-            status: editRow.responsiblePerson ? "In Progress" : "Pending",
             completed_quantity: completedQty,
-            raw_quantity_used: rawQty,
+            in_use_quantity: inUseQty,
             completion_date: editRow.targetDate || null,
             responsible_person: editRow.responsiblePerson || null,
           }),
         }
       );
+
       if (!res.ok) {
-        const data = await safeJson(res);
-        throw new Error(
-          data?.error || `Failed to update process status (${res.status})`
-        );
+        const errData = await safeJson(res);
+        throw new Error(errData?.error || "Failed to update process");
       }
-      // refresh the work order payload
-      const refetch = await fetch(
-        `${getBackendUrl()}/api/process/${
-          workOrder.orderId
-        }?force_refresh=true`,
+
+      await loadMaterialsAndProcesses(workOrderComponent.workOrderComponentId);
+
+      if (onAfterChange) onAfterChange();
+      setEditRow(null);
+      toast.success("Process updated");
+    } catch (err) {
+      toast.error(err.message || "Failed to save process");
+    }
+  };
+
+  const saveMaterialEdits = async (material, newQuantity) => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/components/${workOrderComponent.workOrderComponentId}/materials/${material.workOrderMaterialId}`,
         {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({ quantity: newQuantity }),
+        }
+      );
+
+      if (!res.ok) {
+        const errData = await safeJson(res);
+        throw new Error(errData?.error || "Failed to update material");
+      }
+
+      await loadMaterialsAndProcesses(workOrderComponent.workOrderComponentId);
+      toast.success("Material updated");
+      if (onAfterChange) onAfterChange();
+      setEditMaterial(null);
+    } catch (err) {
+      toast.error(err.message || "Failed to save material");
+    }
+  };
+
+  const deleteMaterial = async (materialId) => {
+    if (!window.confirm("Are you sure you want to delete this material?")) {
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      const res = await fetch(
+        `${getBackendUrl()}/api/process/components/${workOrderComponent.workOrderComponentId}/materials/${materialId}`,
+        {
+          method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include",
         }
       );
-      const data = (await refetch.json()) || {};
-      const updated = (data.workOrders || []).find(
-        (wo) => wo.workOrderId === Number(workOrder.workOrderId)
-      );
-      if (updated) {
-        setWorkOrder(updated);
-        setWorkOrderQuantity(updated.quantity || 0);
-        setProcessRows(
-          updated.processes.map((p) => ({
-            id: p.processId,
-            sequence: p.sequence,
-            name: p.processName,
-            responsiblePerson: p.responsiblePerson || "",
-            targetDate: p.completionDate || "",
-            completedQuantity: p.completedQuantity ?? 0,
-            rawQtyUsed: p.rawQuantityUsed ?? 0,
-          }))
-        );
-      }
-      if (onAfterChange) onAfterChange();
-      setEditRow(null);
-      toast.success("Process updated");
-    } catch (e) {
-      toast.error(e.message || "Failed to save process changes");
-    }
-  };
 
-  const openEditMaterial = (m) => setEditMaterial({ ...m });
+      if (!res.ok) throw new Error("Failed to delete material");
 
-  const saveMaterialEdits = async (
-    material,
-    newQuantityPerUnit,
-    newRequiredQuantity
-  ) => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      toast.error("Authentication token missing");
-      return;
-    }
-    try {
-      // Construct URL for updating material
-      const updateUrl = `${getBackendUrl()}/api/process/components/${
-        material.componentId
-      }/materials/${material.materialId}`;
-      
-      // Update material quantities
-      const updateRes = await fetch(updateUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          quantity_per_unit: newQuantityPerUnit,
-          required_quantity: newRequiredQuantity,
-        }),
-      });
-      if (!updateRes.ok) {
-        const data = await safeJson(updateRes);
-        throw new Error(
-          data?.error || `Failed to update material (${updateRes.status})`
-        );
-      }
-      
-      // Fetch updated materials list
-      const materialsUrl = `${getBackendUrl()}/api/process/components/${
-        component.componentId
-      }/materials`;
-      const mRes = await fetch(materialsUrl, {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include",
-      });
-      if (mRes.ok) {
-        setMaterials(await mRes.json());
-      } else {
-        setMaterials([]);
-      }
-      
-      toast.success("Material updated");
+      await loadMaterialsAndProcesses(workOrderComponent.workOrderComponentId);
+      toast.success("Material deleted");
       if (onAfterChange) onAfterChange();
-      setEditMaterial(null);
-    } catch (e) {
-      console.error("Error in saveMaterialEdits:", e);
-      toast.error(e.message || "Failed to save material changes");
+    } catch (err) {
+      toast.error(err.message || "Failed to delete material");
     }
   };
 
   return (
     <Modal
-      title={`${component.componentName} — ${
-        motor.instance_name || "(unnamed)"
-      }`}
+      title={`${component.componentName} — ${motor.instance_name || "(unnamed)"}`}
       onClose={onClose}
-      widthClass="max-w-3xl"
+      widthClass="max-w-4xl"
     >
       <div className="space-y-6">
-        {!workOrder && (
+        {!workOrderComponent && (
           <button
-            onClick={ensureWorkOrder}
+            onClick={ensureWorkOrderComponent}
             disabled={busy}
-            className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60"
+            className="px-5 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-60"
           >
-            {busy ? "Creating…" : "Create Work Order"}
+            {busy ? "Creating…" : "Initialize Component"}
           </button>
         )}
 
-        {/* Processes */}
-        <div className="bg-white rounded-xl border p-4">
-          <h4 className="text-lg font-semibold text-gray-800 mb-3">
-            Processes
+        {materials.length > 0 && (
+          <div className="bg-blue-50 border-2 border-blue-200 p-4 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <h5 className="font-semibold text-blue-900 mb-1">📦 Material Summary</h5>
+                <div className="text-sm text-blue-800">
+                  Total Available: <span className="font-bold">{maxAllowedQty}</span> units
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-blue-800">
+                  Global In-Use: <span className="font-bold text-blue-600">{totalInUse}</span> / {maxAllowedQty}
+                </div>
+                <div className="text-xs text-blue-600 mt-1">
+                  Available for in-use: {maxAllowedQty - totalInUse}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white rounded-xl border p-5 shadow-sm">
+          <h4 className="text-lg font-semibold mb-4 flex items-center justify-between">
+            <span>Processes</span>
+            <span className="text-sm font-normal text-gray-500">
+              Max allowed: {maxAllowedQty}
+            </span>
           </h4>
+
           {processRows.length ? (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="text-left text-gray-600 border-b">
                     <th className="py-2 pr-4">Seq</th>
-                    <th className="py-2 pr-4">Process Name</th>
-                    <th className="py-2 pr-4">
-                      <span className="inline-flex items-center gap-1">
-                        <User size={14} /> Responsible
-                      </span>
-                    </th>
-                    <th className="py-2 pr-4">
-                      <span className="inline-flex items-center gap-1">
-                        <Calendar size={14} /> Target Date
-                      </span>
-                    </th>
-                    <th className="py-2 pr-4">Raw Qty Used</th>
-                    <th className="py-2 pr-4">In use</th>
+                    <th className="py-2 pr-4">Process</th>
+                    <th className="py-2 pr-4">Responsible</th>
+                    <th className="py-2 pr-4">Target Date</th>
+                    <th className="py-2 pr-4">Status</th>
+                    <th className="py-2 pr-4">In Use</th>
+                    <th className="py-2 pr-4">Completed</th>
                     <th className="py-2">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {processRows.map((p) => (
-                    <tr key={p.id} className="border-b last:border-0">
-                      <td className="py-2 pr-4 text-gray-500">{p.sequence}</td>
-                      <td className="py-2 pr-4 font-medium text-gray-900">
-                        {p.name}
-                      </td>
-                      <td className="py-2 pr-4">
-                        {p.responsiblePerson || "—"}
-                      </td>
-                      <td className="py-2 pr-4">{p.targetDate || "—"}</td>
-                      <td className="py-2 pr-4">{p.rawQtyUsed}</td>
-                      <td className="py-2 pr-4">
+                    <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50">
+                      <td className="py-3 pr-4 text-gray-500">{p.sequence}</td>
+                      <td className="py-3 pr-4 font-medium">{p.name}</td>
+                      <td className="py-3 pr-4">{p.responsiblePerson || "—"}</td>
+                      <td className="py-3 pr-4">{p.targetDate || "—"}</td>
+                      <td className="py-3 pr-4">
                         <span
-                          className={`px-3 py-1 rounded-full text-white text-sm font-medium ${
-                            Number(p.completedQuantity) === 0
-                              ? "bg-red-600"
-                              : Number(p.completedQuantity) ===
-                                  Number(p.rawQtyUsed) &&
-                                Number(p.completedQuantity) > 0
-                              ? "bg-green-600"
-                              : Number(p.completedQuantity) > 0 &&
-                                Number(p.completedQuantity) <
-                                  Number(p.rawQtyUsed)
-                              ? "bg-yellow-600"
-                              : "bg-gray-500"
-                          }`}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold ${statusToBadgeClass(
+                            p.status
+                          )}`}
                         >
-                          {p.completedQuantity}
+                          {DISPLAY_STATUS[p.status] || "Yet To Start"}
                         </span>
                       </td>
-                      <td className="py-2">
+                      <td className="py-3 pr-4">
+                        <span className="font-medium text-blue-600">
+                          {p.inUseQuantity ?? 0}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className="font-medium">{p.completedQuantity}</span>
+                        <span className="text-gray-500"> / {maxAllowedQty}</span>
+                      </td>
+                      <td className="py-3">
                         <button
                           onClick={() => setEditRow(p)}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border hover:bg-amber-50"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded hover:bg-amber-50"
                         >
-                          <Pencil size={16} className="text-amber-600" /> Edit
+                          <Pencil size={15} /> Edit
                         </button>
                       </td>
                     </tr>
@@ -695,70 +979,77 @@ function ComponentDetailModal({
               </table>
             </div>
           ) : (
-            <p className="text-gray-500">
-              No processes yet.{" "}
-              {workOrder
-                ? "Check component definition."
-                : "Create the work order first."}
+            <p className="text-gray-500 py-6 text-center">
+              {workOrderComponent
+                ? "No processes defined for this component yet."
+                : "Initialize the component first."}
             </p>
           )}
         </div>
 
-        {/* Materials */}
-        <div className="bg-white rounded-xl border p-4">
-          <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-            <Package size={18} className="text-amber-600" /> Raw Materials
-          </h4>
-          {materials?.length ? (
+        <div className="bg-white rounded-xl border p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-lg font-semibold flex items-center gap-2">
+              <Package size={18} className="text-amber-600" />
+              Raw Materials
+            </h4>
+            {workOrderComponent && (
+              <button
+                onClick={() => setShowAddMaterial(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200"
+              >
+                <Plus size={16} /> Add Material
+              </button>
+            )}
+          </div>
+
+          {materials.length ? (
             <ul className="divide-y">
               {materials.map((rm) => (
                 <li
-                  key={rm.materialId ?? `${rm.componentId}-${rm.rawMaterialId}`}
+                  key={rm.workOrderMaterialId}
                   className="py-3 flex justify-between items-center"
                 >
                   <div>
-                    <p className="font-medium text-gray-900">
-                      Raw Material ID: {rm.rawMaterialId}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Quantity / unit:{" "}
-                      <span className="font-medium">{rm.quantityPerUnit}</span>
-                    </p>
-                    {"requiredQuantity" in rm && (
-                      <p className="text-sm text-gray-600">
-                        Required Quantity:{" "}
-                        <span className="font-medium">
-                          {rm.requiredQuantity}
-                        </span>
-                      </p>
-                    )}
+                    <div className="font-medium">
+                      {rm.rawMaterialName || `Raw Material ${rm.rawMaterialId}`}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      Qty: <span className="font-medium">{rm.quantity}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {typeof rm.materialId !== "undefined" && (
-                      <span className="text-xs text-gray-500">
-                        material_id: {rm.materialId}
-                      </span>
-                    )}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-500">
+                      ID: {rm.rawMaterialId}
+                    </span>
                     <button
-                      onClick={() => openEditMaterial(rm)}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border hover:bg-amber-50"
+                      onClick={() => setEditMaterial(rm)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded hover:bg-amber-50"
                     >
-                      <Pencil size={16} className="text-amber-600" /> Edit
+                      <Pencil size={15} /> Edit
+                    </button>
+                    <button
+                      onClick={() => deleteMaterial(rm.workOrderMaterialId)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-red-200 text-red-600 rounded hover:bg-red-50"
+                    >
+                      <Trash2 size={15} /> Delete
                     </button>
                   </div>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-gray-500">No materials listed.</p>
+            <p className="text-gray-500 py-6 text-center">
+              No raw materials assigned yet.
+              {workOrderComponent && " Click 'Add Material' to begin."}
+            </p>
           )}
         </div>
       </div>
 
-      {/* nested editors */}
       {editRow && (
         <Modal
-          title={`Edit: ${editRow.name}`}
+          title={`Edit Process: ${editRow.name}`}
           onClose={() => setEditRow(null)}
           widthClass="max-w-lg"
         >
@@ -767,7 +1058,7 @@ function ComponentDetailModal({
             onChange={setEditRow}
             onCancel={() => setEditRow(null)}
             onSave={saveRowEdits}
-            workOrderQuantity={workOrderQuantity}
+            maxAllowedQty={maxAllowedQty}
             processes={processRows}
           />
         </Modal>
@@ -775,59 +1066,102 @@ function ComponentDetailModal({
 
       {editMaterial && (
         <Modal
-          title={`Edit Material: Raw Material ID ${editMaterial.rawMaterialId}`}
+          title={`Edit Material — ID ${editMaterial.rawMaterialId}`}
           onClose={() => setEditMaterial(null)}
-          widthClass="max-w-lg"
+          widthClass="max-w-md"
         >
           <MaterialEditor
             material={editMaterial}
             onCancel={() => setEditMaterial(null)}
-            onSave={(qpu, rq) => saveMaterialEdits(editMaterial, qpu, rq)}
+            onSave={(qty) => saveMaterialEdits(editMaterial, qty)}
           />
         </Modal>
+      )}
+
+      {showAddMaterial && workOrderComponent && (
+        <AddMaterialModal
+          wocId={workOrderComponent.workOrderComponentId}
+          onClose={() => setShowAddMaterial(false)}
+          onAdded={() => loadMaterialsAndProcesses(workOrderComponent.workOrderComponentId)}
+        />
       )}
     </Modal>
   );
 }
 
-/* ---------- Main Page: Grid with INLINE STATUS (components + stages as columns) ---------- */
+/* ---------- Main Page ---------- */
 export default function CreateMotorProcess({ socket }) {
   const { orderId } = useParams();
 
-  // page state
   const [customerName, setCustomerName] = useState("");
   const [components, setComponents] = useState([]);
-  const [motors, setMotors] = useState([]); // normalized instance groups
-  const [workOrders, setWorkOrders] = useState([]); // each has status, etc
+  const [motors, setMotors] = useState([]);
+  const [workOrders, setWorkOrders] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingList, setLoadingList] = useState(false);
 
   const [showAddMotor, setShowAddMotor] = useState(false);
-  const [openDetail, setOpenDetail] = useState(null); // { motor, component, wo }
-  const [stages, setStages] = useState([]);
-  const [editStage, setEditStage] = useState(null); // current stage being edited
+  const [openDetail, setOpenDetail] = useState(null);
+  const [editStage, setEditStage] = useState(null);
 
-  // inline status editing state (for components only)
-  const [editingCell, setEditingCell] = useState(null); // { motorId, componentId }
+  const [editingCell, setEditingCell] = useState(null);
   const [editingValue, setEditingValue] = useState("Pending");
 
-  // Listen for real-time updates via Socket.IO
+  // ────────────────────────────────────────────────
+  //  refetchAll – now filters only Motor type
+  // ────────────────────────────────────────────────
+  const refetchAll = useCallback(async () => {
+    setLoadingList(true);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("No auth token");
+
+      const igRes = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}/instance-groups`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+      const igData = igRes.ok ? await igRes.json() : [];
+
+      setMotors(
+        Array.isArray(igData)
+          ? igData
+              .map(normalizeMotor)
+              .filter((m) => m.instance_type === "Motor")
+          : []
+      );
+
+      const woRes = await fetch(
+        `${getBackendUrl()}/api/process/${orderId}?force_refresh=true`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+      const woData = woRes.ok ? await woRes.json() : { workOrders: [] };
+      setWorkOrders(woData.workOrders || []);
+    } catch (err) {
+      console.error("Refresh failed:", err);
+      toast.error("Failed to refresh data");
+    } finally {
+      setLoadingList(false);
+    }
+  }, [orderId]);
+
   useEffect(() => {
     if (!socket) return;
+
     socket.on("instanceGroupUpdate", () => {
-      console.log("Received instanceGroupUpdate event");
       refetchAll();
     });
-    socket.on("stageUpdate", () => {
-      console.log("Received stageUpdate event");
-      fetchStages();
-    });
+
     return () => {
       socket.off("instanceGroupUpdate");
-      socket.off("stageUpdate");
     };
-  }, [socket]);
+  }, [socket, refetchAll]);
 
   const tokenGuard = () => {
     const token = localStorage.getItem("token");
@@ -835,65 +1169,64 @@ export default function CreateMotorProcess({ socket }) {
     return token;
   };
 
-  // helpers to find/create WO
-  const findWO = useCallback(
-    (motorId, componentId) =>
-      workOrders.find(
-        (wo) =>
-          Number(wo.instanceGroupId) === Number(motorId) &&
-          Number(wo.componentId) === Number(componentId)
-      ) || null,
+  const findWorkOrderComponent = useCallback(
+    (motorId, componentId) => {
+      for (const wo of workOrders) {
+        if (Number(wo.instanceGroupId) !== Number(motorId)) continue;
+        const woc = (wo.components || []).find(
+          (c) => Number(c.componentId) === Number(componentId)
+        );
+        if (woc) return woc;
+      }
+      return null;
+    },
     [workOrders]
   );
 
-  const fetchRequiredQuantity = useCallback(async (componentId, token) => {
-    try {
-      const mRes = await fetch(
-        `${getBackendUrl()}/api/process/components/${componentId}/materials`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        }
-      );
-      if (!mRes.ok) return 1;
-      const mats = await mRes.json();
-      const found = (mats || []).find((m) => m.requiredQuantity);
-      return found?.requiredQuantity || 1;
-    } catch {
-      return 1;
-    }
+  const deriveComponentStatusFromWOC = useCallback((woc) => {
+    if (!woc?.processes?.length) return "Pending";
+    const procs = woc.processes;
+    if (procs.every((p) => p.status === "Completed")) return "Completed";
+    if (procs.some((p) => p.status !== "Pending")) return "In Progress";
+    return "Pending";
   }, []);
 
-  const toStage = (x) => ({
-    id: x.stageId ?? x.id,
-    name: (x.stageName ?? x.stage_name ?? x.name ?? "").trim(),
-    targetDate:
-      x.targetDate ??
-      x.stageDate ??
-      x.target_date ??
-      x.planned_date ??
-      x.plannedDate ??
-      "",
-  });
+  const stagesByWorkOrder = useMemo(() => {
+    const map = new Map();
 
-  const fetchStages = useCallback(async () => {
-    const token = tokenGuard();
-    const r = await fetch(`${getBackendUrl()}/api/process/${orderId}/stages`, {
-      headers: { Authorization: `Bearer ${token}` },
-      credentials: "include",
+    workOrders.forEach((wo) => {
+      const stageMap = new Map();
+      (wo.stages || []).forEach((s) => {
+        const key = normalizeNameKey(s.stageName || s.stage_name || "");
+        stageMap.set(key, {
+          name: s.stageName || s.stage_name || "",
+          targetDate: s.stageDate || s.targetDate || "",
+          workOrderId: wo.workOrderId,
+        });
+      });
+      map.set(Number(wo.instanceGroupId), stageMap);
     });
-    const arr = r.ok ? await r.json() : [];
-    const normalized = Array.isArray(arr) ? arr.map(toStage) : [];
-    setStages(normalized);
-    return normalized; // so callers can use the fresh list
-  }, [orderId]);
 
-  const createStage = useCallback(
-    async (label) => {
-      try {
-        const token = tokenGuard();
-        const res = await fetch(
-          `${getBackendUrl()}/api/process/${orderId}/stages`,
+    return map;
+  }, [workOrders]);
+
+  const ensureWorkOrderComponent = useCallback(
+    async (motor, component) => {
+      const token = tokenGuard();
+
+      const existing = findWorkOrderComponent(
+        motor.instance_group_id,
+        component.componentId
+      );
+      if (existing) return existing;
+
+      let workOrder = workOrders.find(
+        (wo) => Number(wo.instanceGroupId) === Number(motor.instance_group_id)
+      );
+
+      if (!workOrder) {
+        const createRes = await fetch(
+          `${getBackendUrl()}/api/process/${orderId}/work-orders`,
           {
             method: "POST",
             headers: {
@@ -901,122 +1234,100 @@ export default function CreateMotorProcess({ socket }) {
               Authorization: `Bearer ${token}`,
             },
             credentials: "include",
-            body: JSON.stringify({
-              stage_name: label, // send snake_case as required by backend
-            }),
+            body: JSON.stringify({ instance_group_id: motor.instance_group_id }),
           }
         );
-        if (!res.ok) {
-          const data = await safeJson(res);
-          throw new Error(
-            data?.error || `Failed to create stage (${res.status})`
-          );
+        if (!createRes.ok) throw new Error("Failed to create work order");
+        workOrder = await createRes.json();
+      }
+
+      const addRes = await fetch(
+        `${getBackendUrl()}/api/process/work-orders/${workOrder.workOrderId}/components`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            component_id: component.componentId,
+            quantity: 1,
+          }),
         }
-        toast.success(`${label} stage created`);
-        const list = await fetchStages(); // get fresh normalized list
-        const created =
-          list.find(
-            (s) => normalizeNameKey(s.name) === normalizeNameKey(label)
-          ) || null;
-        if (created) setEditStage(created);
-      } catch (e) {
-        console.error("Error creating stage:", e);
-        toast.error(
-          e.message || `Could not create ${label} stage. Please try again.`
-        );
-      }
-    },
-    [orderId, fetchStages]
-  );
-
-  const stageByName = useMemo(() => {
-    const map = new Map();
-    stages.forEach((s) => map.set(normalizeNameKey(s.name), s));
-    return map;
-  }, [stages]);
-
-  const createWorkOrderFor = useCallback(
-    async (motor, component) => {
-      const token = tokenGuard();
-      const qty = await fetchRequiredQuantity(component.componentId, token);
-      const res = await fetch(`${getBackendUrl()}/api/process/${orderId}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          component_id: component.componentId,
-          instance_group_id: motor.instance_group_id,
-          quantity: qty,
-          target_date: new Date().toISOString().split("T")[0],
-        }),
-      });
-      if (!res.ok) {
-        const data = await safeJson(res);
-        throw new Error(
-          data?.error || `Failed to create work order (${res.status})`
-        );
-      }
-      return await res.json();
-    },
-    [orderId, fetchRequiredQuantity]
-  );
-
-  // choose a "board" process to reflect the cell's status
-  function pickBoardProcess(wo) {
-    if (!wo?.processes?.length) return null;
-    const incomplete = wo.processes.find((p) => p.status !== "Completed");
-    return (
-      incomplete ||
-      [...wo.processes].sort((a, b) => (a.sequence || 0) - (b.sequence || 0))[0]
-    );
-  }
-
-  // Update via existing /:workOrderId/process-status route
-  const updateBoardStatusViaProcess = useCallback(async (wo, newStatus) => {
-    const token = tokenGuard();
-    const proc = pickBoardProcess(wo);
-    if (!proc) throw new Error("No processes found for this work order");
-
-    const body = {
-      process_id: Number(proc.processId),
-      status: newStatus,
-      completed_quantity: Number(proc.completedQuantity ?? 0),
-      raw_quantity_used: Number(proc.rawQuantityUsed ?? 0),
-      completion_date: proc.completionDate || null,
-      responsible_person: proc.responsiblePerson || null,
-    };
-
-    const res = await fetch(
-      `${getBackendUrl()}/api/process/${wo.workOrderId}/process-status`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        credentials: "include",
-        body: JSON.stringify(body),
-      }
-    );
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(
-        `${res.status} ${res.statusText} — ${text.slice(0, 200)}`
       );
-    }
-    return true;
-  }, []);
 
-  // Save stage edits
+      if (!addRes.ok) throw new Error("Failed to add component to work order");
+      return await addRes.json();
+    },
+    [orderId, workOrders, findWorkOrderComponent]
+  );
+
+  const updateComponentStatus = useCallback(
+    async (woc, newStatus) => {
+      const token = tokenGuard();
+
+      const procRes = await fetch(
+        `${getBackendUrl()}/api/process/components/${woc.workOrderComponentId}/processes`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        }
+      );
+      if (!procRes.ok) throw new Error("Cannot fetch processes");
+
+      const processes = await procRes.json();
+      if (!processes.length) throw new Error("No processes found");
+
+      const targetProcess =
+        processes.find((p) => p.status !== "Completed") || processes[0];
+
+      let completedQty = targetProcess.completedQuantity ?? 0;
+      let inUseQty = targetProcess.inUseQuantity ?? 0;
+
+      if (newStatus === "Completed") {
+        completedQty = 999999;
+        inUseQty = 0;
+      } else if (newStatus === "Pending") {
+        completedQty = 0;
+        inUseQty = 0;
+      }
+
+      const updateRes = await fetch(
+        `${getBackendUrl()}/api/process/components/${woc.workOrderComponentId}/process-status`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            process_id: Number(targetProcess.processId),
+            completed_quantity: completedQty,
+            in_use_quantity: inUseQty,
+            completion_date: targetProcess.completionDate || null,
+            responsible_person: targetProcess.responsiblePerson || null,
+          }),
+        }
+      );
+
+      if (!updateRes.ok) {
+        const errData = await safeJson(updateRes);
+        throw new Error(errData?.error || "Failed to update process status");
+      }
+      return true;
+    },
+    []
+  );
+
   const saveStageEdits = useCallback(
     async ({ targetDate }) => {
       try {
         const token = tokenGuard();
+
         const res = await fetch(
-          `${getBackendUrl()}/api/process/${orderId}/stages`,
+          `${getBackendUrl()}/api/process/work-orders/${editStage.workOrderId}/stages`,
           {
             method: "PUT",
             headers: {
@@ -1030,237 +1341,184 @@ export default function CreateMotorProcess({ socket }) {
             }),
           }
         );
+
         if (!res.ok) {
-          const data = await safeJson(res);
-          throw new Error(
-            data?.error || `Failed to update stage (${res.status})`
-          );
+          const errData = await safeJson(res);
+          throw new Error(errData?.error || "Failed to update stage");
         }
+
         toast.success("Stage updated");
         setEditStage(null);
-        await fetchStages();
+        await refetchAll();
       } catch (e) {
         toast.error(e.message || "Failed to save stage");
       }
     },
-    [editStage, orderId, fetchStages]
+    [editStage, refetchAll]
   );
 
-  // main refetch
-  const refetchAll = useCallback(async () => {
-    setLoadingList(true);
-    try {
-      const token = tokenGuard();
-
-      // motors
-      const ig = await fetch(
-        `${getBackendUrl()}/api/process/${orderId}/instance-groups`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        }
-      );
-      const rawList = ig.ok ? await ig.json() : [];
-      const motorList = Array.isArray(rawList)
-        ? rawList.map(normalizeMotor)
-        : [];
-      setMotors(motorList);
-
-      // work orders
-      const wo = await fetch(
-        `${getBackendUrl()}/api/process/${orderId}?force_refresh=true`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        }
-      );
-      const woData = wo.ok ? await wo.json() : { workOrders: [] };
-      setWorkOrders(woData.workOrders || []);
-
-      await fetchStages();
-    } catch (e) {
-      toast.error(e.message || "Failed to refresh");
-    } finally {
-      setLoadingList(false);
-    }
-  }, [orderId, fetchStages]);
-
-  // initial load
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
         const token = tokenGuard();
 
-        // customer name for heading
         const ordersRes = await fetch(`${getBackendUrl()}/api/process/orders`, {
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include",
         });
         if (ordersRes.ok) {
           const all = await ordersRes.json();
-          const me = all.find((o) => String(o.orderId) === String(orderId));
-          setCustomerName(me?.customerName || "Unknown");
+          const current = all.find((o) => String(o.orderId) === String(orderId));
+          setCustomerName(current?.customerName || "Unknown");
         }
 
-        // components master
-        const comps = await fetch(`${getBackendUrl()}/api/process/components`, {
+        const compRes = await fetch(`${getBackendUrl()}/api/process/components`, {
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include",
         });
-        setComponents(comps.ok ? await comps.json() : []);
+        if (compRes.ok) setComponents(await compRes.json());
 
         await refetchAll();
-      } catch (e) {
-        toast.error(e.message || "Failed to load");
+      } catch (err) {
+        toast.error("Failed to load initial data");
       } finally {
         setLoading(false);
       }
     })();
   }, [orderId, refetchAll]);
 
-  // Build the exact columns in the requested order.
   const displayColumns = useMemo(() => {
     const byName = new Map(
-      (components || []).map((c) => [
-        normalizeNameKey(c.componentName || ""),
-        c,
-      ])
+      components.map((c) => [normalizeNameKey(c.componentName || ""), c])
     );
-
     return DESIRED_COMPONENT_ORDER.map((label) => {
       if (STAGE_LIST.includes(label)) {
-        // These are order-level stages, not components
-        return { label, isStage: true }; // don't mark missing
+        return { label, isStage: true };
       }
       const hit = byName.get(normalizeNameKey(label));
       return hit ? { ...hit, label } : { label, missing: true };
     });
   }, [components]);
 
-  // filter rows by search
   const filteredMotors = useMemo(() => {
-    if (!search.trim()) return motors;
+    // Extra safety layer – only Motors should be here anyway
+    const motorOnly = motors.filter((m) => m.instance_type === "Motor");
+
+    if (!search.trim()) return motorOnly;
+
     const q = search.toLowerCase();
-    return motors.filter((m) =>
+    return motorOnly.filter((m) =>
       (m.instance_name || "").toLowerCase().includes(q)
     );
   }, [motors, search]);
 
-  // details modal (optional)
   const openCellDetails = (motor, component) => {
     if (component.missing) return;
-    const wo = findWO(motor.instance_group_id, component.componentId);
-    setOpenDetail({ motor, component, wo });
+    const woc = findWorkOrderComponent(
+      motor.instance_group_id,
+      component.componentId
+    );
+    setOpenDetail({ motor, component, woc });
   };
 
-  // open inline editor for component cells
   const startEditStatus = (motorId, component, current) => {
     if (component.missing) {
-      toast.warn(
-        `“${component.label}” isn’t defined in Components. Add it in master to enable editing.`
-      );
+      toast.warn(`Component "${component.label}" is not defined in master data`);
       return;
     }
     setEditingCell({ motorId, componentId: component.componentId });
     setEditingValue(current || "Pending");
   };
 
-  // save inline status for component cells
   const saveStatus = async (motor, component, newStatus) => {
     try {
-      if (component.missing)
-        throw new Error(`Component “${component.label}” not defined`);
-      let wo = findWO(motor.instance_group_id, component.componentId);
-      if (!wo) {
-        wo = await createWorkOrderFor(motor, component);
+      if (component.missing) throw new Error("Component not defined");
+
+      let woc = findWorkOrderComponent(
+        motor.instance_group_id,
+        component.componentId
+      );
+
+      if (!woc) {
+        woc = await ensureWorkOrderComponent(motor, component);
       }
 
-      // refresh to get processes before updating
-      const token = tokenGuard();
-      const ref = await fetch(
-        `${getBackendUrl()}/api/process/${orderId}?force_refresh=true`,
+      const matRes = await fetch(
+        `${getBackendUrl()}/api/process/components/${woc.workOrderComponentId}/materials`,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${tokenGuard()}` },
           credentials: "include",
         }
       );
-      const woData = ref.ok ? await ref.json() : { workOrders: [] };
-      const freshWO = (woData.workOrders || []).find(
-        (w) => w.workOrderId === wo.workOrderId
-      );
-      if (!freshWO) throw new Error("Work order not found after refresh");
+      const mats = matRes.ok ? await matRes.json() : [];
+      if (!Array.isArray(mats) || mats.length === 0) {
+        toast.error("Cannot update status — please add raw materials first");
+        return;
+      }
 
-      await updateBoardStatusViaProcess(freshWO, newStatus);
+      await updateComponentStatus(woc, newStatus);
       toast.success("Status updated");
       setEditingCell(null);
       await refetchAll();
-    } catch (e) {
-      toast.error(`Failed to update status: ${e.message || e}`);
+    } catch (err) {
+      toast.error(`Failed to update status: ${err.message}`);
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-600">
-        Loading motors…
+        Loading motors and configuration…
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-        Work Orders — Order #{orderId} —{" "}
-        {customerName?.trim() ? customerName : "Unknown"}
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6 md:p-8">
+      <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-8 md:mb-10 text-center">
+        Work Orders — Order #{orderId} — {customerName || "Unknown Customer"}
       </h1>
 
-      {/* toolbar */}
-      <div className="max-w-7xl mx-auto mb-8 flex gap-6 flex-wrap items-end">
+      <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row gap-4 md:gap-6">
         <div className="relative flex-grow">
-          <label htmlFor="search-motors" className="sr-only">
-            Search Motors
-          </label>
           <input
-            id="search-motors"
             type="text"
-            placeholder="Search by Motor Name…"
+            placeholder="Search motors by name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
+            className="w-full p-4 pl-12 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white shadow-sm"
           />
-          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
         </div>
-        <button
-          onClick={refetchAll}
-          disabled={loadingList}
-          className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg inline-flex items-center gap-2"
-          aria-label="Refresh motors"
-        >
-          <RefreshCw className={loadingList ? "animate-spin" : ""} size={18} />
-          {loadingList ? "Refreshing…" : "Refresh"}
-        </button>
-        <button
-          onClick={() => setShowAddMotor(true)}
-          className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md flex items-center"
-          aria-label="Add motor"
-        >
-          <PlusCircle className="mr-2" /> Add Motor
-        </button>
+
+        <div className="flex gap-3 flex-wrap">
+          <button
+            onClick={refetchAll}
+            disabled={loadingList}
+            className="px-5 py-3 bg-amber-100 text-amber-800 rounded-xl hover:bg-amber-200 flex items-center gap-2 shadow-sm"
+          >
+            <RefreshCw className={loadingList ? "animate-spin" : ""} size={18} />
+            Refresh
+          </button>
+          <button
+            onClick={() => setShowAddMotor(true)}
+            className="px-6 py-3 bg-amber-600 text-white rounded-xl hover:bg-amber-700 flex items-center gap-2 shadow-md"
+          >
+            <PlusCircle size={18} /> Add Motor
+          </button>
+        </div>
       </div>
 
-      {/* grid: Motor Name + exact ordered columns (components + stages) */}
-      <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-lg overflow-x-auto">
+      <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50">
-              <th className="py-5 px-3 text-gray-800 text-base font-semibold whitespace-nowrap">
-                Motor Name
-              </th>
+            <tr className="bg-gradient-to-r from-amber-100 to-amber-50">
+              <th className="py-5 px-4 font-semibold text-gray-800">Motor</th>
               {displayColumns.map((col) => (
                 <th
                   key={col.label}
-                  className="py-5 px-3 text-gray-800 text-base font-semibold whitespace-nowrap"
+                  className="py-5 px-4 font-semibold text-gray-800 whitespace-nowrap"
                 >
                   {col.label}
                 </th>
@@ -1268,119 +1526,87 @@ export default function CreateMotorProcess({ socket }) {
             </tr>
           </thead>
           <tbody>
-            {filteredMotors.length ? (
-              filteredMotors.map((m) => (
-                <tr
-                  key={m.instance_group_id ?? m.instanceName ?? m.id}
-                  className="border-t hover:bg-amber-50 transition-all duration-200"
+            {filteredMotors.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={1 + displayColumns.length}
+                  className="py-12 text-center text-gray-500"
                 >
-                  <td className="py-4 px-3 text-gray-800">
-                    <div className="font-semibold">
-                      {m.instance_name || "(unnamed)"}
-                    </div>
-                    {m.instance_type && (
-                      <div className="text-sm text-gray-600">
-                        {m.instance_type}
-                      </div>
-                    )}
+                  No motors found. Add a motor to begin.
+                </td>
+              </tr>
+            ) : (
+              filteredMotors.map((motor) => (
+                <tr
+                  key={motor.instance_group_id}
+                  className="border-t hover:bg-amber-50/60 transition-colors"
+                >
+                  <td className="py-5 px-4">
+                    <div className="font-semibold">{motor.instance_name || "(unnamed)"}</div>
+                    <div className="text-sm text-gray-600">Motor</div>
                   </td>
 
                   {displayColumns.map((col) => {
-                    // 1) Stage columns (order-level)
                     if (col.isStage) {
-                      const s = stageByName.get(normalizeNameKey(col.label));
+                      const stageMap = stagesByWorkOrder.get(motor.instance_group_id);
+                      const stage = stageMap?.get(normalizeNameKey(col.label));
+
                       return (
-                        <td
-                          key={`stage-${col.label}`}
-                          className="py-4 px-3 align-middle"
-                        >
-                          {s ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-600">
-                                {s.targetDate || "—"}
+                        <td key={`stage-${col.label}`} className="py-5 px-4">
+                          {stage ? (
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="text-gray-600">
+                                {stage.targetDate || "—"}
                               </span>
                               <button
                                 onClick={() =>
-                                  setEditStage({ ...s, name: col.label })
+                                  setEditStage({
+                                    ...stage,
+                                    workOrderId: stage.workOrderId,
+                                  })
                                 }
-                                className="text-gray-600 hover:text-amber-700 text-xs underline"
+                                className="text-amber-700 hover:underline text-xs"
                               >
-                                Edit
+                                edit
                               </button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => createStage(col.label)}
-                              className="px-2 py-1 text-xs rounded-lg border hover:bg-amber-50"
-                              title={`Create ${col.label} stage`}
-                            >
-                              Set
-                            </button>
+                            <span className="text-xs text-gray-400 italic">
+                              Not started
+                            </span>
                           )}
                         </td>
                       );
                     }
 
-                    // 2) Component columns
                     if (col.missing) {
                       return (
-                        <td
-                          key={`${col.label}-missing`}
-                          className="py-4 px-3 align-middle"
-                        >
-                          <span
-                            className="text-xs text-gray-400 italic"
-                            title="Define this in Components master to enable editing"
-                          >
-                            Not defined
-                          </span>
+                        <td key={col.label} className="py-5 px-4 text-xs text-gray-400 italic">
+                          Not defined
                         </td>
                       );
                     }
 
-                    const wo = findWO(m.instance_group_id, col.componentId);
-                    const status = wo?.status || "Pending";
-                    const isEditing =
-                      editingCell &&
-                      editingCell.motorId === m.instance_group_id &&
-                      editingCell.componentId === col.componentId;
+                    const woc = findWorkOrderComponent(
+                      motor.instance_group_id,
+                      col.componentId
+                    );
+                    const status = woc
+                      ? deriveComponentStatusFromWOC(woc)
+                      : "Pending";
+
+                    const isEditingThisCell =
+                      editingCell?.motorId === motor.instance_group_id &&
+                      editingCell?.componentId === col.componentId;
 
                     return (
-                      <td
-                        key={col.componentId}
-                        className="py-4 px-3 align-middle"
-                      >
-                        {!isEditing ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() =>
-                                startEditStatus(
-                                  m.instance_group_id,
-                                  col,
-                                  status
-                                )
-                              }
-                              className={`px-3 py-1 rounded-full text-xs font-semibold ${statusToBadgeClass(
-                                status
-                              )}`}
-                              title="Click to edit status"
-                            >
-                              {DISPLAY_STATUS[status] || "Yet To Start"}
-                            </button>
-                            <button
-                              onClick={() => openCellDetails(m, col)}
-                              className="text-gray-600 hover:text-amber-700 text-xs underline"
-                              title="Open details"
-                            >
-                              Details
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
+                      <td key={col.componentId} className="py-5 px-4">
+                        {isEditingThisCell ? (
+                          <div className="flex items-center gap-2 flex-wrap">
                             <select
                               value={editingValue}
                               onChange={(e) => setEditingValue(e.target.value)}
-                              className="border rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-amber-300"
+                              className="border rounded px-3 py-1.5 text-sm"
                             >
                               {STATUS_OPTIONS.map((opt) => (
                                 <option key={opt} value={opt}>
@@ -1389,16 +1615,36 @@ export default function CreateMotorProcess({ socket }) {
                               ))}
                             </select>
                             <button
-                              onClick={() => saveStatus(m, col, editingValue)}
-                              className="px-2 py-1 text-sm rounded-lg bg-amber-500 text-white hover:bg-amber-600"
+                              onClick={() => saveStatus(motor, col, editingValue)}
+                              className="px-3 py-1.5 bg-amber-600 text-white rounded hover:bg-amber-700 text-sm"
                             >
                               Save
                             </button>
                             <button
                               onClick={() => setEditingCell(null)}
-                              className="px-2 py-1 text-sm rounded-lg border hover:bg-gray-50"
+                              className="px-3 py-1.5 border rounded hover:bg-gray-100 text-sm"
                             >
                               Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() =>
+                                startEditStatus(motor.instance_group_id, col, status)
+                              }
+                              className={`px-3.5 py-1.5 rounded-full text-xs font-medium ${statusToBadgeClass(
+                                status
+                              )}`}
+                              title="Click to change status"
+                            >
+                              {DISPLAY_STATUS[status] || "Yet To Start"}
+                            </button>
+                            <button
+                              onClick={() => openCellDetails(motor, col)}
+                              className="text-sm text-amber-700 hover:underline"
+                            >
+                              Details
                             </button>
                           </div>
                         )}
@@ -1407,21 +1653,11 @@ export default function CreateMotorProcess({ socket }) {
                   })}
                 </tr>
               ))
-            ) : (
-              <tr>
-                <td
-                  colSpan={1 + displayColumns.length}
-                  className="py-10 text-center text-gray-500"
-                >
-                  No motors found. Click “Add Motor” to create one.
-                </td>
-              </tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Modals */}
       {showAddMotor && (
         <AddMotorModal
           orderId={orderId}
@@ -1436,7 +1672,7 @@ export default function CreateMotorProcess({ socket }) {
           orderId={orderId}
           motor={openDetail.motor}
           component={openDetail.component}
-          existingWorkOrder={openDetail.wo}
+          existingWorkOrderComponent={openDetail.woc}
           onClose={() => setOpenDetail(null)}
           onAfterChange={refetchAll}
         />
@@ -1453,7 +1689,7 @@ export default function CreateMotorProcess({ socket }) {
       <ToastContainer
         position="top-right"
         autoClose={3000}
-        hideProgressBar={false}
+        hideProgressBar
         closeOnClick
         pauseOnHover
         draggable
