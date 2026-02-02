@@ -46,11 +46,6 @@ const formatISTTime = (date) => {
   }).toLowerCase().replace(/:/g, ':');
 };
 
-const isoDate = (s) => {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return 'all';
-  return s;
-};
-
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 
 function AttendanceSummary({ socket }) {
@@ -164,6 +159,12 @@ function AttendanceSummary({ socket }) {
     };
   }, []);
 
+  // Debounced version of fetchFirstPageQuietly for WebSocket updates
+  const debouncedQuietRefresh = useMemo(
+    () => debounce(fetchFirstPageQuietly, 1000),
+    [fetchFirstPageQuietly]
+  );
+
   useEffect(() => {
     if (!socket) return;
 
@@ -178,15 +179,36 @@ function AttendanceSummary({ socket }) {
       });
 
       if (cursor === null) {
-        fetchData(true); 
+        fetchData(true);
       } else {
-        fetchFirstPageQuietly(); 
+        debouncedQuietRefresh();
       }
     };
 
     socket.on('attendanceMarked', handler);
-    return () => socket.off('attendanceMarked', handler);
-  }, [socket, dateFilter, cursor, fetchData, fetchFirstPageQuietly]);
+    return () => {
+      socket.off('attendanceMarked', handler);
+      debouncedQuietRefresh.cancel();
+    };
+  }, [socket, dateFilter, cursor, fetchData, debouncedQuietRefresh]);
+
+  // Handle socket reconnection
+  useEffect(() => {
+    if (!socket) return;
+
+    const onReconnect = () => {
+      const currentToday = todayIST();
+      const isViewingToday = !dateFilter || dateFilter === currentToday;
+      
+      if (isViewingToday) {
+        fetchData(true);
+        toast.success('Reconnected - Data refreshed', { autoClose: 2000 });
+      }
+    };
+
+    socket.on('connect', onReconnect);
+    return () => socket.off('connect', onReconnect);
+  }, [socket, dateFilter, fetchData]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore && cursor) {
@@ -247,13 +269,24 @@ function AttendanceSummary({ socket }) {
           <h1 className="text-5xl font-bold bg-gradient-to-r from-gray-800 via-gray-700 to-amber-700 bg-clip-text text-transparent mb-4 tracking-tight">
             Attendance Summary
           </h1>
-          <p className="text-gray-600 text-lg font-light">
-            {search
-              ? `Search: "${search}"${dateFilter && dateFilter !== currentToday ? ` • ${formatDisplayDate(dateFilter)}` : ''}`
-              : isViewingToday
-              ? 'Today • Real-time'
-              : `Attendance for ${formatDisplayDate(dateFilter)}`}
-          </p>
+          <div className="flex items-center justify-center gap-3 mb-2">
+            <p className="text-gray-600 text-lg font-light">
+              {search
+                ? `Search: "${search}"${dateFilter && dateFilter !== currentToday ? ` • ${formatDisplayDate(dateFilter)}` : ''}`
+                : isViewingToday
+                ? 'Today'
+                : `Attendance for ${formatDisplayDate(dateFilter)}`}
+            </p>
+            {isViewingToday && (
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                </span>
+                <span className="text-sm text-green-600 font-medium">Live</span>
+              </div>
+            )}
+          </div>
           {total > 0 && (
             <div className="flex items-center justify-center gap-4 mt-2">
               <p className="text-sm text-gray-500">
@@ -289,7 +322,8 @@ function AttendanceSummary({ socket }) {
           />
           <button
             onClick={exportCSV}
-            className="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-white font-medium rounded-xl shadow-lg hover:shadow-xl flex items-center gap-2 transition-all transform hover:scale-105"
+            disabled={data.length === 0}
+            className="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-white font-medium rounded-xl shadow-lg hover:shadow-xl flex items-center gap-2 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
             <Download className="w-5 h-5" /> Export CSV
           </button>
@@ -351,7 +385,8 @@ function AttendanceSummary({ socket }) {
             </table>
           </div>
 
-          {hasMore && (
+          {/* FIXED: Only show "Load More" when there's actually more data AND we have existing data */}
+          {hasMore && data.length > 0 && (
             <div className="p-6 text-center">
               <button
                 onClick={debouncedLoadMore}
