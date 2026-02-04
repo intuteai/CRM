@@ -615,8 +615,12 @@ function OrdersPage() {
         console.log("Cancelling order:", orderId);
         const res = await fetch(`${backendUrl}/api/orders/${orderId}/cancel`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
           credentials: "include",
+          body: JSON.stringify({ goods_returned: false }),
         });
         if (!res.ok) {
           const errorData = await res.json();
@@ -655,9 +659,6 @@ function OrdersPage() {
           },
           credentials: "include",
           body: JSON.stringify({
-            items: order.items,
-            payment_status: order.paymentStatus,
-            targetDeliveryDate: order.targetDeliveryDate,
             status: newStatus,
           }),
         });

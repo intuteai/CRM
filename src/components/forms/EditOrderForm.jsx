@@ -34,6 +34,10 @@ function EditOrderForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableProducts, setAvailableProducts] = useState(initialProducts);
 
+  // Once an order is Shipped or Delivered the items are a historical record.
+  // Lock every item control so the user never hits the model's immutability guard.
+  const isDispatched = order.status === "Shipped" || order.status === "Delivered";
+
   // Fetch fresh stock (with price)
   useEffect(() => {
     const fetchStock = async () => {
@@ -251,16 +255,24 @@ function EditOrderForm({
             >
               <option value="Pending">Pending</option>
               <option value="Processing">Processing</option>
-              <option value="Testing">Testing</option> {/* ✅ ADDED */}
+              <option value="Testing">Testing</option>
               <option value="Shipped">Shipped</option>
               <option value="Delivered">Delivered</option>
-              <option value="Cancelled">Cancelled</option>
             </select>
           </div>
 
           {/* ITEMS */}
           <div>
             <label className="text-gray-700 font-medium">Items</label>
+
+            {/* Banner: explain why items are locked before the user tries to edit */}
+            {isDispatched && (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1 mb-3">
+                Items are locked — this order has already been {order.status.toLowerCase()}.
+                Changes to line items are no longer permitted.
+              </p>
+            )}
+
             {editedOrder.items.map((item, idx) => (
               <div key={idx} className="flex flex-wrap gap-2 mb-3 items-center">
                 {/* Product select – react-select with search & code */}
@@ -272,7 +284,6 @@ function EditOrderForm({
                         value: String(p.product_id),
                         label: p.product_name,
                         code: p.product_code || String(p.product_id),
-                        // no isDisabled → allow overselling / negative stock
                       }))}
                     value={
                       availableProducts
@@ -289,8 +300,9 @@ function EditOrderForm({
                     onChange={(opt) =>
                       handleItemChange(idx, "product_id", opt ? opt.value : "")
                     }
-                    isClearable
-                    backspaceRemovesValue
+                    isDisabled={isDispatched}
+                    isClearable={!isDispatched}
+                    backspaceRemovesValue={!isDispatched}
                     // search by name or product code
                     filterOption={(option, rawInput) => {
                       const input = rawInput.toLowerCase().trim();
@@ -323,6 +335,7 @@ function EditOrderForm({
                         minHeight: "48px",
                         fontSize: "15px",
                         paddingLeft: "4px",
+                        ...(isDispatched ? { backgroundColor: "#f3f4f6" } : {}),
                       }),
                       menu: (base) => ({
                         ...base,
@@ -341,7 +354,10 @@ function EditOrderForm({
                   onChange={(e) =>
                     handleItemChange(idx, "quantity", e.target.value)
                   }
-                  className="flex-1 min-w-[110px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  disabled={isDispatched}
+                  className={`flex-1 min-w-[110px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 ${
+                    isDispatched ? "bg-gray-100 cursor-not-allowed" : ""
+                  }`}
                   min="1"
                   required
                 />
@@ -354,13 +370,17 @@ function EditOrderForm({
                   onChange={(e) =>
                     handleItemChange(idx, "price", e.target.value)
                   }
-                  className="flex-1 min-w-[130px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  disabled={isDispatched}
+                  className={`flex-1 min-w-[130px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 ${
+                    isDispatched ? "bg-gray-100 cursor-not-allowed" : ""
+                  }`}
                   min="0.01"
                   step="0.01"
                   required
                 />
 
-                {editedOrder.items.length > 1 && (
+                {/* Remove button — hidden entirely when dispatched */}
+                {!isDispatched && editedOrder.items.length > 1 && (
                   <button
                     type="button"
                     onClick={() => removeItem(idx)}
@@ -373,13 +393,16 @@ function EditOrderForm({
               </div>
             ))}
 
-            <button
-              type="button"
-              onClick={addItem}
-              className="mt-2 flex items-center text-amber-500 hover:text-amber-700"
-            >
-              <PlusCircle className="mr-2" size={20} /> Add Item
-            </button>
+            {/* Add button — hidden when dispatched */}
+            {!isDispatched && (
+              <button
+                type="button"
+                onClick={addItem}
+                className="mt-2 flex items-center text-amber-500 hover:text-amber-700"
+              >
+                <PlusCircle className="mr-2" size={20} /> Add Item
+              </button>
+            )}
           </div>
 
           {formErrors.length > 0 && (

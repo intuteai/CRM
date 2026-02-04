@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
-  Edit2, MoreVertical, Package, XCircle, Trash2, Eye, Download, Upload, CheckCircle
+  Edit2, MoreVertical, Package, XCircle, Trash2, Eye, Download, Upload, CheckCircle, Lock
 } from 'lucide-react';
 import { debounce } from 'lodash';
 import { io } from 'socket.io-client';
@@ -27,7 +27,9 @@ const useFetchInventory = ({ limit, offset }) => {
       const token = localStorage.getItem('token');
       if (!token) throw new Error("Authentication token missing. Please log in again.");
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const url = `${backendUrl}/api/inventory?limit=${limit}&offset=${offset}&force_refresh=true`;
+      
+      const url = `${backendUrl}/api/inventory/available?limit=${limit}&offset=${offset}&force_refresh=true`;
+      
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
         credentials: 'include',
@@ -43,6 +45,8 @@ const useFetchInventory = ({ limit, offset }) => {
           ...item,
           price: item.price !== null ? Number(item.price) : 0,
           stock_quantity: item.stock_quantity ?? 0,
+          reserved_quantity: item.reserved_quantity ?? 0,
+          available_quantity: item.available_quantity ?? 0,
           returnable_qty: item.returnable_qty ?? 0,
           description: item.description || '',
           product_code: item.product_code,
@@ -95,18 +99,56 @@ function InventoryPage({ userRole }) {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'product_id', direction: 'desc' });
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [selectedDescription, setSelectedDescription] = useState('');
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const [selectedBarcode, setSelectedBarcode] = useState('');
   const [selectedProductName, setSelectedProductName] = useState('');
   const [selectedProductDescription, setSelectedProductDescription] = useState('');
+  
+  const [showQtyModal, setShowQtyModal] = useState(false);
+  const [qtyProduct, setQtyProduct] = useState(null);
+  
+  // NEW: Reserve/Hold modal state
+  const [showReserveModal, setShowReserveModal] = useState(false);
+  const [reserveProduct, setReserveProduct] = useState(null);
+  
   const tableRef = useRef(null);
   const fileInputRef = useRef(null);
 
   const { inventory: allInventory, totalItems, isLoading, error, refetchData } =
     useFetchInventory({ limit: 5000, offset: 0 });
+
+  const openQuantityModal = useCallback((item) => {
+    setQtyProduct(item);
+    setShowQtyModal(true);
+  }, []);
+
+  const releaseHold = useCallback(async (holdId, productId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
+      const response = await fetch(
+        `${backendUrl}/api/inventory/hold/${holdId}/release`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          credentials: 'include',
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to release hold');
+      }
+
+      toast.success('Hold released successfully', { autoClose: 2000 });
+      await refetchData();
+    } catch (err) {
+      toast.error(err.message || 'Failed to release hold', { autoClose: 3000 });
+    }
+  }, [refetchData]);
 
   const generateQRCode = useCallback(async (productCode, productName, description, elementId) => {
     try {
@@ -166,7 +208,7 @@ function InventoryPage({ userRole }) {
     if (sortConfig.key) {
       sortableInventory.sort((a, b) => {
         let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
-        if (sortConfig.key === 'price' || sortConfig.key === 'stock_quantity' || sortConfig.key === 'returnable_qty') {
+        if (sortConfig.key === 'product_id' || sortConfig.key === 'price' || sortConfig.key === 'stock_quantity' || sortConfig.key === 'returnable_qty' || sortConfig.key === 'available_quantity') {
           aValue = Number(aValue);
           bValue = Number(bValue);
         } else if (sortConfig.key === 'created_at') {
@@ -189,8 +231,8 @@ function InventoryPage({ userRole }) {
         (item.product_code || '').toLowerCase().includes(searchTerm);
       const matchesStock =
         filterStock === 'All' ||
-        (filterStock === 'In Stock' && item.stock_quantity > 0) ||
-        (filterStock === 'Out of Stock' && item.stock_quantity === 0);
+        (filterStock === 'In Stock' && item.available_quantity > 0) ||
+        (filterStock === 'Out of Stock' && item.available_quantity === 0);
       return matchesSearch && matchesStock;
     });
   }, [sortedInventory, searchTerm, filterStock]);
@@ -200,7 +242,6 @@ function InventoryPage({ userRole }) {
     return filteredInventory.slice(start, start + itemsPerPage);
   }, [filteredInventory, page, itemsPerPage]);
 
-  // ── IMPROVED EXPORT FUNCTION ──
   const exportToExcel = useCallback(() => {
     if (filteredInventory.length === 0) {
       toast.warning('No data to export', { autoClose: 2500 });
@@ -213,6 +254,8 @@ function InventoryPage({ userRole }) {
       'Product Name': (item.product_name || '').replace(/<[^>]*>/g, '').trim() || 'N/A',
       'Description': (item.description || 'N/A').replace(/<[^>]*>/g, '').trim(),
       'Stock Quantity': Number(item.stock_quantity ?? 0),
+      'Reserved Qty': Number(item.reserved_quantity ?? 0),
+      'Available Qty': Number(item.available_quantity ?? 0),
       'Returnable Qty': Number(item.returnable_qty ?? 0),
       'Price (₹)': formatCurrency(Number(item.price ?? 0)),
       'Created At': item.created_at
@@ -225,7 +268,6 @@ function InventoryPage({ userRole }) {
 
     const worksheet = XLSX.utils.json_to_sheet(data);
 
-    // Auto-calculate column widths with reasonable limits
     const colWidths = [];
     const headers = Object.keys(data[0] || {});
     headers.forEach((header, i) => {
@@ -239,11 +281,8 @@ function InventoryPage({ userRole }) {
     worksheet['!cols'] = colWidths;
 
     const workbook = XLSX.utils.book_new();
-
-    // Fixed: Safe sheet name (no / : \ ? * [ ] allowed)
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Finished Goods');
 
-    // Modern filename with date
     const today = new Date().toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
@@ -257,10 +296,6 @@ function InventoryPage({ userRole }) {
       autoClose: 2200,
     });
   }, [filteredInventory]);
-
-  // ────────────────────────────────────────────────────────────────
-  // Rest of your code remains unchanged
-  // ────────────────────────────────────────────────────────────────
 
   const validateImportRow = useCallback((row, index) => {
     const errors = [];
@@ -424,7 +459,8 @@ function InventoryPage({ userRole }) {
     }
   }, [refetchData]);
 
-  const handleUpdateItem = useCallback(async (itemId, { product_name, stock_quantity, price, description, product_code, returnable_qty = 0 }) => {
+  // UPDATED: handleUpdateItem now accepts stock quantities for admin
+  const handleUpdateItem = useCallback(async (itemId, formData) => {
     const token = localStorage.getItem('token');
     try {
       if (!token) throw new Error("Authentication token missing.");
@@ -432,7 +468,7 @@ function InventoryPage({ userRole }) {
       const response = await fetch(`${backendUrl}/api/inventory/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ product_name, stock_quantity, price, description, product_code, returnable_qty }),
+        body: JSON.stringify(formData),
         credentials: 'include',
       });
       if (!response.ok) {
@@ -526,6 +562,17 @@ function InventoryPage({ userRole }) {
               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:bg-gray-100"
             >
               <Edit2 size={16} className="mr-2" /> Edit
+            </button>
+
+            <button
+              onClick={() => { 
+                setReserveProduct(item);
+                setShowReserveModal(true);
+                setIsOpen(false); 
+              }}
+              className="flex items-center w-full px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 focus:outline-none focus:bg-blue-50"
+            >
+              <Lock size={16} className="mr-2" /> Reserve Stock
             </button>
 
             <button
@@ -677,7 +724,7 @@ function InventoryPage({ userRole }) {
                   { key: 'product_code', label: 'Product Code' },
                   { key: 'product_name', label: 'Product Name' },
                   { key: 'description', label: 'Description' },
-                  { key: 'stock_quantity', label: 'Stock Quantity' },
+                  { key: 'stock_quantity', label: 'Stock (Physical)' },
                   { key: 'returnable_qty', label: 'Returnable Qty' },
                   { key: 'price', label: 'Price' },
                   { key: 'created_at', label: 'Created At (IST)' },
@@ -730,17 +777,22 @@ function InventoryPage({ userRole }) {
                     ) : '-'}
                   </td>
                   <td className="py-4 px-3">
-                    <span
-                      className={`px-3 py-1 rounded-full text-white text-sm ${
+                    <button
+                      onClick={() => openQuantityModal(item)}
+                      className={`px-3 py-1 rounded-full text-white text-sm hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-amber-300 ${
                         item.stock_quantity > 0
-                          ? 'bg-green-600'
+                          ? 'bg-green-600 hover:bg-green-700'
                           : item.stock_quantity === 0
                             ? 'bg-gray-500'
                             : 'bg-red-600'
                       }`}
+                      aria-label={`View quantity breakdown for ${item.product_name}`}
                     >
                       {item.stock_quantity}
-                    </span>
+                    </button>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Avail: {item.available_quantity ?? item.stock_quantity}
+                    </div>
                   </td>
                   <td className="py-4 px-3">
                     <span
@@ -925,10 +977,366 @@ function InventoryPage({ userRole }) {
         </div>
       )}
 
+      {/* Quantity Breakdown Modal */}
+      {showQtyModal && qtyProduct && (
+        <QuantityBreakdownModal
+          product={qtyProduct}
+          onClose={() => setShowQtyModal(false)}
+          onReleaseHold={releaseHold}
+        />
+      )}
+
+      {/* NEW: Reserve Stock Modal */}
+      {showReserveModal && reserveProduct && (
+        <ReserveStockModal
+          product={reserveProduct}
+          onClose={() => setShowReserveModal(false)}
+          onReserved={async () => {
+            setShowReserveModal(false);
+            await refetchData();
+          }}
+        />
+      )}
+
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </div>
   );
 }
+
+/* ========= UPDATED: QuantityBreakdownModal Component - Changed button to link for order navigation ========= */
+const QuantityBreakdownModal = ({ product, onClose, onReleaseHold }) => {
+  const [holds, setHolds] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHolds = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const res = await fetch(
+          `${backendUrl}/api/inventory/${product.product_id}/holds`,
+          {
+            headers: { 'Authorization': `Bearer ${token}` },
+            credentials: 'include',
+          }
+        );
+        
+        if (!res.ok) {
+          throw new Error('Failed to fetch holds');
+        }
+        
+        const json = await res.json();
+        setHolds(json.data || []);
+      } catch (err) {
+        console.error('Failed to load holds:', err);
+        toast.error('Failed to load reserved stock', { autoClose: 3000 });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchHolds();
+  }, [product.product_id]);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+      <div className="bg-white w-[90%] max-w-[900px] rounded-xl shadow-xl p-6 relative max-h-[90vh] overflow-y-auto">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          aria-label="Close modal"
+        >
+          <XCircle size={24} />
+        </button>
+
+        <h2 className="text-2xl font-bold mb-4 pr-8">
+          Quantity Breakdown — {product.product_name}
+        </h2>
+
+        {/* SUMMARY STATS */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <Stat label="Physical" value={product.stock_quantity} />
+          <Stat label="Reserved" value={product.reserved_quantity || 0} highlight />
+          <Stat label="Available" value={product.available_quantity || 0} />
+          <Stat label="Returnable" value={product.returnable_qty || 0} />
+        </div>
+
+        <div className="text-sm text-gray-600 mb-4">
+          <strong>Formula:</strong> Available = Physical - Reserved
+        </div>
+
+        {/* RESERVED BREAKDOWN */}
+        <h3 className="text-lg font-semibold mb-3 text-amber-700 flex items-center">
+          <span className="w-2 h-2 bg-amber-600 rounded-full mr-2"></span>
+          Reserved / Blocked Stock
+        </h3>
+
+        {loading ? (
+          <p className="text-gray-500 py-4">Loading holds…</p>
+        ) : holds.length === 0 ? (
+          <div className="bg-gray-50 rounded-lg p-4 text-gray-600 text-center">
+            <Package size={32} className="mx-auto mb-2 text-gray-400" />
+            <p>No active reservations</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border rounded-lg">
+              <thead className="bg-amber-100">
+                <tr>
+                  <th className="p-3 text-left">Reason</th>
+                  <th className="p-3 text-left">Qty</th>
+                  <th className="p-3 text-left">For</th>
+                  <th className="p-3 text-left">Reference</th>
+                  <th className="p-3 text-left">Created</th>
+                  <th className="p-3 text-left">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {holds.map(h => (
+                  <tr key={h.hold_id} className="border-t hover:bg-amber-50">
+                    <td className="p-3">{h.reason}</td>
+                    <td className="p-3">
+                      <span className="px-2 py-1 bg-amber-200 rounded-full text-sm font-medium">
+                        {h.quantity}
+                      </span>
+                    </td>
+                    
+                    <td className="p-3">
+                      {h.reference_type ? (
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                            h.reference_type === 'ORDER'
+                              ? 'bg-blue-100 text-blue-800'
+                              : h.reference_type === 'QA'
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {h.reference_type}
+                        </span>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+
+                    <td className="p-3 text-sm">
+                      {h.reference_value ? (
+                        h.reference_type === 'ORDER' ? (
+                          <a
+                            href={`/orders?orderId=${h.reference_value}`}
+                            className="text-blue-600 hover:underline font-medium focus:outline-none focus:ring-2 focus:ring-blue-300 rounded px-1"
+                          >
+                            #{h.reference_value}
+                          </a>
+                        ) : (
+                          <span className="font-medium">{h.reference_value}</span>
+                        )
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+
+                    <td className="p-3 text-sm">
+                      {new Date(h.created_at).toLocaleDateString('en-IN')}
+                      <div className="text-gray-500 text-xs">
+                        {new Date(h.created_at).toLocaleTimeString('en-IN')}
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <button
+                        onClick={() => onReleaseHold(h.hold_id, product.product_id)}
+                        className="text-red-600 hover:text-red-800 hover:underline focus:outline-none focus:ring-2 focus:ring-red-300 rounded px-2 py-1"
+                      >
+                        Release
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* Helper Component for Stats */
+const Stat = ({ label, value, highlight }) => (
+  <div className={`p-4 rounded-lg text-center ${highlight ? 'bg-amber-200 border-2 border-amber-400' : 'bg-gray-100'}`}>
+    <div className="text-sm text-gray-600 mb-1">{label}</div>
+    <div className="text-2xl font-bold">{value ?? 0}</div>
+  </div>
+);
+
+/* ========= NEW: ReserveStockModal Component ========= */
+const ReserveStockModal = ({ product, onClose, onReserved }) => {
+  const [quantity, setQuantity] = useState(1);
+  const [reason, setReason] = useState('');
+  const [referenceType, setReferenceType] = useState('');
+  const [referenceValue, setReferenceValue] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleReserve = async () => {
+    if (!reason.trim()) {
+      toast.error('Please enter a reason for reservation', { autoClose: 3000 });
+      return;
+    }
+
+    if (quantity <= 0 || quantity > product.available_quantity) {
+      toast.error(`Quantity must be between 1 and ${product.available_quantity}`, { autoClose: 3000 });
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const token = localStorage.getItem('token');
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
+      const response = await fetch(
+        `${backendUrl}/api/inventory/${product.product_id}/hold`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            quantity: parseInt(quantity),
+            reason: reason.trim(),
+            reference_type: referenceType || null,
+            reference_value: referenceValue || null
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to reserve stock');
+      }
+
+      toast.success('Stock reserved successfully', { autoClose: 2000 });
+      if (onReserved) await onReserved();
+    } catch (err) {
+      console.error('Reserve stock failed', err);
+      toast.error(err.message || 'Failed to reserve stock', { autoClose: 4000 });
+    } finally {
+      setIsSubmitting(false);
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-60">
+      <div className="bg-white p-6 rounded-2xl shadow-xl w-[480px] relative">
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          aria-label="Close reserve stock modal"
+        >
+          <XCircle size={22} />
+        </button>
+        
+        <h3 className="text-xl font-semibold mb-3 flex items-center">
+          <Lock size={20} className="mr-2 text-blue-600" />
+          Reserve Stock — {product.product_name}
+        </h3>
+        
+        <p className="text-sm text-gray-600 mb-4">
+          Available to reserve: <strong className="text-green-600">{product.available_quantity}</strong>
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium block mb-1">Quantity to Reserve</label>
+            <input
+              type="number"
+              min={1}
+              max={product.available_quantity}
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium block mb-1">Reason <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g., Reserved for order #123"
+              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium block mb-1">Reference Type (optional)</label>
+            <select
+              value={referenceType}
+              onChange={(e) => setReferenceType(e.target.value)}
+              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+              disabled={isSubmitting}
+            >
+              <option value="">-- Select --</option>
+              <option value="ORDER">Order</option>
+              <option value="QA">Quality Assurance</option>
+              <option value="MANUAL">Manual Hold</option>
+            </select>
+          </div>
+
+          {referenceType && (
+            <div>
+              <label className="text-sm font-medium block mb-1">Reference Value</label>
+              <input
+                type="text"
+                value={referenceValue}
+                onChange={(e) => setReferenceValue(e.target.value)}
+                placeholder={referenceType === 'ORDER' ? 'Order ID' : 'Reference value'}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+                disabled={isSubmitting}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex space-x-3 justify-end mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleReserve}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Reserving...' : (
+              <>
+                <Lock className="mr-2" size={16} />
+                Reserve
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 /* ========= CreateItemForm ========= */
 const CreateItemForm = ({ onSubmit, onClose }) => {
@@ -1275,23 +1683,23 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   );
 };
 
-/* ========= EditItemForm ========= */
+/* ========= UPDATED: EditItemForm with Admin Quantity Control ========= */
 const EditItemForm = ({ item, onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: item.product_name,
-    stock_quantity: String(item.stock_quantity ?? 0),
-    returnable_qty: String(item.returnable_qty ?? 0),
     price: item.price,
     description: item.description || '',
     product_code: item.product_code,
+    stock_quantity: item.stock_quantity ?? 0,
+    returnable_qty: item.returnable_qty ?? 0,
   });
   const [errors, setErrors] = useState({
     product_name: '',
-    stock_quantity: '',
-    returnable_qty: '',
     price: '',
     description: '',
     product_code: '',
+    stock_quantity: '',
+    returnable_qty: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -1326,18 +1734,18 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   const handleSave = async () => {
     const fieldErrors = {
       product_name: validateField('product_name', formData.product_name),
-      stock_quantity: '',
-      returnable_qty: validateField('returnable_qty', formData.returnable_qty),
       price: validateField('price', formData.price),
       product_code: validateField('product_code', formData.product_code),
       description: '',
+      stock_quantity: '',
+      returnable_qty: validateField('returnable_qty', formData.returnable_qty),
     };
 
-    const sq = formData.stock_quantity.trim();
+    const sq = formData.stock_quantity.toString().trim();
     if (sq === '') {
       fieldErrors.stock_quantity = 'Stock quantity is required';
     } else if (!Number.isInteger(Number(sq))) {
-      fieldErrors.stock_quantity = 'Stock quantity must be an integer (can be negative)';
+      fieldErrors.stock_quantity = 'Stock quantity must be an integer';
     }
 
     setErrors(fieldErrors);
@@ -1406,7 +1814,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
       </div>
 
       <div>
-        <label htmlFor="edit-stock-quantity" className="text-gray-700 font-medium">Stock Quantity (can be negative)</label>
+        <label htmlFor="edit-stock-quantity" className="text-gray-700 font-medium">Stock Quantity (Physical)</label>
         <input
           id="edit-stock-quantity"
           type="number"
@@ -1436,6 +1844,10 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
           min={0}
         />
         {errors.returnable_qty && <p id="edit-returnable-qty-error" className="text-red-600 text-sm mt-1">{errors.returnable_qty}</p>}
+      </div>
+      
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+        <strong>Note:</strong> Stock quantities can be edited directly. Changes will be reflected immediately in the system.
       </div>
 
       <div>
