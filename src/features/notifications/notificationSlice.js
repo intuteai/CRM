@@ -14,14 +14,14 @@ const notificationSlice = createSlice({
           type,
           message,
         },
-      }),
-    },
+      }), 
+    },     
 
     removeNotification: (state, action) => {
       return state.filter((n) => n.id !== action.payload);
-    },
+    }, 
 
-    clearNotifications: () => [],
+    clearNotifications: () => [], 
   },
 });
 
