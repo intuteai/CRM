@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import logo from "/intute-ai_logo.jpeg";
 
-function LoginModal({ setShowLogin, onSubmit }) {
+function LoginModal({ onClose, onSubmit }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
@@ -30,7 +30,7 @@ function LoginModal({ setShowLogin, onSubmit }) {
       if (res.ok) {
         localStorage.setItem("token", data.token);
         onSubmit(data.role, data.name || email.split("@")[0], data.token);
-        setShowLogin(false);
+        onClose()
       } else {
         if (res.status === 429) {
           setError("Too many login attempts. Please wait and try again.");
@@ -88,7 +88,7 @@ function LoginModal({ setShowLogin, onSubmit }) {
           </button>
         </form>
         <button
-          onClick={() => setShowLogin(false)}
+          onClick={onClose}
           className="mt-4 w-full text-gray-600 hover:text-gray-800 text-lg transition-colors duration-200"
         >
           Close
