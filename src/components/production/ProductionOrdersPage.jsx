@@ -13,6 +13,8 @@ import {
   ChevronRight,
   ShoppingCart,
   Edit2,
+  X,
+  Calendar,
 } from "lucide-react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -39,18 +41,13 @@ const formatDate = (dateString) =>
   dateString ? new Date(dateString).toISOString().split("T")[0] : "";
 
 const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+];
+
+const MONTHS_FULL = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
 ];
 
 const formatCurrency = (amount) =>
@@ -65,7 +62,8 @@ const calculateTotalAmount = (items) =>
     0,
   );
 
-const useFetchData = ({ limit, cursor, userRole }) => {
+// FIXED: Fetch ALL orders like admin page does
+const useFetchData = ({ userRole }) => {
   const [orders, setOrders] = useState([]);
   const [totalOrders, setTotalOrders] = useState(0);
   const [products, setProducts] = useState([]);
@@ -80,9 +78,8 @@ const useFetchData = ({ limit, cursor, userRole }) => {
       const backendUrl =
         import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
-      const url = cursor
-        ? `${backendUrl}/api/orders?limit=${limit}&cursor=${encodeURIComponent(cursor)}&force_refresh=true`
-        : `${backendUrl}/api/orders?limit=${limit}&force_refresh=true`;
+      // Fetch ALL orders (up to 5000) for client-side filtering
+      const url = `${backendUrl}/api/orders?limit=5000&offset=0&force_refresh=true`;
 
       const headers = { Authorization: `Bearer ${token}` };
 
@@ -107,7 +104,7 @@ const useFetchData = ({ limit, cursor, userRole }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [limit, cursor]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -126,7 +123,7 @@ const useFetchData = ({ limit, cursor, userRole }) => {
 };
 
 function ProductionOrdersPage({ socket, userRole }) {
-  const [cursor, setCursor] = useState(null);
+  const [page, setPage] = useState(0);
   const [ordersPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -147,7 +144,7 @@ function ProductionOrdersPage({ socket, userRole }) {
     error,
     isEmpty,
     refetchData,
-  } = useFetchData({ limit: ordersPerPage, cursor, userRole });
+  } = useFetchData({ userRole });
 
   // ─── Get all available statuses except current and Cancelled ────────
   const getAvailableStatuses = (currentStatus) => {
@@ -222,6 +219,17 @@ function ProductionOrdersPage({ socket, userRole }) {
     });
   }, [sortedOrders, searchTerm, filterStatus, filterMonth, filterYear]);
 
+  // ─── Pagination on filtered results ─────────────────────────────────
+  const paginatedOrders = useMemo(() => {
+    const start = page * ordersPerPage;
+    return filteredOrders.slice(start, start + ordersPerPage);
+  }, [filteredOrders, page, ordersPerPage]);
+
+  // ─── Reset to page 0 when filters change ────────────────────────────
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, filterStatus, filterMonth, filterYear]);
+
   const handleSort = useCallback((key) => {
     setSortConfig((prev) => ({
       key,
@@ -284,6 +292,17 @@ function ProductionOrdersPage({ socket, userRole }) {
     }
   };
 
+  // Get active filter text for display
+  const getFilterText = () => {
+    const parts = [];
+    if (filterStatus !== 'All') parts.push(filterStatus);
+    if (filterMonth !== 'All') parts.push(MONTHS[Number(filterMonth)]);
+    if (filterYear !== 'All') parts.push(filterYear);
+    return parts.join(' • ');
+  };
+
+  const hasActiveFilters = filterStatus !== 'All' || filterMonth !== 'All' || filterYear !== 'All';
+
   if (isLoading && !orders.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
@@ -333,8 +352,9 @@ function ProductionOrdersPage({ socket, userRole }) {
       </h1>
 
       <div className="max-w-7xl mx-auto">
-        <div className="flex mb-8 gap-6 flex-wrap">
-          <div className="relative flex-grow">
+        <div className="flex mb-8 gap-4 flex-wrap items-center">
+          {/* Search Bar */}
+          <div className="relative flex-grow min-w-[300px]">
             <input
               type="text"
               placeholder="Search by Order ID or Customer Name..."
@@ -345,10 +365,11 @@ function ProductionOrdersPage({ socket, userRole }) {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
           </div>
 
+          {/* Status Filter */}
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
+            className="p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md min-w-[140px]"
           >
             <option value="All">All Status</option>
             {Object.values(STATUS).map((s) => (
@@ -358,40 +379,91 @@ function ProductionOrdersPage({ socket, userRole }) {
             ))}
           </select>
 
-          <select
-            value={filterMonth}
-            onChange={(e) => setFilterMonth(e.target.value)}
-            className="p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
-          >
-            <option value="All">All Months</option>
-            {MONTHS.map((m, i) => (
-              <option key={m} value={i}>
-                {m}
-              </option>
-            ))}
-          </select>
+          {/* Month-Year Combined Filter */}
+          <div className="flex gap-2 items-center bg-white border border-gray-200 rounded-lg shadow-md p-2">
+            <Calendar size={18} className="text-gray-400 ml-1" />
+            <select
+              value={filterMonth}
+              onChange={(e) => setFilterMonth(e.target.value)}
+              className="p-1.5 border-none focus:outline-none focus:ring-0 text-base bg-transparent appearance-none cursor-pointer pr-6"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 0.25rem center',
+              }}
+            >
+              <option value="All">All Months</option>
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            
+            <div className="w-px h-6 bg-gray-300"></div>
+            
+            <select
+              value={filterYear}
+              onChange={(e) => setFilterYear(e.target.value)}
+              className="p-1.5 border-none focus:outline-none focus:ring-0 text-base bg-transparent appearance-none cursor-pointer pr-6"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 0.25rem center',
+              }}
+            >
+              <option value="All">All Years</option>
+              {availableYears.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
 
-          <select
-            value={filterYear}
-            onChange={(e) => setFilterYear(e.target.value)}
-            className="p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
-          >
-            <option value="All">All Years</option>
-            {availableYears.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
+            {hasActiveFilters && (
+              <>
+                <div className="w-px h-6 bg-gray-300"></div>
+                <button
+                  onClick={() => {
+                    setFilterMonth('All');
+                    setFilterYear('All');
+                  }}
+                  className="p-1 hover:bg-gray-100 rounded transition-colors"
+                  title="Clear date filters"
+                >
+                  <X size={16} className="text-gray-500" />
+                </button>
+              </>
+            )}
+          </div>
 
+          {/* Refresh Button */}
           <button
             onClick={refetchData}
             disabled={isLoading}
-            className="p-3 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all shadow-md text-lg"
+            className="p-3 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all shadow-md text-lg font-medium disabled:opacity-50"
           >
             {isLoading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
+
+        {/* Active filter indicator */}
+        {hasActiveFilters && (
+          <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
+            <Filter size={14} />
+            <span>Filtered by: <span className="font-medium text-amber-700">{getFilterText()}</span></span>
+            <button
+              onClick={() => {
+                setFilterStatus('All');
+                setFilterMonth('All');
+                setFilterYear('All');
+              }}
+              className="text-amber-600 hover:text-amber-700 underline ml-1"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
 
         {isLoading && orders.length > 0 && (
           <div className="text-gray-600 text-lg mb-4 text-center">
@@ -435,7 +507,7 @@ function ProductionOrdersPage({ socket, userRole }) {
               </tr>
             </thead>
             <tbody>
-              {filteredOrders.map((order) => {
+              {paginatedOrders.map((order) => {
                 const availableStatuses = getAvailableStatuses(order.status);
 
                 return (
@@ -526,21 +598,19 @@ function ProductionOrdersPage({ socket, userRole }) {
           {totalOrders > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600">
-                Showing {filteredOrders.length} of {totalOrders} orders
+                Showing {paginatedOrders.length} of {filteredOrders.length} filtered orders (Total: {totalOrders})
               </div>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => setCursor(null)}
-                  disabled={!cursor}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
                 >
                   <ChevronLeft size={20} />
                 </button>
                 <button
-                  onClick={() =>
-                    setCursor(orders[orders.length - 1]?.createdAt)
-                  }
-                  disabled={orders.length < ordersPerPage}
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={(page + 1) * ordersPerPage >= filteredOrders.length}
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
                 >
                   <ChevronRight size={20} />

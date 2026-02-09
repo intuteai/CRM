@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────────────────────
-// ActivitiesPage.jsx – FULLY FIXED (2025-11-26)
-// Fixes: filtering + real-time + infinite scroll + missing new items
+// ActivitiesPage.jsx – COMPLETE FINAL VERSION
+// Features: Fixed pagination, real-time updates, filtering, sorting, backward S.No
 // ──────────────────────────────────────────────────────────────
 
 import React, {
@@ -47,15 +47,6 @@ const PRIORITY_COLORS = {
 };
 
 // ────── Date helpers ──────
-const todayIST = () => {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-};
-
 const toYMD = (v) => {
   if (!v) return "";
   if (v instanceof Date && !isNaN(v)) {
@@ -148,8 +139,6 @@ function ActivitiesPage({ socket }) {
   const abortRef = useRef(null);
   const mountedRef = useRef(true);
   const loadingRef = useRef(false);
-  const fetchIdRef = useRef(0);
-  const loadMoreRef = useRef();
   const textareaRef = useRef(null);
 
   // Auto-resize textarea
@@ -181,7 +170,7 @@ function ActivitiesPage({ socket }) {
     }
   }, []);
 
-  // ────── FILTER MATCHER (ref for socket) ──────
+  // ────── FILTER MATCHER ──────
   const matchesFilters = useCallback(
     (a) => {
       if (!a) return false;
@@ -214,7 +203,7 @@ function ActivitiesPage({ socket }) {
 
   // ────── FETCH ACTIVITIES ──────
   const fetchActivities = useCallback(
-    async (reset = false) => {
+    async (reset = false, currentCursor = null) => {
       if (loadingRef.current) return;
       const token = localStorage.getItem("token");
       if (!token) {
@@ -229,12 +218,10 @@ function ActivitiesPage({ socket }) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const currentFetchId = ++fetchIdRef.current;
-
       try {
         const params = {
           limit: 50,
-          ...(reset ? {} : cursor ? { cursor } : {}),
+          ...(reset ? {} : currentCursor ? { cursor: currentCursor } : {}),
         };
         const res = await axios.get(`${API_URL}/api/activities`, {
           params,
@@ -242,8 +229,7 @@ function ActivitiesPage({ socket }) {
           signal: controller.signal,
         });
 
-        if (currentFetchId !== fetchIdRef.current || !mountedRef.current)
-          return;
+        if (!mountedRef.current) return;
 
         const newData = res.data?.data || [];
         setActivities((prev) => {
@@ -266,16 +252,16 @@ function ActivitiesPage({ socket }) {
         }
       }
     },
-    [cursor]
+    []
   );
 
-  // ────── RESET ON FILTER CHANGE (CRITICAL FIX) ──────
+  // ────── RESET ON FILTER CHANGE ──────
   useEffect(() => {
     setCursor(null);
     setHasMore(true);
     setActivities([]);
-    fetchActivities(true);
-  }, [search, statusFilter, assigneeFilter, priorityFilter]);
+    fetchActivities(true, null);
+  }, [search, statusFilter, assigneeFilter, priorityFilter, fetchActivities]);
 
   // Initial load
   useEffect(() => {
@@ -284,41 +270,52 @@ function ActivitiesPage({ socket }) {
       return;
     }
     fetchAssignees();
-    fetchActivities(true);
-  }, []);
+    fetchActivities(true, null);
 
-  // ────── REAL-TIME UPDATES (FIXED) ──────
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [fetchAssignees, fetchActivities]);
+
+  // ────── REAL-TIME UPDATES ──────
   useEffect(() => {
     if (!socket) return;
 
     const handleCreate = (activity) => {
-      toast.success(`New: ${activity.summary}`);
-
       setActivities((prev) => {
-        // Avoid duplicates
         const filtered = prev.filter((a) => a.id !== activity.id);
         const updated = [activity, ...filtered];
-        return updated.slice(0, MAX_CACHED_ACTIVITIES + 10); // allow temporary overflow
+        return updated.slice(0, MAX_CACHED_ACTIVITIES);
       });
 
       setTotal((t) => t + 1);
 
-      // Force filtered/sorted list to update
-      setActivities((prev) => [...prev]);
+      if (matchesFiltersRef.current(activity)) {
+        toast.success(`New: ${activity.summary}`);
+      }
     };
 
     const handleUpdate = (activity) => {
-      toast.info(`Updated: ${activity.summary}`);
-      setActivities((prev) => {
-        const updated = prev.map((a) => (a.id === activity.id ? activity : a));
-        // Re-apply current filter in case status/assignee changed
-        return updated.filter(matchesFiltersRef.current);
-      });
+      setActivities((prev) =>
+        prev.map((a) => (a.id === activity.id ? activity : a))
+      );
+
+      if (matchesFiltersRef.current(activity)) {
+        toast.info(`Updated: ${activity.summary}`);
+      }
     };
 
     const handleDelete = ({ id }) => {
-      toast.warn("Activity deleted");
-      setActivities((prev) => prev.filter((a) => a.id !== id));
+      setActivities((prev) => {
+        const item = prev.find((a) => a.id === id);
+        const filtered = prev.filter((a) => a.id !== id);
+        
+        if (item && matchesFiltersRef.current(item)) {
+          toast.warn("Activity deleted");
+        }
+        
+        return filtered;
+      });
       setTotal((t) => Math.max(0, t - 1));
     };
 
@@ -334,10 +331,14 @@ function ActivitiesPage({ socket }) {
   }, [socket]);
 
   // ────── LOAD MORE ──────
-  loadMoreRef.current = () => fetchActivities(false);
+  const handleLoadMore = useCallback(() => {
+    if (!cursor || loading || loadingRef.current) return;
+    fetchActivities(false, cursor);
+  }, [cursor, loading, fetchActivities]);
+
   const debouncedLoadMore = useMemo(
-    () => debounce(() => loadMoreRef.current?.(), 300),
-    []
+    () => debounce(handleLoadMore, 300),
+    [handleLoadMore]
   );
 
   const debouncedSetSearch = useMemo(
@@ -371,10 +372,6 @@ function ActivitiesPage({ socket }) {
       let aVal, bVal;
 
       switch (key) {
-        case "id":
-          aVal = a.id;
-          bVal = b.id;
-          break;
         case "summary":
           aVal = a.summary?.toLowerCase() || "";
           bVal = b.summary?.toLowerCase() || "";
@@ -412,7 +409,7 @@ function ActivitiesPage({ socket }) {
     return items;
   }, [filteredActivities, sortConfig]);
 
-  // ────── FORM HANDLERS (unchanged) ──────
+  // ────── FORM HANDLERS ──────
   const openCreate = () => {
     setEditingActivity(null);
     setForm({
@@ -439,49 +436,6 @@ function ActivitiesPage({ socket }) {
     setIsEditOpen(true);
   };
 
-  // const handleSubmit = async (e) => {
-  //   e.preventDefault();
-  //   const token = localStorage.getItem("token");
-  //   if (!token) {
-  //     toast.error("Please log in again");
-  //     return;
-  //   }
-
-  //   const payload = {
-  //     ...form,
-  //     assignee_ids: form.assignee_ids.filter((id) => id),
-  //     due_date: toYMD(form.due_date),
-  //     comments: form.comments?.trim() || "",
-  //   };
-
-  //   if (payload.assignee_ids.length === 0) {
-  //     toast.error("Select at least one assignee");
-  //     return;
-  //   }
-
-  //   const url = editingActivity
-  //     ? `${API_URL}/api/activities/${editingActivity.id}`
-  //     : `${API_URL}/api/activities`;
-
-  //   try {
-  //     if (editingActivity) {
-  //       await axios.put(url, payload, {
-  //         headers: { Authorization: `Bearer ${token}` },
-  //       });
-  //     } else {
-  //       await axios.post(url, payload, {
-  //         headers: { Authorization: `Bearer ${token}` },
-  //       });
-  //     }
-  //     toast.success(editingActivity ? "Updated!" : "Created!");
-  //     setIsCreateOpen(false);
-  //     setIsEditOpen(false);
-  //     setEditingActivity(null);
-  //     // Will be handled by socket
-  //   } catch (err) {
-  //     toast.error(err.response?.data?.error || "Failed");
-  //   }
-  // };
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem("token");
@@ -508,26 +462,15 @@ function ActivitiesPage({ socket }) {
       : `${API_URL}/api/activities`;
 
     try {
-      const res = isEdit
-        ? await axios.put(url, payload, {
-            headers: { Authorization: `Bearer ${token}` },
-          })
-        : await axios.post(url, payload, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-
-      const activityFromServer = res.data;
-
-      setActivities((prev) => {
-        if (isEdit) {
-          return prev.map((a) =>
-            a.id === activityFromServer.id ? activityFromServer : a
-          );
-        } else {
-          const list = [activityFromServer, ...prev];
-          return list.slice(0, MAX_CACHED_ACTIVITIES);
-        }
-      });
+      if (isEdit) {
+        await axios.put(url, payload, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } else {
+        await axios.post(url, payload, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
 
       toast.success(isEdit ? "Updated!" : "Created!");
       setIsCreateOpen(false);
@@ -549,8 +492,6 @@ function ActivitiesPage({ socket }) {
       await axios.delete(`${API_URL}/api/activities/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      toast.warn("Deleted");
-      // Will be handled by socket
     } catch (err) {
       toast.error(err.response?.data?.error || "Delete failed");
     }
@@ -562,7 +503,7 @@ function ActivitiesPage({ socket }) {
     setEditingActivity(null);
   };
 
-  // ────── RENDER (unchanged UI) ──────
+  // ────── RENDER ──────
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-25 to-gray-100 relative overflow-hidden">
       {/* Background Blobs */}
@@ -583,7 +524,10 @@ function ActivitiesPage({ socket }) {
           </h1>
           {total > 0 && (
             <p className="text-sm text-gray-500 mt-2">
-              {total} activit{total > 1 ? "ies" : "y"}
+              {total} activit{total > 1 ? "ies" : "y"} total
+              {filteredActivities.length !== total && (
+                <> · {filteredActivities.length} shown</>
+              )}
             </p>
           )}
         </div>
@@ -657,11 +601,8 @@ function ActivitiesPage({ socket }) {
             <table className="w-full">
               <thead className="bg-gradient-to-r from-amber-100 to-orange-50">
                 <tr>
-                  <th
-                    className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200"
-                    onClick={() => requestSort("id")}
-                  >
-                    ID {getSortIcon("id")}
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                    S.No
                   </th>
                   <th
                     className="px-6 py-4 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-amber-200"
@@ -727,13 +668,13 @@ function ActivitiesPage({ socket }) {
                     </td>
                   </tr>
                 ) : (
-                  sortedActivities.map((a) => (
+                  sortedActivities.map((a, index) => (
                     <tr
                       key={a.id}
                       className="hover:bg-amber-50 transition-colors"
                     >
                       <td className="px-6 py-4 text-sm font-mono text-gray-600">
-                        #{a.id}
+                        #{filteredActivities.length - index}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
                         {a.summary ? (
@@ -843,7 +784,7 @@ function ActivitiesPage({ socket }) {
         </div>
       </div>
 
-      {/* Modals remain exactly the same */}
+      {/* Modals */}
       <Modal
         isOpen={!!summaryModal}
         onRequestClose={() => setSummaryModal(null)}
@@ -894,7 +835,6 @@ function ActivitiesPage({ socket }) {
         className="bg-white rounded-2xl p-8 max-w-2xl mx-auto mt-20 shadow-2xl outline-none overflow-y-auto max-h-screen"
         overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       >
-        {/* Create/Edit form - unchanged */}
         <h2 className="text-2xl font-bold text-gray-800 mb-6">
           {editingActivity ? "Edit Activity" : "New Activity"}
         </h2>

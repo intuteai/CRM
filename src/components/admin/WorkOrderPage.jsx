@@ -9,10 +9,14 @@ const getStatusStyles = (status) => {
   switch (status) {
     case "Delivered":
       return "border-4 border-green-700";
+    case "Shipped":
+      return "border-4 border-blue-500";
+    case "Testing":
+      return "border-4 border-purple-600";
     case "Processing":
       return "border-4 border-yellow-600";
     case "Pending":
-      return "border-4 border-blue-600";
+      return "border-4 border-orange-500";
     case "Cancelled":
       return "border-4 border-red-600";
     default:
@@ -24,10 +28,14 @@ const getStatusTextColor = (status) => {
   switch (status) {
     case "Delivered":
       return "text-green-700";
+    case "Shipped":
+      return "text-blue-600";
+    case "Testing":
+      return "text-purple-700";
     case "Processing":
       return "text-yellow-700";
     case "Pending":
-      return "text-blue-700";
+      return "text-orange-600";
     case "Cancelled":
       return "text-red-700";
     default:
@@ -92,6 +100,20 @@ function WorkOrderPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <span className="w-7 h-7 border-4 border-blue-500 rounded-sm"></span>
+              <span className="text-gray-700 text-md font-medium">
+                Shipped
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="w-7 h-7 border-4 border-purple-600 rounded-sm"></span>
+              <span className="text-gray-700 text-md font-medium">
+                Testing
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
               <span className="w-7 h-7 border-4 border-yellow-600 rounded-sm"></span>
               <span className="text-gray-700 text-md font-medium">
                 Processing
@@ -99,7 +121,7 @@ function WorkOrderPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="w-7 h-7 border-4 border-blue-600 rounded-sm"></span>
+              <span className="w-7 h-7 border-4 border-orange-500 rounded-sm"></span>
               <span className="text-gray-700 text-md font-medium">
                 Pending
               </span>
