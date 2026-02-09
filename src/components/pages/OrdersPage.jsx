@@ -1238,17 +1238,17 @@ const calculateTotalAmount = (items) =>
     0,
   );
 
-// ✅ UPDATED: no stock restriction → overselling/backorders allowed
 const validateOrderItems = (
   items,
   products,
-  getAvailableStock, // kept for signature compatibility, not used now
+  getAvailableStock,
   editingOrderId = null,
 ) => {
   const errors = [];
-  const productIds = new Set();
+  const productIds = new Set(); // prevents duplicate products in the order
 
   const isValid = items.every((item) => {
+    // checks for missing or duplicate ID
     if (!item.product_id || productIds.has(item.product_id)) {
       errors.push(`Duplicate or invalid product ID: ${item.product_id}`);
       return false;
@@ -1256,6 +1256,7 @@ const validateOrderItems = (
 
     productIds.add(item.product_id);
 
+    // checks if product exists in database
     const product = products.find(
       (p) => String(p.product_id) === String(item.product_id),
     );
@@ -1270,24 +1271,143 @@ const validateOrderItems = (
       );
       return false;
     }
-
-    // ⛔️ Removed stock validation — we now allow negative inventory.
-    // If you ever want a warning (non-blocking), you could push to errors
-    // but still return true here.
-
     return true;
   });
-
-  console.log("validateOrderItems result:", {
-    isValid,
-    errors,
-    items,
-    editingOrderId,
-  });
-
   return { isValid, errors };
 };
 
+// const useFetchData = ({ limit, offset }) => {
+//   const [orders, setOrders] = useState([]);
+//   const [totalOrders, setTotalOrders] = useState(0); // total count for pagination
+//   const [products, setProducts] = useState([]);
+//   const [customers, setCustomers] = useState([]);
+//   const [isLoading, setIsLoading] = useState(true);
+//   const [error, setError] = useState(null);
+//   const [isEmpty, setIsEmpty] = useState(false);
+
+//   // useCallback to prevent unnecessary re-creation of function unless limit or offset changes
+//   const fetchData = useCallback(async () => {
+//     let isMounted = true;
+//     try {
+//       setIsLoading(true);
+//       const token = localStorage.getItem("token");
+//       if (!token)
+//         throw new Error("Authentication token missing. Please log in again.");
+//       const backendUrl =
+//         import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+//       // console.log("Fetching data from:", backendUrl);
+//       // Pagination applied below in the API call
+//       const url = `${backendUrl}/api/orders?limit=${limit}&offset=${offset}&force_refresh=true`;
+//       // All 3 requests run at the same time
+//       // headers: {Authorization: `Bearer ${token}` --- to let the backend know who has made the request
+//       const [ordersRes, productsRes, customersRes] = await Promise.all([
+//         fetch(url, {
+//           headers: { Authorization: `Bearer ${token}` },
+//           credentials: "include",
+//         }).catch(() => ({ ok: false })),
+//         fetch(`${backendUrl}/api/inventory/available`, {
+//           headers: { Authorization: `Bearer ${token}` },
+//           credentials: "include",
+//         }).catch(() => ({ ok: false })),
+//         fetch(`${backendUrl}/api/users/customers`, {
+//           headers: { Authorization: `Bearer ${token}` },
+//           credentials: "include",
+//         }).catch(() => ({ ok: false })),
+//       ]);
+
+//       // Convert the responses into JSON
+//       const [ordersData, productsData, customersData] = await Promise.all([
+//         ordersRes.ok ? ordersRes.json() : { orders: [], total: 0 },
+//         productsRes.ok
+//           ? productsRes.json().then((data) => data.data || [])
+//           : [],
+//         customersRes.ok ? customersRes.json() : [],
+//       ]);
+
+//       if (isMounted) {
+//         const validOrders = (ordersData.orders || [])
+//           .filter((o) => o && typeof o.id !== "undefined")
+//           .map((order) => ({
+//             ...order,
+//             totalAmount: calculateTotalAmount(order.items),
+//             createdAt: order.createdAt || new Date().toISOString(),
+//             targetDeliveryDate: order.targetDeliveryDate || null,
+//             paymentStatus: order.paymentStatus || "Pending",
+//             status: order.status || "Pending",
+//             customerName: order.customerName || "N/A",
+//             items: Array.isArray(order.items)
+//               ? order.items
+//                   .filter(
+//                     (item) => item && typeof item.product_id !== "undefined",
+//                   )
+//                   .map((item) => ({
+//                     ...item,
+//                     product_id: String(item.product_id),
+//                     quantity: String(item.quantity),
+//                     price: String(item.price),
+//                     productName:
+//                       item.productName ||
+//                       productsData.find(
+//                         (p) => String(p.product_id) === String(item.product_id),
+//                       )?.product_name ||
+//                       "Unknown",
+//                   }))
+//               : [],
+//           }));
+//         setOrders(validOrders);
+//         setTotalOrders(ordersData.total || 0);
+//         setProducts(
+//           (productsData || []).filter(
+//             (p) => p && typeof p.product_id !== "undefined",
+//           ),
+//         );
+//         setCustomers(
+//           (customersData || []).filter(
+//             (c) => c && typeof c.user_id !== "undefined",
+//           ),
+//         );
+//         setIsEmpty(
+//           validOrders.length === 0 &&
+//             productsData.length === 0 &&
+//             customersData.length === 0,
+//         );
+//         setError(null);
+//         // console.log("Fetched orders:", validOrders);
+//         // console.log("Fetched products:", productsData);
+//       }
+//     } catch (err) {
+//       if (isMounted) {
+//         setError(err.message || "Failed to fetch data");
+//         setIsEmpty(false);
+//         console.error("Fetch error:", err);
+//       }
+//     } finally {
+//       if (isMounted) setIsLoading(false);
+//     }
+//     return () => {
+//       isMounted = false;
+//     };
+//   }, [limit, offset]);
+
+//   useEffect(() => {
+//     fetchData();
+//   }, [fetchData]);
+
+//   return {
+//     orders,
+//     setOrders,
+//     totalOrders,
+//     products,
+//     setProducts,
+//     customers,
+//     isLoading,
+//     error,
+//     isEmpty,
+//     refetchData: fetchData,
+//   };
+// };
+
+// Custom hook to fetch orders, products & customers
 const useFetchData = ({ limit, offset }) => {
   const [orders, setOrders] = useState([]);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -1297,104 +1417,104 @@ const useFetchData = ({ limit, offset }) => {
   const [error, setError] = useState(null);
   const [isEmpty, setIsEmpty] = useState(false);
 
+  const backendUrl =
+    import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+
+  const normalizeItems = (items = [], productsData = []) =>
+    items
+      .filter((item) => item && item.product_id !== undefined)
+      .map((item) => ({
+        ...item,
+        product_id: String(item.product_id),
+        quantity: String(item.quantity),
+        price: String(item.price),
+        productName:
+          item.productName ||
+          productsData.find(
+            (p) => String(p.product_id) === String(item.product_id),
+          )?.product_name ||
+          "Unknown",
+      }));
+
+  const normalizeOrders = (ordersData = [], productsData = []) =>
+    ordersData
+      .filter((o) => o && o.id !== undefined)
+      .map((order) => ({
+        ...order,
+        totalAmount: calculateTotalAmount(order.items),
+        createdAt: order.createdAt || new Date().toISOString(),
+        targetDeliveryDate: order.targetDeliveryDate || null,
+        paymentStatus: order.paymentStatus || "Pending",
+        status: order.status || "Pending",
+        customerName: order.customerName || "N/A",
+        items: normalizeItems(order.items, productsData),
+      }));
+
   const fetchData = useCallback(async () => {
-    let isMounted = true;
     try {
       setIsLoading(true);
+      setError(null);
+
       const token = localStorage.getItem("token");
       if (!token)
         throw new Error("Authentication token missing. Please log in again.");
-      const backendUrl =
-        import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-      console.log("Fetching data from:", backendUrl);
-      const url = `${backendUrl}/api/orders?limit=${limit}&offset=${offset}&force_refresh=true`;
+
+      const ordersUrl = `${backendUrl}/api/orders?limit=${limit}&offset=${offset}&force_refresh=true`;
+
+      const headers = {
+        Authorization: `Bearer ${token}`,
+      };
+
       const [ordersRes, productsRes, customersRes] = await Promise.all([
-        fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
+        fetch(ordersUrl, { headers, credentials: "include" }),
+        fetch(`${backendUrl}/api/inventory/stock`, {
+          headers,
           credentials: "include",
-        }).catch(() => ({ ok: false })),
-        fetch(`${backendUrl}/api/inventory/available`, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        }).catch(() => ({ ok: false })),
+        }),
         fetch(`${backendUrl}/api/users/customers`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers,
           credentials: "include",
-        }).catch(() => ({ ok: false })),
+        }),
       ]);
 
-      const [ordersData, productsData, customersData] = await Promise.all([
-        ordersRes.ok ? ordersRes.json() : { orders: [], total: 0 },
-        productsRes.ok
-          ? productsRes.json().then((data) => data.data || [])
-          : [],
-        customersRes.ok ? customersRes.json() : [],
-      ]);
+      const ordersData = ordersRes.ok
+        ? await ordersRes.json()
+        : { orders: [], total: 0 };
 
-      if (isMounted) {
-        const validOrders = (ordersData.orders || [])
-          .filter((o) => o && typeof o.id !== "undefined")
-          .map((order) => ({
-            ...order,
-            totalAmount: calculateTotalAmount(order.items),
-            createdAt: order.createdAt || new Date().toISOString(),
-            targetDeliveryDate: order.targetDeliveryDate || null,
-            paymentStatus: order.paymentStatus || "Pending",
-            status: order.status || "Pending",
-            customerName: order.customerName || "N/A",
-            items: Array.isArray(order.items)
-              ? order.items
-                  .filter(
-                    (item) => item && typeof item.product_id !== "undefined",
-                  )
-                  .map((item) => ({
-                    ...item,
-                    product_id: String(item.product_id),
-                    quantity: String(item.quantity),
-                    price: String(item.price),
-                    productName:
-                      item.productName ||
-                      productsData.find(
-                        (p) => String(p.product_id) === String(item.product_id),
-                      )?.product_name ||
-                      "Unknown",
-                  }))
-              : [],
-          }));
-        setOrders(validOrders);
-        setTotalOrders(ordersData.total || 0);
-        setProducts(
-          (productsData || []).filter(
-            (p) => p && typeof p.product_id !== "undefined",
-          ),
-        );
-        setCustomers(
-          (customersData || []).filter(
-            (c) => c && typeof c.user_id !== "undefined",
-          ),
-        );
-        setIsEmpty(
-          validOrders.length === 0 &&
-            productsData.length === 0 &&
-            customersData.length === 0,
-        );
-        setError(null);
-        console.log("Fetched orders:", validOrders);
-        console.log("Fetched products:", productsData);
-      }
+      const productsData = productsRes.ok
+        ? (await productsRes.json()).data || []
+        : [];
+
+      const customersData = customersRes.ok ? await customersRes.json() : [];
+
+      const validOrders = normalizeOrders(ordersData.orders, productsData);
+
+      const validProducts = productsData.filter(
+        (p) => p && p.product_id !== undefined,
+      );
+
+      const validCustomers = customersData.filter(
+        (c) => c && c.user_id !== undefined,
+      );
+
+      setOrders(validOrders);
+      setTotalOrders(ordersData.total || 0);
+      setProducts(validProducts);
+      setCustomers(validCustomers);
+
+      setIsEmpty(
+        validOrders.length === 0 &&
+          validProducts.length === 0 &&
+          validCustomers.length === 0,
+      );
     } catch (err) {
-      if (isMounted) {
-        setError(err.message || "Failed to fetch data");
-        setIsEmpty(false);
-        console.error("Fetch error:", err);
-      }
+      console.error("Fetch error:", err);
+      setError(err.message || "Failed to fetch data");
+      setIsEmpty(false);
     } finally {
-      if (isMounted) setIsLoading(false);
+      setIsLoading(false);
     }
-    return () => {
-      isMounted = false;
-    };
-  }, [limit, offset]);
+  }, [limit, offset, backendUrl]);
 
   useEffect(() => {
     fetchData();
@@ -1631,7 +1751,12 @@ function OrdersPage() {
       // toast.info(`Stock updated for product ID ${product_id}`, {
       //   autoClose: 2000,
       // });
-      dispatch(addNotification({type: "info", message: `Stock updated for product ID ${product_id}`}))
+      dispatch(
+        addNotification({
+          type: "info",
+          message: `Stock updated for product ID ${product_id}`,
+        }),
+      );
     });
     return () => socket.disconnect();
   }, [setOrders, refetchData]);
@@ -1748,15 +1873,23 @@ function OrdersPage() {
         await refetchData();
         setShowCreateForm(false);
         // toast.success("Order created successfully", { autoClose: 3000 });
-        dispatch(addNotification({ type: "success", message: "Order created successfully" }));
-
+        dispatch(
+          addNotification({
+            type: "success",
+            message: "Order created successfully",
+          }),
+        );
       } catch (error) {
         console.error("Create order error:", error);
         // toast.error(`Failed to create order: ${error.message}`, {
         //   autoClose: 5000,
         // });
-        dispatch(addNotification({ type: "error", message: `Failed to create order: ${error.message}` }));
-
+        dispatch(
+          addNotification({
+            type: "error",
+            message: `Failed to create order: ${error.message}`,
+          }),
+        );
       }
     },
     [refetchData],
@@ -1791,13 +1924,18 @@ function OrdersPage() {
         setShowEditForm(false);
         setSelectedOrder(null);
         // toast.success("Order updated successfully", { autoClose: 3000 });
-        dispatch(addNotification({ type: "success", message: "Order updated successfully" }))
+        dispatch(
+          addNotification({
+            type: "success",
+            message: "Order updated successfully",
+          }),
+        );
       } catch (error) {
         console.error("Update order error:", error);
         // toast.error(`Failed to update order: ${error.message}`, {
         //   autoClose: 5000,
         // });
-        dispatch(addNotification({ type: "error", message: error.message }))
+        dispatch(addNotification({ type: "error", message: error.message }));
       }
     },
     [refetchData],
