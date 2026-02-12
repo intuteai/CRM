@@ -38,27 +38,33 @@ function EditOrderForm({
   // Lock every item control so the user never hits the model's immutability guard.
   const isDispatched = order.status === "Shipped" || order.status === "Delivered";
 
-  // Fetch fresh stock (with price)
+  // Fetch fresh stock (with price and availability)
   useEffect(() => {
     const fetchStock = async () => {
       try {
         const token = localStorage.getItem("token");
         const backendUrl =
           import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+        // ✅ CHANGED: Use /available endpoint instead of /stock
         const response = await fetch(
-          `${backendUrl}/api/inventory/stock?force_refresh=true`,
+          `${backendUrl}/api/inventory/available?limit=5000&offset=0`,
           {
             headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include',
           },
         );
         if (!response.ok) throw new Error("Failed to fetch available stock");
-        const data = await response.json();
+        const json = await response.json();
+        const data = json.data || json; // Handle both {data: []} and [] responses
 
         const normalized = (data || [])
           .filter((p) => p && typeof p.product_id !== "undefined")
           .map((p) => ({
             ...p,
             price: p.price != null ? Number(p.price) : 0,
+            stock_quantity: p.stock_quantity ?? 0,
+            available_quantity: p.available_quantity ?? 0, // ✅ NEW
+            reserved_quantity: p.reserved_quantity ?? 0, // ✅ NEW
           }));
 
         setAvailableProducts(normalized);
@@ -273,125 +279,145 @@ function EditOrderForm({
               </p>
             )}
 
-            {editedOrder.items.map((item, idx) => (
-              <div key={idx} className="flex flex-wrap gap-2 mb-3 items-center">
-                {/* Product select – react-select with search & code */}
-                <div className="flex-[2] min-w-[380px]">
-                  <Select
-                    options={availableProducts
-                      .filter((p) => p && typeof p.product_id !== "undefined")
-                      .map((p) => ({
-                        value: String(p.product_id),
-                        label: p.product_name,
-                        code: p.product_code || String(p.product_id),
-                      }))}
-                    value={
-                      availableProducts
-                        .filter(
-                          (p) =>
-                            String(p.product_id) === String(item.product_id),
-                        )
-                        .map((p) => ({
-                          value: String(p.product_id),
-                          label: p.product_name,
-                          code: p.product_code || String(p.product_id),
-                        }))[0] || null
-                    }
-                    onChange={(opt) =>
-                      handleItemChange(idx, "product_id", opt ? opt.value : "")
-                    }
-                    isDisabled={isDispatched}
-                    isClearable={!isDispatched}
-                    backspaceRemovesValue={!isDispatched}
-                    // search by name or product code
-                    filterOption={(option, rawInput) => {
-                      const input = rawInput.toLowerCase().trim();
-                      const name =
-                        option.label?.toLowerCase() ||
-                        option.data.label?.toLowerCase() ||
-                        "";
-                      const code =
-                        option.data.code?.toLowerCase() ||
-                        option.code?.toLowerCase() ||
-                        "";
-                      return name.includes(input) || code.includes(input);
-                    }}
-                    formatOptionLabel={(option) => (
-                      <div className="flex flex-col">
-                        <span>{option.label}</span>
-                        <span className="text-xs text-gray-500">
-                          Code: {option.code}
-                        </span>
-                      </div>
+            {editedOrder.items.map((item, idx) => {
+              // ✅ NEW: Get available quantity for selected product
+              const selectedProduct = availableProducts.find(
+                (p) => String(p.product_id) === String(item.product_id)
+              );
+              const availableQty = selectedProduct?.available_quantity ?? 0;
+
+              return (
+                <div key={idx} className="mb-4">
+                  <div className="flex flex-wrap gap-2 items-center">
+                    {/* Product select – react-select with search & code */}
+                    <div className="flex-[2] min-w-[380px]">
+                      <Select
+                        options={availableProducts
+                          .filter((p) => p && typeof p.product_id !== "undefined")
+                          .map((p) => ({
+                            value: String(p.product_id),
+                            label: p.product_name,
+                            code: p.product_code || String(p.product_id),
+                            available: p.available_quantity ?? 0,
+                          }))}
+                        value={
+                          availableProducts
+                            .filter(
+                              (p) =>
+                                String(p.product_id) === String(item.product_id),
+                            )
+                            .map((p) => ({
+                              value: String(p.product_id),
+                              label: p.product_name,
+                              code: p.product_code || String(p.product_id),
+                              available: p.available_quantity ?? 0,
+                            }))[0] || null
+                        }
+                        onChange={(opt) =>
+                          handleItemChange(idx, "product_id", opt ? opt.value : "")
+                        }
+                        isDisabled={isDispatched}
+                        isClearable={!isDispatched}
+                        backspaceRemovesValue={!isDispatched}
+                        // search by name or product code
+                        filterOption={(option, rawInput) => {
+                          const input = rawInput.toLowerCase().trim();
+                          const name = option.label?.toLowerCase() || "";
+                          const code = option.data.code?.toLowerCase() || "";
+                          return name.includes(input) || code.includes(input);
+                        }}
+                        formatOptionLabel={(option) => (
+                          <div className="flex flex-col">
+                            <span>{option.label}</span>
+                            <span className="text-xs text-gray-500">
+                              Code: {option.code} | Available: {option.available}
+                            </span>
+                          </div>
+                        )}
+                        styles={{
+                          container: (base) => ({
+                            ...base,
+                            width: "100%",
+                            minWidth: "380px",
+                          }),
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "48px",
+                            fontSize: "15px",
+                            paddingLeft: "4px",
+                            ...(isDispatched ? { backgroundColor: "#f3f4f6" } : {}),
+                          }),
+                          menu: (base) => ({
+                            ...base,
+                            zIndex: 9999,
+                            width: "100%",
+                          }),
+                        }}
+                      />
+                    </div>
+
+                    {/* Quantity */}
+                    <input
+                      type="number"
+                      placeholder="Quantity"
+                      value={item.quantity}
+                      onChange={(e) =>
+                        handleItemChange(idx, "quantity", e.target.value)
+                      }
+                      disabled={isDispatched}
+                      className={`flex-1 min-w-[110px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 ${
+                        isDispatched ? "bg-gray-100 cursor-not-allowed" : ""
+                      }`}
+                      min="1"
+                      required
+                    />
+
+                    {/* Price */}
+                    <input
+                      type="number"
+                      placeholder="Price per Item"
+                      value={item.price}
+                      onChange={(e) =>
+                        handleItemChange(idx, "price", e.target.value)
+                      }
+                      disabled={isDispatched}
+                      className={`flex-1 min-w-[130px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 ${
+                        isDispatched ? "bg-gray-100 cursor-not-allowed" : ""
+                      }`}
+                      min="0.01"
+                      step="0.01"
+                      required
+                    />
+
+                    {/* Remove button — hidden entirely when dispatched */}
+                    {!isDispatched && editedOrder.items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeItem(idx)}
+                        className="p-2 text-red-500 hover:text-red-700"
+                        aria-label="Remove item"
+                      >
+                        <Trash2 size={20} />
+                      </button>
                     )}
-                    styles={{
-                      container: (base) => ({
-                        ...base,
-                        width: "100%",
-                        minWidth: "380px",
-                      }),
-                      control: (base) => ({
-                        ...base,
-                        minHeight: "48px",
-                        fontSize: "15px",
-                        paddingLeft: "4px",
-                        ...(isDispatched ? { backgroundColor: "#f3f4f6" } : {}),
-                      }),
-                      menu: (base) => ({
-                        ...base,
-                        zIndex: 9999,
-                        width: "100%",
-                      }),
-                    }}
-                  />
+                  </div>
+
+                  {/* ✅ NEW: Show available quantity warning */}
+                  {item.product_id && !isDispatched && (
+                    <div className="text-xs text-gray-600 mt-1 ml-1">
+                      Available: <span className={`font-semibold ${availableQty > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {availableQty}
+                      </span> units
+                      {selectedProduct?.reserved_quantity > 0 && (
+                        <span className="text-amber-600 ml-2">
+                          (Reserved: {selectedProduct.reserved_quantity})
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
-
-                {/* Quantity */}
-                <input
-                  type="number"
-                  placeholder="Quantity"
-                  value={item.quantity}
-                  onChange={(e) =>
-                    handleItemChange(idx, "quantity", e.target.value)
-                  }
-                  disabled={isDispatched}
-                  className={`flex-1 min-w-[110px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 ${
-                    isDispatched ? "bg-gray-100 cursor-not-allowed" : ""
-                  }`}
-                  min="1"
-                  required
-                />
-
-                {/* Price */}
-                <input
-                  type="number"
-                  placeholder="Price per Item"
-                  value={item.price}
-                  onChange={(e) =>
-                    handleItemChange(idx, "price", e.target.value)
-                  }
-                  disabled={isDispatched}
-                  className={`flex-1 min-w-[130px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 ${
-                    isDispatched ? "bg-gray-100 cursor-not-allowed" : ""
-                  }`}
-                  min="0.01"
-                  step="0.01"
-                  required
-                />
-
-                {/* Remove button — hidden entirely when dispatched */}
-                {!isDispatched && editedOrder.items.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeItem(idx)}
-                    className="p-2 text-red-500 hover:text-red-700"
-                    aria-label="Remove item"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
 
             {/* Add button — hidden when dispatched */}
             {!isDispatched && (

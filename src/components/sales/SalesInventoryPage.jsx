@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-  ArrowDownUp, Filter, PlusCircle, Search, ChevronLeft, ChevronRight,
-  Edit2, MoreVertical, Package, XCircle, Trash2, Eye, Download, Upload, CheckCircle
+  ArrowDownUp, Filter, Search, ChevronLeft, ChevronRight,
+  Package, Eye, Download, Lock, PlusCircle, Upload, Edit2, Trash2, 
+  MoreVertical, XCircle, CheckCircle
 } from 'lucide-react';
 import { debounce } from 'lodash';
 import { io } from 'socket.io-client';
@@ -13,7 +14,7 @@ import QRCode from 'qrcode';
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
 
-/* ========= useFetchInventory (reads returnable_qty) ========= */
+/* ========= useFetchInventory with reserved/available quantities ========= */
 const useFetchInventory = ({ limit, offset }) => {
   const [inventory, setInventory] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -27,7 +28,10 @@ const useFetchInventory = ({ limit, offset }) => {
       const token = localStorage.getItem('token');
       if (!token) throw new Error("Authentication token missing. Please log in again.");
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const url = `${backendUrl}/api/inventory?limit=${limit}&offset=${offset}&force_refresh=true`;
+      
+      // Use the /available endpoint like admin does
+      const url = `${backendUrl}/api/inventory/available?limit=${limit}&offset=${offset}&force_refresh=true`;
+      
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
         credentials: 'include',
@@ -43,7 +47,9 @@ const useFetchInventory = ({ limit, offset }) => {
           ...item,
           price: item.price !== null ? Number(item.price) : 0,
           stock_quantity: item.stock_quantity ?? 0,
-          returnable_qty: item.returnable_qty ?? 0, // <-- new
+          reserved_quantity: item.reserved_quantity ?? 0,
+          available_quantity: item.available_quantity ?? 0,
+          returnable_qty: item.returnable_qty ?? 0,
           description: item.description || '',
           product_code: item.product_code,
         }));
@@ -64,7 +70,7 @@ const useFetchInventory = ({ limit, offset }) => {
   return { inventory, totalItems, isLoading, error, refetchData: fetchData };
 };
 
-/* ========= Accept Return API helper (no notes) ========= */
+/* ========= Accept Return API helper ========= */
 const acceptReturnApi = async (productId, qty) => {
   const token = localStorage.getItem('token');
   if (!token) throw new Error('Authentication token missing.');
@@ -85,28 +91,38 @@ const acceptReturnApi = async (productId, qty) => {
   return await res.json();
 };
 
-/* ========= InventoryPage ========= */
+/* ========= SalesInventoryPage Component ========= */
 function SalesInventoryPage({ userRole }) {
   const [page, setPage] = useState(0);
   const [itemsPerPage] = useState(10);
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStock, setFilterStock] = useState('All');
-  const [showEditForm, setShowEditForm] = useState(false);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'product_id', direction: 'desc' });
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [selectedDescription, setSelectedDescription] = useState('');
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const [selectedBarcode, setSelectedBarcode] = useState('');
   const [selectedProductName, setSelectedProductName] = useState('');
   const [selectedProductDescription, setSelectedProductDescription] = useState('');
+  
+  const [showQtyModal, setShowQtyModal] = useState(false);
+  const [qtyProduct, setQtyProduct] = useState(null);
+  
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  
   const tableRef = useRef(null);
   const fileInputRef = useRef(null);
 
   const { inventory: allInventory, totalItems, isLoading, error, refetchData } =
     useFetchInventory({ limit: 5000, offset: 0 });
+
+  const openQuantityModal = useCallback((item) => {
+    setQtyProduct(item);
+    setShowQtyModal(true);
+  }, []);
 
   const generateQRCode = useCallback(async (productCode, productName, description, elementId) => {
     try {
@@ -166,7 +182,7 @@ function SalesInventoryPage({ userRole }) {
     if (sortConfig.key) {
       sortableInventory.sort((a, b) => {
         let aValue = a[sortConfig.key], bValue = b[sortConfig.key];
-        if (sortConfig.key === 'price' || sortConfig.key === 'stock_quantity' || sortConfig.key === 'returnable_qty') {
+        if (sortConfig.key === 'product_id' || sortConfig.key === 'price' || sortConfig.key === 'stock_quantity' || sortConfig.key === 'returnable_qty' || sortConfig.key === 'available_quantity') {
           aValue = Number(aValue);
           bValue = Number(bValue);
         } else if (sortConfig.key === 'created_at') {
@@ -189,8 +205,8 @@ function SalesInventoryPage({ userRole }) {
         (item.product_code || '').toLowerCase().includes(searchTerm);
       const matchesStock =
         filterStock === 'All' ||
-        (filterStock === 'In Stock' && item.stock_quantity > 0) ||
-        (filterStock === 'Out of Stock' && item.stock_quantity === 0);
+        (filterStock === 'In Stock' && item.available_quantity > 0) ||
+        (filterStock === 'Out of Stock' && item.available_quantity === 0);
       return matchesSearch && matchesStock;
     });
   }, [sortedInventory, searchTerm, filterStock]);
@@ -200,7 +216,73 @@ function SalesInventoryPage({ userRole }) {
     return filteredInventory.slice(start, start + itemsPerPage);
   }, [filteredInventory, page, itemsPerPage]);
 
-  /* ========= Import/Export validation includes returnable_qty ========= */
+  const exportToExcel = useCallback(() => {
+    if (filteredInventory.length === 0) {
+      toast.warning('No data to export', { autoClose: 2500 });
+      return;
+    }
+
+    const data = filteredInventory.map(item => ({
+      'Product ID': item.product_id,
+      'Product Code': item.product_code || 'N/A',
+      'Product Name': (item.product_name || '').replace(/<[^>]*>/g, '').trim() || 'N/A',
+      'Description': (item.description || 'N/A').replace(/<[^>]*>/g, '').trim(),
+      'Stock Quantity': Number(item.stock_quantity ?? 0),
+      'Reserved Qty': Number(item.reserved_quantity ?? 0),
+      'Available Qty': Number(item.available_quantity ?? 0),
+      'Returnable Qty': Number(item.returnable_qty ?? 0),
+      'Price (₹)': formatCurrency(Number(item.price ?? 0)),
+      'Created At': item.created_at
+        ? new Date(item.created_at).toLocaleString('en-IN', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          })
+        : 'N/A',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+
+    const colWidths = [];
+    const headers = Object.keys(data[0] || {});
+    headers.forEach((header, i) => {
+      let maxWidth = header.length;
+      data.forEach(row => {
+        const val = String(row[header] ?? '');
+        maxWidth = Math.max(maxWidth, val.length);
+      });
+      colWidths[i] = { wch: Math.min(Math.max(maxWidth + 3, 12), 60) };
+    });
+    worksheet['!cols'] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Finished Goods');
+
+    const today = new Date().toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).replace(/ /g, '_');
+
+    const filename = `FG_Inventory_${today}.xlsx`;
+
+    XLSX.writeFile(workbook, filename);
+    toast.success(`Exported ${filteredInventory.length} items successfully`, {
+      autoClose: 2200,
+    });
+  }, [filteredInventory]);
+
+  const showDescription = useCallback((description) => {
+    setSelectedDescription(description);
+    setShowDescriptionModal(true);
+  }, []);
+
+  const showBarcode = useCallback((productCode, productName, description) => {
+    setSelectedBarcode(productCode);
+    setSelectedProductName(productName);
+    setSelectedProductDescription(description || 'No description available');
+    setShowBarcodeModal(true);
+  }, []);
+
   const validateImportRow = useCallback((row, index) => {
     const errors = [];
     if (!row['Product Name'] || !String(row['Product Name']).trim()) {
@@ -336,39 +418,6 @@ function SalesInventoryPage({ userRole }) {
     }
   }, [validateImportRow, refetchData]);
 
-  /* ========= Export includes returnable_qty ========= */
-  const exportToExcel = useCallback(() => {
-    const data = filteredInventory.map(item => ({
-      'Product ID': item.product_id,
-      'Product Code': item.product_code || 'N/A',
-      'Product Name': item.product_name.replace(/<[^>]*>/g, '') || 'N/A',
-      'Description': item.description || 'N/A',
-      'Stock Quantity': Number(item.stock_quantity),
-      'Returnable Qty': Number(item.returnable_qty ?? 0),
-      'Price (₹)': formatCurrency(Number(item.price)),
-      'Created At (IST)': item.created_at
-        ? `${new Date(item.created_at).toLocaleDateString('en-IN')} ${new Date(item.created_at).toLocaleTimeString('en-IN')}`
-        : 'N/A',
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Products/Finished Goods');
-
-    const colWidths = data.reduce((acc, row) => {
-      Object.keys(row).forEach((key, idx) => {
-        const value = String(row[key]).replace(/<[^>]*>/g, '');
-        acc[idx] = Math.max(acc[idx] || 10, value.length + 2);
-      });
-      return acc;
-    }, []);
-    worksheet['!cols'] = colWidths.map(width => ({ wch: width }));
-
-    XLSX.writeFile(workbook, 'Products_Finished_Goods_Inventory.xlsx');
-    toast.success('Products/Finished Goods exported to Excel!', { autoClose: 2000 });
-  }, [filteredInventory]);
-
-  /* ========= Create / Update handlers now send returnable_qty ========= */
   const handleCreateItem = useCallback(async ({ product_name, stock_quantity, price, description, product_code, returnable_qty = 0 }) => {
     const token = localStorage.getItem('token');
     try {
@@ -453,19 +502,6 @@ function SalesInventoryPage({ userRole }) {
     setShowEditForm(true);
   }, []);
 
-  const showDescription = useCallback((description) => {
-    setSelectedDescription(description);
-    setShowDescriptionModal(true);
-  }, []);
-
-  const showBarcode = useCallback((productCode, productName, description) => {
-    setSelectedBarcode(productCode);
-    setSelectedProductName(productName);
-    setSelectedProductDescription(description || 'No description available');
-    setShowBarcodeModal(true);
-  }, []);
-
-  /* ========= ActionsDropdown includes Accept Return (modal) ========= */
   const ActionsDropdown = ({ item, onEdit }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
@@ -539,19 +575,13 @@ function SalesInventoryPage({ userRole }) {
     }));
   }, []);
 
-//   if (userRole !== 'admin') return (
-//     <div className="min-h-screen flex items-center justify-center text-gray-800 text-2xl" role="alert">
-//       Access Denied
-//     </div>
-//   );
-
   if (isLoading && !allInventory.length) return (
     <div className="min-h-screen flex items-center justify-center" aria-live="polite">
       <div className="text-gray-600 text-xl animate-pulse">Loading inventory...</div>
     </div>
   );
 
-  if (error && !showEditForm && !showCreateForm) return (
+  if (error) return (
     <div className="min-h-screen flex items-center justify-center text-red-700" role="alert">
       {error}
       <button
@@ -563,7 +593,6 @@ function SalesInventoryPage({ userRole }) {
     </div>
   );
 
-  /* ========= Render ========= */
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Products/Finished Goods Stocks</h1>
@@ -651,8 +680,8 @@ function SalesInventoryPage({ userRole }) {
                   { key: 'product_code', label: 'Product Code' },
                   { key: 'product_name', label: 'Product Name' },
                   { key: 'description', label: 'Description' },
-                  { key: 'stock_quantity', label: 'Stock Quantity' },
-                  { key: 'returnable_qty', label: 'Returnable Qty' }, // <-- new column
+                  { key: 'stock_quantity', label: 'Stock (Physical)' },
+                  { key: 'returnable_qty', label: 'Returnable Qty' },
                   { key: 'price', label: 'Price' },
                   { key: 'created_at', label: 'Created At (IST)' },
                   { key: 'qrcode', label: 'QR Code' },
@@ -660,25 +689,25 @@ function SalesInventoryPage({ userRole }) {
                 ].map(({ key, label }) => (
                   <th
                     key={key}
-                    onClick={() => key !== 'actions' && key !== 'qrcode' && handleSort(key)}
+                    onClick={() => key !== 'qrcode' && key !== 'actions' && handleSort(key)}
                     onKeyDown={(e) =>
-                      key !== 'actions' &&
                       key !== 'qrcode' &&
+                      key !== 'actions' &&
                       (e.key === 'Enter' || e.key === ' ') &&
                       (e.preventDefault(), handleSort(key))
                     }
                     className={`py-5 px-3 ${
-                      key !== 'actions' && key !== 'qrcode'
+                      key !== 'qrcode' && key !== 'actions'
                         ? 'cursor-pointer hover:bg-amber-200 focus:outline-none focus:bg-amber-200'
                         : ''
                     }`}
-                    tabIndex={key !== 'actions' && key !== 'qrcode' ? 0 : undefined}
+                    tabIndex={key !== 'qrcode' && key !== 'actions' ? 0 : undefined}
                     aria-sort={sortConfig.key === key ? sortConfig.direction : 'none'}
                     role="columnheader"
                   >
                     <div className="flex items-center">
                       {label}
-                      {key !== 'actions' && key !== 'qrcode' && (
+                      {key !== 'qrcode' && key !== 'actions' && (
                         <ArrowDownUp className="ml-2" size={16} aria-hidden="true" />
                       )}
                     </div>
@@ -704,20 +733,23 @@ function SalesInventoryPage({ userRole }) {
                     ) : '-'}
                   </td>
                   <td className="py-4 px-3">
-                    <span
-                      className={`px-3 py-1 rounded-full text-white text-sm ${
+                    <button
+                      onClick={() => openQuantityModal(item)}
+                      className={`px-3 py-1 rounded-full text-white text-sm hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-amber-300 ${
                         item.stock_quantity > 0
-                          ? 'bg-green-600'
+                          ? 'bg-green-600 hover:bg-green-700'
                           : item.stock_quantity === 0
                             ? 'bg-gray-500'
                             : 'bg-red-600'
                       }`}
+                      aria-label={`View quantity breakdown for ${item.product_name}`}
                     >
                       {item.stock_quantity}
-                    </span>
+                    </button>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Avail: {item.available_quantity ?? item.stock_quantity}
+                    </div>
                   </td>
-
-                  {/* Returnable Qty cell */}
                   <td className="py-4 px-3">
                     <span
                       className={`px-3 py-1 rounded-full text-white text-sm ${
@@ -727,7 +759,6 @@ function SalesInventoryPage({ userRole }) {
                       {item.returnable_qty}
                     </span>
                   </td>
-
                   <td className="py-4 px-3">{formatCurrency(item.price)}</td>
                   <td className="py-4 px-3">
                     <div className="flex flex-col">
@@ -788,14 +819,7 @@ function SalesInventoryPage({ userRole }) {
               <p className="text-lg">No inventory items found.</p>
               {searchTerm || filterStock !== 'All' ? (
                 <p className="mt-2">Try adjusting your search or filters.</p>
-              ) : (
-                <button
-                  onClick={() => setShowCreateForm(true)}
-                  className="mt-4 p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center"
-                >
-                  <PlusCircle className="mr-2" aria-hidden="true" /> Add Your First Item
-                </button>
-              )}
+              ) : null}
             </div>
           )}
         </div>
@@ -803,8 +827,8 @@ function SalesInventoryPage({ userRole }) {
 
       {/* Create Item Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="create-form-title">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] max-h-[90vh] overflow-y-auto relative" role="dialog" aria-labelledby="create-form-title">
             <button
               onClick={() => setShowCreateForm(false)}
               className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
@@ -820,8 +844,8 @@ function SalesInventoryPage({ userRole }) {
 
       {/* Edit Item Modal */}
       {showEditForm && selectedItem && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="edit-form-title">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] max-h-[90vh] overflow-y-auto relative" role="dialog" aria-labelledby="edit-form-title">
             <button
               onClick={() => setShowEditForm(false)}
               className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
@@ -844,7 +868,7 @@ function SalesInventoryPage({ userRole }) {
               className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
               aria-label="Close description modal"
             >
-              <XCircle size={24} aria-hidden="true" />
+              <Package size={24} aria-hidden="true" />
             </button>
             <h2 id="description-modal-title" className="text-2xl font-bold mb-6">Description</h2>
             <p className="text-gray-700 whitespace-pre-wrap">{selectedDescription || 'No description available'}</p>
@@ -865,7 +889,7 @@ function SalesInventoryPage({ userRole }) {
               className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
               aria-label="Close QR code modal"
             >
-              <XCircle size={24} aria-hidden="true" />
+              <Package size={24} aria-hidden="true" />
             </button>
 
             <h2 id="qrcode-modal-title" className="text-2xl font-bold mb-4">QR Code for {selectedProductName}</h2>
@@ -902,17 +926,191 @@ function SalesInventoryPage({ userRole }) {
         </div>
       )}
 
+      {/* Quantity Breakdown Modal - READ ONLY for sales */}
+      {showQtyModal && qtyProduct && (
+        <QuantityBreakdownModal
+          product={qtyProduct}
+          onClose={() => setShowQtyModal(false)}
+        />
+      )}
+
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </div>
   );
 }
 
-/* ========= CreateItemForm (includes returnable_qty) ========= */
+/* ========= Quantity Breakdown Modal - READ ONLY VERSION for Sales ========= */
+const QuantityBreakdownModal = ({ product, onClose }) => {
+  const [holds, setHolds] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHolds = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const res = await fetch(
+          `${backendUrl}/api/inventory/${product.product_id}/holds`,
+          {
+            headers: { 'Authorization': `Bearer ${token}` },
+            credentials: 'include',
+          }
+        );
+        
+        if (!res.ok) {
+          throw new Error('Failed to fetch holds');
+        }
+        
+        const json = await res.json();
+        setHolds(json.data || []);
+      } catch (err) {
+        console.error('Failed to load holds:', err);
+        toast.error('Failed to load reserved stock', { autoClose: 3000 });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchHolds();
+  }, [product.product_id]);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+      <div className="bg-white w-[90%] max-w-[900px] rounded-xl shadow-xl p-6 relative max-h-[90vh] overflow-y-auto">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          aria-label="Close modal"
+        >
+          <Package size={24} />
+        </button>
+
+        <h2 className="text-2xl font-bold mb-4 pr-8">
+          Quantity Breakdown — {product.product_name}
+        </h2>
+
+        {/* SUMMARY STATS */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <Stat label="Physical" value={product.stock_quantity} />
+          <Stat label="Reserved" value={product.reserved_quantity || 0} highlight />
+          <Stat label="Available" value={product.available_quantity || 0} />
+          <Stat label="Returnable" value={product.returnable_qty || 0} />
+        </div>
+
+        <div className="text-sm text-gray-600 mb-4">
+          <strong>Formula:</strong> Available = Physical - Reserved
+        </div>
+
+        {/* RESERVED BREAKDOWN */}
+        <h3 className="text-lg font-semibold mb-3 text-amber-700 flex items-center">
+          <span className="w-2 h-2 bg-amber-600 rounded-full mr-2"></span>
+          Reserved / Blocked Stock
+        </h3>
+
+        {loading ? (
+          <p className="text-gray-500 py-4">Loading holds…</p>
+        ) : holds.length === 0 ? (
+          <div className="bg-gray-50 rounded-lg p-4 text-gray-600 text-center">
+            <Package size={32} className="mx-auto mb-2 text-gray-400" />
+            <p>No active reservations</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border rounded-lg">
+              <thead className="bg-amber-100">
+                <tr>
+                  <th className="p-3 text-left">Reason</th>
+                  <th className="p-3 text-left">Qty</th>
+                  <th className="p-3 text-left">For</th>
+                  <th className="p-3 text-left">Reference</th>
+                  <th className="p-3 text-left">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {holds.map(h => (
+                  <tr key={h.hold_id} className="border-t hover:bg-amber-50">
+                    <td className="p-3">{h.reason}</td>
+                    <td className="p-3">
+                      <span className="px-2 py-1 bg-amber-200 rounded-full text-sm font-medium">
+                        {h.quantity}
+                      </span>
+                    </td>
+                    
+                    <td className="p-3">
+                      {h.reference_type ? (
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                            h.reference_type === 'ORDER'
+                              ? 'bg-blue-100 text-blue-800'
+                              : h.reference_type === 'QA'
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {h.reference_type}
+                        </span>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+
+                    <td className="p-3 text-sm">
+                      {h.reference_value ? (
+                        h.reference_type === 'ORDER' ? (
+                          <a
+                            href={`/orders?orderId=${h.reference_value}`}
+                            className="text-blue-600 hover:underline font-medium focus:outline-none focus:ring-2 focus:ring-blue-300 rounded px-1"
+                          >
+                            #{h.reference_value}
+                          </a>
+                        ) : (
+                          <span className="font-medium">{h.reference_value}</span>
+                        )
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+
+                    <td className="p-3 text-sm">
+                      {new Date(h.created_at).toLocaleDateString('en-IN')}
+                      <div className="text-gray-500 text-xs">
+                        {new Date(h.created_at).toLocaleTimeString('en-IN')}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* Helper Component for Stats */
+const Stat = ({ label, value, highlight }) => (
+  <div className={`p-4 rounded-lg text-center ${highlight ? 'bg-amber-200 border-2 border-amber-400' : 'bg-gray-100'}`}>
+    <div className="text-sm text-gray-600 mb-1">{label}</div>
+    <div className="text-2xl font-bold">{value ?? 0}</div>
+  </div>
+);
+
+/* ========= CreateItemForm ========= */
 const CreateItemForm = ({ onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: '',
     stock_quantity: '0',
-    returnable_qty: '0', // <-- new
+    returnable_qty: '0',
     price: 0,
     description: '',
     product_code: '',
@@ -926,15 +1124,6 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     product_code: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [partSearch, setPartSearch] = useState('');
-  const [allParts, setAllParts] = useState([]);
-  const [filteredParts, setFilteredParts] = useState([]);
-  const [isPartLoading, setIsPartLoading] = useState(false);
-  const [showPartDropdown, setShowPartDropdown] = useState(false);
-  const [partsLoaded, setPartsLoaded] = useState(false);
-
-  const partDropdownRef = useRef(null);
 
   const validateField = (name, value) => {
     if (name === 'product_name' && !value.trim()) return 'Product name is required';
@@ -951,7 +1140,6 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
 
     let processedValue;
     if (name === 'stock_quantity' || name === 'returnable_qty') {
-      // Keep raw string so "-" and "" are allowed while typing
       processedValue = value;
     } else if (name === 'price') {
       processedValue = parseFloat(value) || 0;
@@ -965,93 +1153,6 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     }
   };
 
-  // ... loading parts logic identical to earlier (kept unchanged) ...
-  const loadParts = useCallback(async () => {
-    if (partsLoaded || isPartLoading) return;
-    try {
-      setIsPartLoading(true);
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error('Authentication token missing.');
-
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const res = await fetch(`${backendUrl}/api/parts?limit=500&offset=0`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-        credentials: 'include',
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Failed to fetch parts (${res.status})`);
-      }
-
-      const json = await res.json();
-      const list = json.data || [];
-      setAllParts(list);
-      setPartsLoaded(true);
-    } catch (err) {
-      console.error('Failed to load parts:', err);
-      toast.error(err.message || 'Failed to load parts', { autoClose: 3000 });
-    } finally {
-      setIsPartLoading(false);
-    }
-  }, [partsLoaded, isPartLoading]);
-
-  useEffect(() => {
-    const term = partSearch.toLowerCase().trim();
-    if (!term) {
-      setFilteredParts(allParts.slice(0, 20));
-    } else {
-      setFilteredParts(
-        allParts
-          .filter(p =>
-            (p.partCode || '').toLowerCase().includes(term) ||
-            (p.name || '').toLowerCase().includes(term) ||
-            (p.drawingNo || '').toLowerCase().includes(term)
-          )
-          .slice(0, 20)
-      );
-    }
-  }, [partSearch, allParts]);
-
-  useEffect(() => {
-    if (!showPartDropdown) return;
-
-    const handleClickOutside = (event) => {
-      if (partDropdownRef.current && !partDropdownRef.current.contains(event.target)) {
-        setShowPartDropdown(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showPartDropdown]);
-
-  const handlePartSearchChange = async (e) => {
-    const value = e.target.value;
-    setPartSearch(value);
-    setShowPartDropdown(true);
-    if (!partsLoaded && !isPartLoading) {
-      loadParts();
-    }
-  };
-
-  const handlePartSelect = (part) => {
-    setFormData(prev => ({
-      ...prev,
-      product_name: part.name || '',
-      product_code: part.partCode || '',
-      description: part.description || '',
-    }));
-    setErrors(prev => ({
-      ...prev,
-      product_name: '',
-      product_code: '',
-      description: '',
-    }));
-    setPartSearch(`${part.partCode} — ${part.name}`);
-    setShowPartDropdown(false);
-  };
-
   const handleSave = async () => {
     const fieldErrors = {
       product_name: validateField('product_name', formData.product_name),
@@ -1062,7 +1163,6 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
       description: '',
     };
 
-    // validate stock_quantity as integer (can be negative)
     const sq = formData.stock_quantity.trim();
     if (sq === '') {
       fieldErrors.stock_quantity = 'Stock quantity is required';
@@ -1090,53 +1190,6 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
 
   return (
     <form className="space-y-4" onSubmit={e => e.preventDefault()}>
-      <div>
-        <label className="text-gray-700 font-medium">Search Part (optional)</label>
-        <div className="relative" ref={partDropdownRef}>
-          <input
-            type="text"
-            value={partSearch}
-            onChange={handlePartSearchChange}
-            onFocus={() => {
-              setShowPartDropdown(true);
-              if (!partsLoaded && !isPartLoading) {
-                loadParts();
-              }
-            }}
-            placeholder="Type part code or name..."
-            className="w-full p-2 pl-8 border rounded-lg focus:ring-2 focus:ring-amber-300"
-            disabled={isSubmitting}
-          />
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-          {showPartDropdown && (
-            <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white border rounded-lg shadow-lg">
-              {isPartLoading && (
-                <div className="px-3 py-2 text-sm text-gray-500">Loading parts...</div>
-              )}
-              {!isPartLoading && filteredParts.length === 0 && (
-                <div className="px-3 py-2 text-sm text-gray-500">No parts found.</div>
-              )}
-              {!isPartLoading && filteredParts.map(part => (
-                <button
-                  key={part.id}
-                  type="button"
-                  onClick={() => handlePartSelect(part)}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50"
-                >
-                  <div className="font-medium">{part.partCode} — {part.name}</div>
-                  <div className="text-xs text-gray-500">
-                    {part.partTypeName}{part.drawingNo ? ` • Drawing: ${part.drawingNo}` : ''}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <p className="text-xs text-gray-500 mt-1">
-          Selecting a part will fill Product Code, Product Name and Description.
-        </p>
-      </div>
-
       <div>
         <label htmlFor="create-product-name" className="text-gray-700 font-medium">Product Name</label>
         <input
@@ -1255,12 +1308,12 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
   );
 };
 
-/* ========= EditItemForm (includes returnable_qty) ========= */
+/* ========= EditItemForm ========= */
 const EditItemForm = ({ item, onSubmit, onClose }) => {
   const [formData, setFormData] = useState({
     product_name: item.product_name,
     stock_quantity: String(item.stock_quantity ?? 0),
-    returnable_qty: String(item.returnable_qty ?? 0), // <-- new
+    returnable_qty: String(item.returnable_qty ?? 0),
     price: item.price,
     description: item.description || '',
     product_code: item.product_code,
@@ -1290,7 +1343,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
 
     let processedValue;
     if (name === 'stock_quantity' || name === 'returnable_qty') {
-      processedValue = value; // keep string
+      processedValue = value;
     } else if (name === 'price') {
       processedValue = parseFloat(value) || 0;
     } else {
@@ -1458,7 +1511,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   );
 };
 
-/* ========= AcceptReturnModal component (NOTES REMOVED) ========= */
+/* ========= AcceptReturnModal ========= */
 const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
   const [qty, setQty] = useState(product.returnable_qty ?? 0);
   const [isSubmitting, setIsSubmitting] = useState(false);
