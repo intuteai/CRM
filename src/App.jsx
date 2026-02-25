@@ -2391,7 +2391,7 @@ function App() {
           .replace(":action", "[a-zA-Z]+");
         regexPattern = `^${regexPattern}$`;
         const regex = new RegExp(regexPattern);
-        return regex.test(normalizedPath);
+        return regex.test(normalizedPath); 
       }
       return path === normalizedPath;
     });
