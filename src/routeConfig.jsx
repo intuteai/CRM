@@ -10,8 +10,13 @@ import StoreDashboard from "./components/dashboards/StoreDashboard";
 import AccountsDashboard from "./components/dashboards/AccountsDashboard";
 import CustomerDashboard from "./components/dashboards/CustomerDashboard";
 import DispatchDashboard from "./components/dashboards/DispatchDashboard";
+// Compage
 import EmployeeDashboard from "./components/dashboards/EmployeeDashboard";
 import HRDashboard from "./components/dashboards/HRDashboard";
+// Intute
+import IAEmployeeDashboard from "./components/dashboards/IAEmployeeDashboard";
+import IAHRDashboard from "./components/dashboards/IAHRDashboard";
+import IAOrdersPage from "./components/ia/IAOrdersPage";
 
 // Admin
 import EnquiryPage from "./components/admin/EnquiryPage";
@@ -80,7 +85,7 @@ import AttendanceSummary from "./components/hr/AttendanceSummary";
 
 // Route configuration array
 export const routeConfig = [
-  // HR Routes
+  // ── Compage HR Routes ────────────────────────────────────
   {
     path: "/hr-dashboard",
     allowedRoles: ["hr"],
@@ -88,17 +93,45 @@ export const routeConfig = [
   },
   {
     path: "/attendance-summary",
-    allowedRoles: ["hr"],
+    allowedRoles: ["hr", "ia_hr"],
     component: AttendanceSummary,
   },
   {
     path: "/hr-payslips",
-    allowedRoles: ["hr"],
+    allowedRoles: ["ia_hr"],           // Intute HR only
     component: HRPayslipForm,
   },
+
+  // ── Compage Employee Routes ──────────────────────────────
+  {
+    path: "/employee-dashboard",
+    allowedRoles: ["employee"],
+    component: EmployeeDashboard,
+  },
+  {
+    path: "/attendance-history",
+    allowedRoles: ["employee", "ia_employee"],
+    component: AttendanceHistory,
+  },
+
+  // ── Intute HR Routes ─────────────────────────────────────
+  {
+    path: "/ia-hr-dashboard",
+    allowedRoles: ["ia_hr"],
+    component: IAHRDashboard,
+  },
+
+  // ── Intute Employee Routes ───────────────────────────────
+  {
+    path: "/ia-employee-dashboard",
+    allowedRoles: ["ia_employee"],
+    component: IAEmployeeDashboard,
+  },
+
+  // ── Shared: Activities (Intute only) ─────────────────────
   {
     path: "/activities",
-    allowedRoles: ["employee", "hr"],
+    allowedRoles: ["ia_employee", "ia_hr"],
     component: ActivitiesPage,
   },
 
@@ -273,28 +306,23 @@ export const routeConfig = [
     component: CustomerQueriesPage,
   },
 
-  // Employee Routes
+  // ── Intute Orders ────────────────────────────────────────────
   {
-    path: "/employee-dashboard",
-    allowedRoles: ["employee"],
-    component: EmployeeDashboard,
-  },
-  {
-    path: "/attendance-history",
-    allowedRoles: ["employee"],
-    component: AttendanceHistory,
+    path: "/ia-orders",
+    allowedRoles: ["ia_employee", "ia_hr"],
+    component: IAOrdersPage,
   },
 
   // Shared Routes (multiple roles)
   {
     path: "/edit-profile",
-    allowedRoles: ["admin", "customer", "sales", "design", "production", "store", "dispatch", "accounts", "employee", "hr"],
+    allowedRoles: ["admin", "customer", "sales", "design", "production", "store", "dispatch", "accounts", "employee", "hr", "ia_employee", "ia_hr"],
     component: EditProfile,
   },
   {
     path: "/orders",
     allowedRoles: ["admin", "sales", "accounts", "production"],
-    component: (props) => 
+    component: (props) =>
       props.userRole === "production" ? (
         <ProductionOrdersPage {...props} />
       ) : (
@@ -405,7 +433,7 @@ export const routeConfig = [
   // Redirect route (typo handling)
   {
     path: "/account-dashboard",
-    allowedRoles: ["admin", "customer", "sales", "design", "production", "store", "dispatch", "accounts", "employee", "hr"],
+    allowedRoles: ["admin", "customer", "sales", "design", "production", "store", "dispatch", "accounts", "employee", "hr", "ia_employee", "ia_hr"],
     isRedirect: true,
     redirectTo: "/accounts-dashboard",
   },
@@ -413,7 +441,6 @@ export const routeConfig = [
 
 // Helper to render routes
 export const renderRoute = (route, userRole, socket) => {
-  // Handle redirect routes
   if (route.isRedirect) {
     return <Navigate to={route.redirectTo} replace />;
   }

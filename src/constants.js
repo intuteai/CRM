@@ -7,8 +7,12 @@ export const ROLES = {
   STORE: "store",
   DISPATCH: "dispatch",
   ACCOUNTS: "accounts",
+  // Compage
   EMPLOYEE: "employee",
   HR: "hr",
+  // Intute
+  IA_EMPLOYEE: "ia_employee",
+  IA_HR: "ia_hr",
 };
 
 export const DASHBOARD_ROUTES = {
@@ -20,8 +24,12 @@ export const DASHBOARD_ROUTES = {
   [ROLES.DISPATCH]: "/dispatch-dashboard",
   [ROLES.ACCOUNTS]: "/accounts-dashboard",
   [ROLES.CUSTOMER]: "/customer-dashboard",
+  // Compage
   [ROLES.EMPLOYEE]: "/employee-dashboard",
   [ROLES.HR]: "/hr-dashboard",
+  // Intute
+  [ROLES.IA_EMPLOYEE]: "/ia-employee-dashboard",
+  [ROLES.IA_HR]: "/ia-hr-dashboard",
 };
 
 export const allowedPathsByRole = {
@@ -126,17 +134,34 @@ export const allowedPathsByRole = {
     "/purchase-invoices",
     "/edit-profile",
   ],
+
+  // ── Compage ──────────────────────────────────────────────
   [ROLES.EMPLOYEE]: [
     "/employee-dashboard",
     "/attendance-history",
     "/edit-profile",
-    "/activities",
   ],
   [ROLES.HR]: [
     "/hr-dashboard",
     "/attendance-summary",
-    "/edit-profile",
-    "/activities",
     "/hr-payslips",
+    "/edit-profile",
+  ],
+
+  // ── Intute ───────────────────────────────────────────────
+  [ROLES.IA_EMPLOYEE]: [
+    "/ia-employee-dashboard",
+    "/attendance-history",
+    "/activities",
+    "/ia-orders",
+    "/edit-profile",
+  ],
+  [ROLES.IA_HR]: [
+    "/ia-hr-dashboard",
+    "/attendance-summary",
+    "/activities",
+    "/ia-orders",
+    "/hr-payslips",
+    "/edit-profile",
   ],
 };

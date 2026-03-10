@@ -1,10 +1,10 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarCheck, Sparkles } from 'lucide-react';
+import { CalendarCheck, CalendarDays, Download, Package, Sparkles } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-function HRDashboard({ socket, userRole }) {
+function IAHRDashboard({ socket, userRole }) {
   useEffect(() => {
     if (!socket) return;
     socket.on('leaveRequestCreated', (data) => {
@@ -13,9 +13,17 @@ function HRDashboard({ socket, userRole }) {
     socket.on('payrollProcessed', (data) => {
       toast.success(`Payroll for ${data?.month || 'month'} processed`, { autoClose: 4000 });
     });
+    socket.on('activities:created', (data) => {
+      toast.info(`New activity: ${data?.summary || ''}`, { autoClose: 3000 });
+    });
+    socket.on('ia_orders:created', (data) => {
+      toast.success(`New order: ${data?.invoice_number || ''}`, { autoClose: 3000 });
+    });
     return () => {
       socket.off('leaveRequestCreated');
       socket.off('payrollProcessed');
+      socket.off('activities:created');
+      socket.off('ia_orders:created');
     };
   }, [socket]);
 
@@ -26,7 +34,6 @@ function HRDashboard({ socket, userRole }) {
       <div className="absolute -bottom-32 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
 
       <div className="relative z-10 p-6">
-        {/* Header */}
         <div className="text-center mb-16 mt-8">
           <div className="inline-flex items-center justify-center mb-4">
             <div className="p-3 bg-gradient-to-r from-amber-400 to-orange-400 rounded-2xl shadow-lg">
@@ -35,7 +42,7 @@ function HRDashboard({ socket, userRole }) {
           </div>
           <div className="flex justify-center mb-3">
             <span className="inline-flex items-center bg-white border border-amber-200 text-amber-700 text-xs font-semibold uppercase tracking-widest px-4 py-1.5 rounded-full shadow-sm">
-              Compage
+              INTUTE AI
             </span>
           </div>
           <h1 className="text-5xl font-bold bg-gradient-to-r from-gray-800 via-gray-700 to-amber-700 bg-clip-text text-transparent mb-4 tracking-tight">
@@ -44,9 +51,8 @@ function HRDashboard({ socket, userRole }) {
           <div className="w-24 h-1 bg-gradient-to-r from-amber-400 to-orange-400 mx-auto rounded-full"></div>
         </div>
 
-        {/* Cards */}
         <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
             <DashboardCard
               to="/attendance-summary"
               icon={<CalendarCheck />}
@@ -55,6 +61,33 @@ function HRDashboard({ socket, userRole }) {
               gradient="from-teal-100 to-cyan-50"
               hoverGradient="hover:from-teal-200 hover:to-cyan-100"
               iconBg="bg-teal-500"
+            />
+            <DashboardCard
+              to="/activities"
+              icon={<CalendarDays />}
+              title="Activities"
+              desc="Manage team tasks and assignments"
+              gradient="from-orange-100 to-red-50"
+              hoverGradient="hover:from-orange-200 hover:to-red-100"
+              iconBg="bg-orange-500"
+            />
+            <DashboardCard
+              to="/ia-orders"
+              icon={<Package />}
+              title="Dispatch Orders"
+              desc="Track VCU and HMI dispatch with serial numbers"
+              gradient="from-purple-100 to-violet-50"
+              hoverGradient="hover:from-purple-200 hover:to-violet-100"
+              iconBg="bg-purple-500"
+            />
+            <DashboardCard
+              to="/hr-payslips"
+              icon={<Download />}
+              title="Payslip Generator"
+              desc="Generate manual payslips with PDF download"
+              gradient="from-green-100 to-emerald-50"
+              hoverGradient="hover:from-green-200 hover:to-emerald-100"
+              iconBg="bg-green-500"
             />
           </div>
         </div>
@@ -89,4 +122,4 @@ function DashboardCard({ to, icon, title, desc, gradient, hoverGradient, iconBg 
   );
 }
 
-export default HRDashboard;
+export default IAHRDashboard;
