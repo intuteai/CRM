@@ -14,7 +14,7 @@ import DispatchDashboard from "./components/dashboards/DispatchDashboard";
 import EmployeeDashboard from "./components/dashboards/EmployeeDashboard";
 import HRDashboard from "./components/dashboards/HRDashboard";
 // Intute
-import IAEmployeeDashboard from "./components/dashboards/IAEmployeeDashboard";
+import IAEmployeeDashboard from "./components/dashboards/Iaemployeedashboard";
 import IAHRDashboard from "./components/dashboards/IAHRDashboard";
 import IAOrdersPage from "./components/ia/IAOrdersPage";
 
