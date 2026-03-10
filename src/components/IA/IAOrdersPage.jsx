@@ -46,8 +46,15 @@ const Highlight = ({ text, query }) => {
   );
 };
 
-const emptyItem = () => ({ vcu_serial: '', vcu_make: '', vcu_model: '', hmi_imei: '', hmi_make: '', hmi_model: '' });
+const emptyItem = () => ({
+  vcu_serial: '', vcu_make: '', vcu_model: '',
+  hmi_imei: '', hmi_make: '', hmi_model: '',
+});
 const emptyForm = () => ({ customer_name: '', invoice_number: '', dispatch_date: '', notes: '', items: [emptyItem()] });
+
+// Whether an item has any HMI data at all
+const itemHasHmi = (item) =>
+  !!(item?.hmi_imei || item?.hmi_make || item?.hmi_model);
 
 // ── Sort indicator ────────────────────────────────────────────
 const SortIcon = ({ col, sortConfig }) => {
@@ -252,7 +259,14 @@ function IAOrdersPage({ socket }) {
       dispatch_date:  toYMD(order.dispatch_date),
       notes:          order.notes || '',
       items: order.items?.length > 0
-        ? order.items.map(i => ({ vcu_serial: i.vcu_serial, vcu_make: i.vcu_make, vcu_model: i.vcu_model, hmi_imei: i.hmi_imei, hmi_make: i.hmi_make, hmi_model: i.hmi_model }))
+        ? order.items.map(i => ({
+            vcu_serial: i.vcu_serial,
+            vcu_make:   i.vcu_make,
+            vcu_model:  i.vcu_model,
+            hmi_imei:   i.hmi_imei  || '',
+            hmi_make:   i.hmi_make  || '',
+            hmi_model:  i.hmi_model || '',
+          }))
         : [emptyItem()],
     });
     setIsModalOpen(true);
@@ -267,8 +281,22 @@ function IAOrdersPage({ socket }) {
     const token = localStorage.getItem('token');
     if (!token) { toast.error('Please log in again'); return; }
 
-    const validItems = form.items.filter(i => i.vcu_serial.trim() && i.vcu_make.trim() && i.vcu_model.trim() && i.hmi_imei.trim() && i.hmi_make.trim() && i.hmi_model.trim());
-    if (validItems.length === 0) { toast.error('Add at least one complete VCU + HMI unit'); return; }
+    // VCU fields are required; HMI fields are optional (but all-or-nothing)
+    const validItems = form.items.filter(i =>
+      i.vcu_serial.trim() && i.vcu_make.trim() && i.vcu_model.trim()
+    );
+    if (validItems.length === 0) { toast.error('Add at least one complete VCU unit'); return; }
+
+    // Validate HMI: if any HMI field is filled, all must be filled
+    for (let idx = 0; idx < validItems.length; idx++) {
+      const i = validItems[idx];
+      const hmiFields = [i.hmi_imei.trim(), i.hmi_make.trim(), i.hmi_model.trim()];
+      const filledCount = hmiFields.filter(Boolean).length;
+      if (filledCount > 0 && filledCount < 3) {
+        toast.error(`Unit ${idx + 1}: Fill all HMI fields (IMEI, Make, Model) or leave all blank`);
+        return;
+      }
+    }
 
     const payload = { ...form, dispatch_date: toYMD(form.dispatch_date), items: validItems };
     const isEdit  = !!editingOrder;
@@ -540,67 +568,76 @@ function IAOrdersPage({ socket }) {
                         <td colSpan={8} className="px-6 pb-5 pt-2">
                           {order.items?.length > 0 ? (
                             <div className="space-y-2">
-                              {order.items.map((item, i) => (
-                                <div key={item.item_id} className="bg-white rounded-xl border border-amber-100 shadow-sm overflow-hidden">
-                                  <div className="grid grid-cols-2 divide-x divide-amber-100">
-                                    {/* VCU */}
-                                    <div className="p-3">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-md">
-                                          <Cpu className="w-3 h-3" /> VCU
+                              {order.items.map((item, i) => {
+                                const hasHmi = itemHasHmi(item);
+                                return (
+                                  <div key={item.item_id} className="bg-white rounded-xl border border-amber-100 shadow-sm overflow-hidden">
+                                    <div className={`grid ${hasHmi ? 'grid-cols-2 divide-x divide-amber-100' : 'grid-cols-1'}`}>
+                                      {/* VCU */}
+                                      <div className="p-3">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-md">
+                                            <Cpu className="w-3 h-3" /> VCU
+                                          </div>
+                                          <span className="text-xs text-gray-400">Unit {i + 1}</span>
+                                          {!hasHmi && (
+                                            <span className="ml-auto text-xs text-gray-300 italic">No HMI</span>
+                                          )}
                                         </div>
-                                        <span className="text-xs text-gray-400">Unit {i + 1}</span>
-                                      </div>
-                                      <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs">
-                                        <div>
-                                          <span className="text-gray-400 block">Serial</span>
-                                          <span className="font-mono font-semibold text-gray-800">
-                                            <Highlight text={item.vcu_serial} query={searchField === 'all' || searchField === 'vcu_serial' ? search : ''} />
-                                          </span>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-400 block">Make</span>
-                                          <span className="font-medium text-gray-700">
-                                            <Highlight text={item.vcu_make} query={searchField === 'all' || searchField === 'vcu_make' ? search : ''} />
-                                          </span>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-400 block">Model</span>
-                                          <span className="font-medium text-gray-700">
-                                            <Highlight text={item.vcu_model} query={searchField === 'all' || searchField === 'vcu_model' ? search : ''} />
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    {/* HMI */}
-                                    <div className="p-3">
-                                      <div className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-bold px-2 py-0.5 rounded-md mb-2 w-fit">
-                                        <Monitor className="w-3 h-3" /> HMI
-                                      </div>
-                                      <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs">
-                                        <div>
-                                          <span className="text-gray-400 block">IMEI</span>
-                                          <span className="font-mono font-semibold text-gray-800">
-                                            <Highlight text={item.hmi_imei} query={searchField === 'all' || searchField === 'hmi_imei' ? search : ''} />
-                                          </span>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-400 block">Make</span>
-                                          <span className="font-medium text-gray-700">
-                                            <Highlight text={item.hmi_make} query={searchField === 'all' || searchField === 'hmi_make' ? search : ''} />
-                                          </span>
-                                        </div>
-                                        <div>
-                                          <span className="text-gray-400 block">Model</span>
-                                          <span className="font-medium text-gray-700">
-                                            <Highlight text={item.hmi_model} query={searchField === 'all' || searchField === 'hmi_model' ? search : ''} />
-                                          </span>
+                                        <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs">
+                                          <div>
+                                            <span className="text-gray-400 block">Serial</span>
+                                            <span className="font-mono font-semibold text-gray-800">
+                                              <Highlight text={item.vcu_serial} query={searchField === 'all' || searchField === 'vcu_serial' ? search : ''} />
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-400 block">Make</span>
+                                            <span className="font-medium text-gray-700">
+                                              <Highlight text={item.vcu_make} query={searchField === 'all' || searchField === 'vcu_make' ? search : ''} />
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <span className="text-gray-400 block">Model</span>
+                                            <span className="font-medium text-gray-700">
+                                              <Highlight text={item.vcu_model} query={searchField === 'all' || searchField === 'vcu_model' ? search : ''} />
+                                            </span>
+                                          </div>
                                         </div>
                                       </div>
+
+                                      {/* HMI — only when present */}
+                                      {hasHmi && (
+                                        <div className="p-3">
+                                          <div className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-bold px-2 py-0.5 rounded-md mb-2 w-fit">
+                                            <Monitor className="w-3 h-3" /> HMI
+                                          </div>
+                                          <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs">
+                                            <div>
+                                              <span className="text-gray-400 block">IMEI</span>
+                                              <span className="font-mono font-semibold text-gray-800">
+                                                <Highlight text={item.hmi_imei} query={searchField === 'all' || searchField === 'hmi_imei' ? search : ''} />
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-400 block">Make</span>
+                                              <span className="font-medium text-gray-700">
+                                                <Highlight text={item.hmi_make} query={searchField === 'all' || searchField === 'hmi_make' ? search : ''} />
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-gray-400 block">Model</span>
+                                              <span className="font-medium text-gray-700">
+                                                <Highlight text={item.hmi_model} query={searchField === 'all' || searchField === 'hmi_model' ? search : ''} />
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           ) : <p className="text-sm text-gray-400 italic py-2">No items</p>}
                         </td>
@@ -699,33 +736,66 @@ function IAOrdersPage({ socket }) {
                         <Cpu className="w-3.5 h-3.5" /> VCU
                       </div>
                       <div className="grid grid-cols-3 gap-2 flex-1">
-                        {[['vcu_serial', 'Serial No.', 'SN-001', true], ['vcu_make', 'Make', 'e.g. Siemens', false], ['vcu_model', 'Model', 'e.g. S7-1200', false]].map(([field, label, placeholder, mono]) => (
+                        {[
+                          ['vcu_serial', 'Serial No.', 'SN-001',     true,  true],
+                          ['vcu_make',   'Make',       'e.g. Siemens', false, true],
+                          ['vcu_model',  'Model',      'e.g. S7-1200', false, true],
+                        ].map(([field, label, placeholder, mono, required]) => (
                           <div key={field}>
                             <label className="block text-xs text-gray-500 mb-1">{label}</label>
-                            <input type="text" required placeholder={placeholder}
+                            <input
+                              type="text"
+                              required={required}
+                              placeholder={placeholder}
                               className={`w-full px-3 py-2 rounded-lg border border-amber-200 focus:ring-2 focus:ring-amber-300 focus:outline-none text-sm ${mono ? 'font-mono' : ''}`}
-                              value={item[field]} onChange={e => setItemField(index, field, e.target.value)} />
+                              value={item[field]}
+                              onChange={e => setItemField(index, field, e.target.value)}
+                            />
                           </div>
                         ))}
                       </div>
                     </div>
+
                     <div className="border-t border-dashed border-amber-100" />
-                    {/* HMI row */}
+
+                    {/* HMI row — optional */}
                     <div className="flex items-start gap-3">
                       <div className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-bold px-2.5 py-2 rounded-lg shrink-0 mt-5 border border-green-100">
                         <Monitor className="w-3.5 h-3.5" /> HMI
                       </div>
                       <div className="grid grid-cols-3 gap-2 flex-1">
-                        {[['hmi_imei', 'IMEI', '358XXXXXXXXXXX', true], ['hmi_make', 'Make', 'e.g. Weintek', false], ['hmi_model', 'Model', 'e.g. MT8071iP', false]].map(([field, label, placeholder, mono]) => (
+                        {[
+                          ['hmi_imei',  'IMEI',  '358XXXXXXXXXXX', true],
+                          ['hmi_make',  'Make',  'e.g. Weintek',   false],
+                          ['hmi_model', 'Model', 'e.g. MT8071iP',  false],
+                        ].map(([field, label, placeholder, mono]) => (
                           <div key={field}>
-                            <label className="block text-xs text-gray-500 mb-1">{label}</label>
-                            <input type="text" required placeholder={placeholder}
+                            <label className="block text-xs text-gray-500 mb-1">
+                              {label}{' '}
+                              <span className="text-gray-300 font-normal">(optional)</span>
+                            </label>
+                            <input
+                              type="text"
+                              placeholder={placeholder}
                               className={`w-full px-3 py-2 rounded-lg border border-amber-200 focus:ring-2 focus:ring-amber-300 focus:outline-none text-sm ${mono ? 'font-mono' : ''}`}
-                              value={item[field]} onChange={e => setItemField(index, field, e.target.value)} />
+                              value={item[field]}
+                              onChange={e => setItemField(index, field, e.target.value)}
+                            />
                           </div>
                         ))}
                       </div>
                     </div>
+
+                    {/* Warn if HMI is partially filled */}
+                    {(() => {
+                      const hmiFields = [item.hmi_imei.trim(), item.hmi_make.trim(), item.hmi_model.trim()];
+                      const filled = hmiFields.filter(Boolean).length;
+                      return filled > 0 && filled < 3 ? (
+                        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                          <span>⚠️</span> Fill all HMI fields or leave all blank
+                        </p>
+                      ) : null;
+                    })()}
                   </div>
                 </div>
               ))}
