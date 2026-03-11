@@ -3526,20 +3526,25 @@ const formatCurrency = (amount) =>
    Minimum 1 character required (no fixed length restriction).
    ===================================================================== */
 
+/* =====================================================================
+   PRODUCT CODE BUILDER — 11-character structure from ERP_PART_CODE_LIST.pdf
+   Structure: NNNN(4) + ChartPair(2, e.g. L5) + SubAbbr(2, e.g. BR) + Store(1) + Col(1) + Row(1) = 11
+   ===================================================================== */
+
 const PRODUCT_CHARTS = [
-  { label: 'IPT',      symbol: 'L', defaultSub: '5', defaultSubLabel: 'BR – Bearing BR'  },
-  { label: 'Rikshaw',  symbol: 'R', defaultSub: '1', defaultSubLabel: 'SH – Shaft'        },
-  { label: '2Wheeler', symbol: 'W', defaultSub: '2', defaultSubLabel: 'FF – Front Flange' },
-  { label: 'Autonxt',  symbol: 'A', defaultSub: '0', defaultSubLabel: 'RF – Rear Flange'  },
-  { label: 'Special',  symbol: 'S', defaultSub: '3', defaultSubLabel: 'AL – Aluminium'    },
+  { label: 'IPT',      symbol: 'L', digit: '5', defaultSub: 'BR', color: 'purple' },
+  { label: 'Rikshaw',  symbol: 'R', digit: '1', defaultSub: 'SH', color: 'blue'   },
+  { label: '2Wheeler', symbol: 'W', digit: '2', defaultSub: 'FF', color: 'indigo' },
+  { label: 'Autonxt',  symbol: 'A', digit: '0', defaultSub: 'RF', color: 'violet' },
+  { label: 'Special',  symbol: 'S', digit: '3', defaultSub: 'AL', color: 'fuchsia'},
 ];
 
 const SUB_CODES = [
-  { code: '0', abbr: 'RF', label: 'Rear Flange'  },
-  { code: '1', abbr: 'SH', label: 'Shaft'         },
-  { code: '2', abbr: 'FF', label: 'Front Flange'  },
-  { code: '3', abbr: 'AL', label: 'Aluminium'     },
-  { code: '5', abbr: 'BR', label: 'Bearing BR'    },
+  { abbr: 'BR', label: 'Bearing BR'   },
+  { abbr: 'SH', label: 'Shaft'        },
+  { abbr: 'FF', label: 'Front Flange' },
+  { abbr: 'RF', label: 'Rear Flange'  },
+  { abbr: 'AL', label: 'Aluminium'    },
 ];
 
 const SEG = {
@@ -3557,40 +3562,53 @@ function pad4(val) {
   return String(Math.min(n, 9999)).padStart(4, '0');
 }
 
-function buildCode({ partNum, chartSymbol, subCode, storeNum, colNum, rowNum }) {
-  const p  = (partNum || '0001').padStart(4, '0').slice(0, 4);
-  const c  = chartSymbol || '';
-  const s  = subCode     || '';
-  const st = storeNum    || '';
-  const co = colNum      || '';
-  const ro = rowNum      || '';
-  return p + c + s + st + co + ro;
+// Builds the full 11-char code
+function buildCode({ partNum, chartSymbol, chartDigit, subAbbr, storeNum, colNum, rowNum }) {
+  const p  = (partNum     || '0001').padStart(4, '0').slice(0, 4); // 4 chars
+  const cp = (chartSymbol || '') + (chartDigit || '');              // 2 chars e.g. "L5"
+  const s  = (subAbbr     || '').slice(0, 2).padEnd(2, '_');       // 2 chars e.g. "BR"
+  const st = (storeNum    || '').slice(0, 1);                       // 1 char
+  const co = (colNum      || '').slice(0, 1);                       // 1 char
+  const ro = (rowNum      || '').slice(0, 1);                       // 1 char
+  return p + cp + s + st + co + ro;
 }
 
 function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
-  const [partNum,    setPartNum   ] = useState('0001');
-  const [partInput,  setPartInput ] = useState('1');
-  const [chart,      setChart     ] = useState(null);
-  const [subCode,    setSubCode   ] = useState('');
-  const [storeNum,   setStoreNum  ] = useState('');
-  const [colNum,     setColNum    ] = useState('');
-  const [rowNum,     setRowNum    ] = useState('');
-  const [manualMode, setManualMode] = useState(false);
-  const [manualVal,  setManualVal ] = useState(value);
+  const [partNum,   setPartNum  ] = useState('0001');
+  const [partInput, setPartInput] = useState('1');
+  const [chart,     setChart    ] = useState(null);
+  const [subAbbr,   setSubAbbr  ] = useState('');
+  const [storeNum,  setStoreNum ] = useState('');
+  const [colNum,    setColNum   ] = useState('');
+  const [rowNum,    setRowNum   ] = useState('');
+  const [manualMode,setManualMode] = useState(false);
+  const [manualVal, setManualVal ] = useState(value);
 
-  const derivedCode = buildCode({ partNum, chartSymbol: chart?.symbol, subCode, storeNum, colNum, rowNum });
-  const isComplete  = derivedCode.trim().length >= 1;
+  const derivedCode = buildCode({
+    partNum,
+    chartSymbol: chart?.symbol,
+    chartDigit:  chart?.digit,
+    subAbbr,
+    storeNum,
+    colNum,
+    rowNum,
+  });
 
+  // Count filled segments to show progress
+  const filledChars = derivedCode.replace(/_/g, '').length;
+  const isComplete  = derivedCode.length === 11 && !derivedCode.includes('_') && !!chart && !!subAbbr && !!storeNum && !!colNum && !!rowNum;
+
+  // Fire onChange whenever any builder field changes
   useEffect(() => {
     if (manualMode) return;
-    onChange?.(derivedCode);
-  }, [partNum, chart, subCode, storeNum, colNum, rowNum, manualMode]);
+    // Only propagate complete or partial — parent decides validity
+    onChange?.(derivedCode.replace(/_/g, ''));
+  }, [partNum, chart, subAbbr, storeNum, colNum, rowNum, manualMode]);
 
-  // Clicking a chart auto-selects its default sub-code from the PDF mapping
   const handleChartClick = (c) => {
     if (disabled) return;
     setChart(c);
-    setSubCode(c.defaultSub);
+    setSubAbbr(c.defaultSub); // auto-fill matching sub from PDF mapping
   };
 
   const handlePartInput = (e) => {
@@ -3598,12 +3616,19 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
     setPartInput(raw);
     if (raw !== '') setPartNum(pad4(raw));
   };
-
   const handlePartBlur = () => {
     const padded = pad4(partInput);
     setPartInput(String(parseInt(padded, 10)));
     setPartNum(padded);
   };
+
+  // Colour-coded segments for the preview bar
+  const seg_part  = derivedCode.slice(0, 4);
+  const seg_chart = chart ? (chart.symbol + chart.digit) : '';
+  const seg_sub   = subAbbr || '';
+  const seg_store = storeNum || '';
+  const seg_col   = colNum   || '';
+  const seg_row   = rowNum   || '';
 
   if (manualMode) {
     return (
@@ -3612,8 +3637,9 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
           <input
             type="text"
             value={manualVal}
+            maxLength={11}
             onChange={e => { setManualVal(e.target.value); onChange?.(e.target.value); }}
-            placeholder="Enter product code manually"
+            placeholder="Enter 11-char code manually"
             className="flex-1 p-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-amber-300"
             disabled={disabled}
           />
@@ -3625,7 +3651,7 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
             ← Use Builder
           </button>
         </div>
-        <p className="text-xs text-gray-400">Must be at least 1 character.</p>
+        <p className="text-xs text-gray-400">Must be exactly 11 characters.</p>
       </div>
     );
   }
@@ -3633,34 +3659,45 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
   return (
     <div className="border-2 border-amber-200 rounded-xl bg-gradient-to-br from-amber-50 to-white p-4 space-y-4 shadow-sm">
 
-      {/* Live Preview */}
-      <div className="space-y-1">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Generated Code</p>
-        <div className="flex items-center gap-3">
-          <div className="font-mono text-xl tracking-[0.2em] bg-white border-2 border-amber-300 rounded-xl px-4 py-2.5 shadow-inner flex-1 text-center select-all min-h-[48px]">
-            <span className={SEG.part  + ' font-bold'}>{partNum}</span>
-            <span className={SEG.chart + ' font-bold'}>{chart?.symbol ?? ''}</span>
-            <span className={SEG.sub   + ' font-bold'}>{subCode}</span>
-            <span className={SEG.store + ' font-bold'}>{storeNum}</span>
-            <span className={SEG.col   + ' font-bold'}>{colNum}</span>
-            <span className={SEG.row   + ' font-bold'}>{rowNum}</span>
-          </div>
+      {/* ── Live Preview ── */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Code Preview
+          </p>
           {isComplete
-            ? <span className="text-xs bg-green-100 text-green-700 border border-green-300 px-2 py-1 rounded-full font-medium whitespace-nowrap">✓ Valid</span>
-            : <span className="text-xs bg-amber-100 text-amber-700 border border-amber-300 px-2 py-1 rounded-full whitespace-nowrap">Incomplete</span>
+            ? <span className="text-xs bg-green-100 text-green-700 border border-green-300 px-2 py-1 rounded-full font-semibold">✓ 11 / 11</span>
+            : <span className="text-xs bg-amber-100 text-amber-700 border border-amber-300 px-2 py-1 rounded-full">
+                {[seg_part, seg_chart, seg_sub, seg_store, seg_col, seg_row].join('').length} / 11
+              </span>
           }
         </div>
-        <div className="flex gap-3 flex-wrap pt-0.5">
+
+        {/* Code display */}
+        <div className="flex items-center gap-1 bg-white border-2 border-amber-300 rounded-xl px-4 py-3 shadow-inner justify-center font-mono text-2xl tracking-[0.2em] select-all overflow-x-auto">
+          <span className={`${SEG.part}  font-black`}>{seg_part}</span>
+          <span className="text-gray-200 font-thin">·</span>
+          <span className={`${SEG.chart} font-black`}>{seg_chart || <span className="text-gray-200 text-lg">??</span>}</span>
+          <span className="text-gray-200 font-thin">·</span>
+          <span className={`${SEG.sub}   font-black`}>{seg_sub   || <span className="text-gray-200 text-lg">??</span>}</span>
+          <span className="text-gray-200 font-thin">·</span>
+          <span className={`${SEG.store} font-black`}>{seg_store || <span className="text-gray-200 text-lg">?</span>}</span>
+          <span className={`${SEG.col}   font-black`}>{seg_col   || <span className="text-gray-200 text-lg">?</span>}</span>
+          <span className={`${SEG.row}   font-black`}>{seg_row   || <span className="text-gray-200 text-lg">?</span>}</span>
+        </div>
+
+        {/* Segment legend */}
+        <div className="flex gap-3 flex-wrap text-[10px] font-bold pt-0.5">
           {[
-            [SEG.part,  'Part #'],
-            [SEG.chart, 'Chart'],
-            [SEG.sub,   'Sub'],
-            [SEG.store, 'Store'],
-            [SEG.col,   'Col'],
-            [SEG.row,   'Row'],
+            [SEG.part,  '① NNNN  Part #'],
+            [SEG.chart, '② CC  Chart Pair (e.g. L5)'],
+            [SEG.sub,   '③ SS  Sub (e.g. BR)'],
+            [SEG.store, '④ T  Store'],
+            [SEG.col,   '⑤ C  Col'],
+            [SEG.row,   '⑥ R  Row'],
           ].map(([cls, lbl]) => (
-            <span key={lbl} className={`text-[10px] font-bold ${cls} flex items-center gap-0.5`}>
-              <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: 'currentColor', opacity: 0.6 }} />
+            <span key={lbl} className={`${cls} flex items-center gap-0.5`}>
+              <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: 'currentColor', opacity: 0.7 }} />
               {lbl}
             </span>
           ))}
@@ -3669,18 +3706,16 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
 
       <hr className="border-amber-100" />
 
-      {/* Part Number */}
+      {/* ── ① Part Number ── */}
       <div>
         <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1.5">
-          <span className={`${SEG.part} font-black`}>NNNN</span>
+          <span className={`${SEG.part} font-black text-sm`}>①</span>
           Part Number
-          <span className="font-normal text-gray-400">(0001–9999)</span>
+          <span className="font-normal text-gray-400">(0001 – 9999)</span>
         </label>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <input
-            type="number"
-            min={1}
-            max={9999}
+            type="number" min={1} max={9999}
             value={partInput}
             onChange={handlePartInput}
             onBlur={handlePartBlur}
@@ -3688,128 +3723,181 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
             className="w-28 p-2 border border-gray-300 rounded-lg font-mono text-base focus:ring-2 focus:ring-blue-300 bg-white"
             disabled={disabled}
           />
-          <span className="text-gray-400 text-sm">→ <code className={`${SEG.part} font-bold`}>{partNum}</code></span>
+          <span className="text-gray-400 text-sm">
+            → <code className={`${SEG.part} font-bold text-base`}>{partNum}</code>
+          </span>
         </div>
       </div>
 
-      {/* Product Chart */}
+      {/* ── ② Product Chart ── */}
       <div>
         <label className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
-          <span className={`${SEG.chart} font-black`}>C</span>
+          <span className={`${SEG.chart} font-black text-sm`}>②</span>
           Product Chart
-          <span className="font-normal text-gray-400 ml-1">— auto-fills Sub Code from ERP mapping</span>
+          <span className="font-normal text-gray-400 ml-1">— 2-char pair, auto-fills Sub Code</span>
         </label>
-        <div className="grid grid-cols-5 gap-1.5">
+        <div className="grid grid-cols-5 gap-2">
           {PRODUCT_CHARTS.map(c => (
             <button
               key={c.symbol}
               type="button"
               onClick={() => handleChartClick(c)}
-              title={`Auto-fills Sub: ${c.defaultSubLabel}`}
-              className={`py-2 px-1 rounded-lg border-2 text-center transition-all duration-150 select-none
+              title={`Auto-fills sub: ${c.defaultSub}`}
+              className={`py-3 px-1 rounded-xl border-2 text-center transition-all duration-150 select-none
                 ${chart?.symbol === c.symbol
-                  ? 'border-purple-500 bg-purple-100 text-purple-800 shadow-md scale-105'
-                  : 'border-gray-200 bg-white text-gray-600 hover:border-purple-300 hover:bg-purple-50'
+                  ? 'border-purple-500 bg-purple-100 shadow-md scale-105'
+                  : 'border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50'
                 } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             >
-              <div className="text-lg font-black text-purple-600 leading-none">{c.symbol}</div>
-              <div className="text-[10px] font-semibold mt-0.5">{c.label}</div>
-              <div className="text-[9px] text-purple-400 mt-0.5">→ {c.defaultSubLabel.split(' – ')[0]}</div>
+              {/* Big chart pair e.g. "L5" */}
+              <div className={`text-xl font-black ${SEG.chart} leading-none tracking-tight`}>
+                {c.symbol}<span className="text-gray-400">{c.digit}</span>
+              </div>
+              <div className="text-[10px] font-semibold text-gray-600 mt-1">{c.label}</div>
+              <div className="text-[9px] text-purple-400 mt-0.5">→ {c.defaultSub}</div>
             </button>
           ))}
         </div>
         {chart && (
-          <p className="text-xs text-purple-600 mt-1.5 bg-purple-50 border border-purple-200 rounded px-2 py-1">
-            <strong>{chart.label} ({chart.symbol})</strong> selected — sub-code auto-set to <strong>{chart.defaultSub}</strong> ({chart.defaultSubLabel})
-          </p>
+          <div className="mt-2 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5 flex items-center gap-2">
+            <span className="font-semibold">{chart.label}</span>
+            <span className="text-gray-400">·</span>
+            <span>Pair: <code className={`${SEG.chart} font-black`}>{chart.symbol}{chart.digit}</code></span>
+            <span className="text-gray-400">·</span>
+            <span>Sub auto-set to: <code className={`${SEG.sub} font-black`}>{chart.defaultSub}</code></span>
+          </div>
         )}
       </div>
 
-      {/* Sub Code — dropdown + free-text input (synced) */}
+      {/* ── ③ Sub Code ── */}
       <div>
-        <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1.5">
-          <span className={`${SEG.sub} font-black`}>S</span>
+        <label className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
+          <span className={`${SEG.sub} font-black text-sm`}>③</span>
           Sub Code
+          <span className="font-normal text-gray-400 ml-1">— 2-char abbreviation</span>
         </label>
+        {/* Preset quick-pick buttons */}
+        <div className="grid grid-cols-5 gap-1.5 mb-2">
+          {SUB_CODES.map(sc => (
+            <button
+              key={sc.abbr}
+              type="button"
+              onClick={() => !disabled && setSubAbbr(sc.abbr)}
+              className={`py-2.5 px-1 rounded-lg border-2 text-center transition-all duration-150 select-none
+                ${subAbbr === sc.abbr
+                  ? 'border-green-500 bg-green-100 shadow-sm scale-[1.04]'
+                  : 'border-gray-200 bg-white hover:border-green-300 hover:bg-green-50'
+                } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            >
+              <div className={`text-lg font-black ${SEG.sub} leading-none`}>{sc.abbr}</div>
+              <div className="text-[9px] text-gray-400 mt-0.5 leading-tight">{sc.label}</div>
+            </button>
+          ))}
+        </div>
+        {/* Manual sub-code entry */}
         <div className="flex items-center gap-2">
-          <select
-            value={subCode}
-            onChange={e => !disabled && setSubCode(e.target.value)}
-            className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-300 bg-white text-sm"
-            disabled={disabled}
-          >
-            <option value="">— Select Sub Code —</option>
-            {SUB_CODES.map(sc => (
-              <option key={sc.code} value={sc.code}>
-                {sc.code} — {sc.abbr} ({sc.label})
-              </option>
-            ))}
-          </select>
-          {/* Manual override: type any custom sub-code */}
+          <span className="text-xs text-gray-400 whitespace-nowrap">Custom:</span>
           <input
             type="text"
-            maxLength={3}
-            value={subCode}
-            onChange={e => !disabled && setSubCode(e.target.value)}
-            placeholder="or type"
-            className="w-20 p-2 border border-gray-300 rounded-lg font-mono text-sm text-center focus:ring-2 focus:ring-green-300 bg-white"
+            maxLength={2}
+            value={subAbbr}
+            onChange={e => !disabled && setSubAbbr(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 2))}
+            placeholder="XX"
+            className={`w-16 p-1.5 border-2 rounded-lg font-mono text-base text-center focus:ring-2 focus:ring-green-300 bg-white uppercase transition-colors
+              ${subAbbr && !SUB_CODES.find(s => s.abbr === subAbbr)
+                ? 'border-green-400 bg-green-50 text-green-700'
+                : 'border-gray-200'
+              }`}
             disabled={disabled}
           />
+          {subAbbr && !SUB_CODES.find(s => s.abbr === subAbbr) && (
+            <span className="text-xs text-green-600 font-semibold bg-green-50 border border-green-200 rounded px-2 py-0.5">
+              Custom: <code>{subAbbr}</code>
+            </span>
+          )}
+          {!subAbbr && (
+            <span className="text-xs text-gray-300">type any 2-char code here</span>
+          )}
         </div>
-        <p className="text-xs text-gray-400 mt-1">
-          Selecting a chart above auto-fills this. You can override via dropdown or by typing.
-        </p>
       </div>
 
       <hr className="border-amber-100" />
 
-      {/* Store / Column / Row — free-text inputs */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* ── ④⑤⑥ Store / Column / Row ── */}
+      <div className="grid grid-cols-3 gap-4">
+
+        {/* Store */}
         <div>
-          <label className="text-xs font-bold text-gray-600 mb-1 flex items-center gap-1">
-            <span className={`${SEG.store} font-black`}>S</span> Store #
+          <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
+            <span className={`${SEG.store} font-black text-sm`}>④</span> Store # <span className="font-normal text-gray-400">(1 digit)</span>
           </label>
           <input
             type="text"
+            maxLength={1}
             value={storeNum}
-            onChange={e => !disabled && setStoreNum(e.target.value)}
-            placeholder="e.g. 1"
-            className="w-full p-2 border border-gray-300 rounded-lg font-mono text-base text-center focus:ring-2 focus:ring-red-300 bg-white"
+            onChange={e => !disabled && setStoreNum(e.target.value.replace(/\D/g, '').slice(0, 1))}
+            placeholder="1"
+            className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-red-300 bg-white"
             disabled={disabled}
           />
         </div>
+
+        {/* Column */}
         <div>
-          <label className="text-xs font-bold text-gray-600 mb-1 flex items-center gap-1">
-            <span className={`${SEG.col} font-black`}>CC</span> Column
+          <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
+            <span className={`${SEG.col} font-black text-sm`}>⑤</span> Column <span className="font-normal text-gray-400">(1 digit)</span>
           </label>
           <input
             type="text"
+            maxLength={1}
             value={colNum}
-            onChange={e => !disabled && setColNum(e.target.value)}
-            placeholder="e.g. 01"
-            className="w-full p-2 border border-gray-300 rounded-lg font-mono text-base text-center focus:ring-2 focus:ring-orange-300 bg-white"
+            onChange={e => !disabled && setColNum(e.target.value.replace(/\D/g, '').slice(0, 1))}
+            placeholder="1"
+            className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-orange-300 bg-white"
             disabled={disabled}
           />
         </div>
+
+        {/* Row — free text input + quick-pick 1–9 (unrestricted) */}
         <div>
-          <label className="text-xs font-bold text-gray-600 mb-1 flex items-center gap-1">
-            <span className={`${SEG.row} font-black`}>R</span> Row
+          <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
+            <span className={`${SEG.row} font-black text-sm`}>⑥</span> Row <span className="font-normal text-gray-400">(1 digit)</span>
           </label>
           <input
             type="text"
+            maxLength={1}
             value={rowNum}
-            onChange={e => !disabled && setRowNum(e.target.value)}
-            placeholder="e.g. 1"
-            className="w-full p-2 border border-gray-300 rounded-lg font-mono text-base text-center focus:ring-2 focus:ring-teal-300 bg-white"
+            onChange={e => !disabled && setRowNum(e.target.value.replace(/\D/g, '').slice(0, 1))}
+            placeholder="1"
+            className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-teal-300 bg-white mb-1.5"
             disabled={disabled}
           />
+          {/* Quick-pick 1–9 */}
+          <div className="grid grid-cols-5 gap-1">
+            {['1','2','3','4','5','6','7','8','9'].map(r => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => !disabled && setRowNum(r)}
+                className={`py-1 rounded border text-xs font-bold transition-all duration-100
+                  ${rowNum === r
+                    ? 'border-teal-500 bg-teal-100 text-teal-800'
+                    : 'border-gray-200 bg-white text-gray-500 hover:border-teal-300 hover:bg-teal-50'
+                  } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
         </div>
+
       </div>
 
+      {/* Manual override link */}
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => { setManualMode(true); setManualVal(derivedCode); }}
+          onClick={() => { setManualMode(true); setManualVal(isComplete ? derivedCode.replace(/_/g,'') : ''); }}
           className="text-xs text-gray-400 hover:text-gray-600 underline"
         >
           Enter code manually instead →
