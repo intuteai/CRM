@@ -632,7 +632,7 @@ const useFetchStock = () => {
           stockQuantity: item.stockQuantity ?? 0,
           qtyRequired: item.qtyRequired ?? 0,
           description: item.description || "",
-          productCode: item.productCode || "",
+          productCode: item.productCode || item.product_code || "",
           productName: item.productName || "",
           productId: item.productId,
          createdAt: item.createdAt || item.created_at || null,
