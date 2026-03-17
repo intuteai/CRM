@@ -1,19 +1,595 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import {
-  ArrowDownUp, Search, ChevronLeft, ChevronRight, Edit2, MoreVertical,
-  XCircle, Eye, Download, Upload, PlusCircle, Package
-} from 'lucide-react';
-import { debounce } from 'lodash';
-import { io } from 'socket.io-client';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import * as XLSX from 'xlsx';
-import QRCode from 'qrcode';
+  ArrowDownUp,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Edit2,
+  MoreVertical,
+  XCircle,
+  Eye,
+  Download,
+  Upload,
+  PlusCircle,
+  Package,
+} from "lucide-react";
+import { debounce } from "lodash";
+import { io } from "socket.io-client";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import * as XLSX from "xlsx";
+import QRCode from "qrcode";
 
 const formatDate = (dateString) => {
+  if (!dateString) return "N/A";
+
   const date = new Date(dateString);
-  return `${date.toLocaleDateString('en-IN')} ${date.toLocaleTimeString('en-IN')}`;
+
+  if (isNaN(date.getTime())) return "N/A";
+
+  return date.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+  });
 };
+/* =====================================================================
+   PRODUCT CODE BUILDER
+   Data sourced directly from ERP_PART_CODE_LIST.pdf:
+
+   Chart         Symbol  DefaultSubCode  DefaultSubLabel
+   IPT           L       5               Bearing BR
+   Rikshaw       R       1               Shaft SH
+   2Wheeler      W       2               Front Flange FF
+   Autonxt       A       0               Rear Flange RF
+   Special       S       (none)          Aluminium AL
+
+   Sub Codes (alphabetic abbreviations):
+   0 → RF  Rear Flange
+   1 → SH  Shaft
+   2 → FF  Front Flange
+   3 → AL  Aluminium
+   4 → (reserved / custom)
+   5 → BR  Bearing BR
+
+   Code structure: NNNN(4) + ChartPair(2, e.g. L5) + SubAbbr(2, e.g. BR) + Store(1) + Col(1) + Row(1) = 11
+   ===================================================================== */
+
+const PRODUCT_CHARTS = [
+  { label: "IPT", symbol: "L", digit: "5", defaultSub: "BR", color: "purple" },
+  {
+    label: "Rikshaw",
+    symbol: "R",
+    digit: "1",
+    defaultSub: "SH",
+    color: "blue",
+  },
+  {
+    label: "2Wheeler",
+    symbol: "W",
+    digit: "2",
+    defaultSub: "FF",
+    color: "indigo",
+  },
+  {
+    label: "Autonxt",
+    symbol: "A",
+    digit: "0",
+    defaultSub: "RF",
+    color: "violet",
+  },
+  {
+    label: "Special",
+    symbol: "S",
+    digit: "3",
+    defaultSub: "AL",
+    color: "fuchsia",
+  },
+];
+
+const SUB_CODES = [
+  { abbr: "BR", label: "Bearing BR" },
+  { abbr: "SH", label: "Shaft" },
+  { abbr: "FF", label: "Front Flange" },
+  { abbr: "RF", label: "Rear Flange" },
+  { abbr: "AL", label: "Aluminium" },
+];
+
+const SEG = {
+  part: "text-blue-700",
+  chart: "text-purple-600",
+  sub: "text-green-700",
+  store: "text-red-600",
+  col: "text-orange-500",
+  row: "text-teal-600",
+};
+
+function pad4(val) {
+  const n = parseInt(val, 10);
+  if (isNaN(n) || n < 1) return "0001";
+  return String(Math.min(n, 9999)).padStart(4, "0");
+}
+
+// Builds the full 11-char code
+function buildCode({
+  partNum,
+  chartSymbol,
+  chartDigit,
+  subAbbr,
+  storeNum,
+  colNum,
+  rowNum,
+}) {
+  const p = (partNum || "0001").padStart(4, "0").slice(0, 4); // 4 chars
+  const cp = (chartSymbol || "") + (chartDigit || ""); // 2 chars e.g. "L5"
+  const s = (subAbbr || "").slice(0, 2).padEnd(2, "_"); // 2 chars e.g. "BR"
+  const st = (storeNum || "").slice(0, 1); // 1 char
+  const co = (colNum || "").slice(0, 1); // 1 char
+  const ro = (rowNum || "").slice(0, 1); // 1 char
+  return p + cp + s + st + co + ro;
+}
+
+// Parses an existing 11-char code back into builder segments
+// Structure: NNNN(4) + ChartSymbol(1) + ChartDigit(1) + SubAbbr(2) + Store(1) + Col(1) + Row(1)
+function parseCode(code) {
+  if (!code || code.length !== 11) return null;
+  const partNum = code.slice(0, 4); // e.g. "0042"
+  const chartSymbol = code.slice(4, 5); // e.g. "L"
+  const chartDigit = code.slice(5, 6); // e.g. "5"
+  const subAbbr = code.slice(6, 8); // e.g. "BR"
+  const storeNum = code.slice(8, 9); // e.g. "1"
+  const colNum = code.slice(9, 10); // e.g. "2"
+  const rowNum = code.slice(10, 11); // e.g. "3"
+  const chart =
+    PRODUCT_CHARTS.find(
+      (c) => c.symbol === chartSymbol && c.digit === chartDigit,
+    ) || null;
+  return {
+    partNum,
+    chartSymbol,
+    chartDigit,
+    subAbbr,
+    storeNum,
+    colNum,
+    rowNum,
+    chart,
+  };
+}
+
+function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
+  // Prefill from existing code if provided, otherwise use defaults
+  const parsed = parseCode(value);
+
+  const [partNum, setPartNum] = useState(parsed?.partNum ?? "0001");
+  const [partInput, setPartInput] = useState(
+    parsed ? String(parseInt(parsed.partNum, 10)) : "1",
+  );
+  const [chart, setChart] = useState(parsed?.chart ?? null);
+  const [subAbbr, setSubAbbr] = useState(parsed?.subAbbr ?? "");
+  const [storeNum, setStoreNum] = useState(parsed?.storeNum ?? "");
+  const [colNum, setColNum] = useState(parsed?.colNum ?? "");
+  const [rowNum, setRowNum] = useState(parsed?.rowNum ?? "");
+  // If the code can't be parsed into known segments, drop into manual mode so the user can still see and edit it
+  const [manualMode, setManualMode] = useState(!parsed && value.length === 11);
+  const [manualVal, setManualVal] = useState(value);
+
+  const derivedCode = buildCode({
+    partNum,
+    chartSymbol: chart?.symbol,
+    chartDigit: chart?.digit,
+    subAbbr,
+    storeNum,
+    colNum,
+    rowNum,
+  });
+
+  // Count filled segments to show progress
+  const isComplete =
+    derivedCode.length === 11 &&
+    !derivedCode.includes("_") &&
+    !!chart &&
+    !!subAbbr &&
+    !!storeNum &&
+    !!colNum &&
+    !!rowNum;
+
+  // Fire onChange whenever any builder field changes
+  useEffect(() => {
+    if (manualMode) return;
+    onChange?.(derivedCode.replace(/_/g, ""));
+  }, [partNum, chart, subAbbr, storeNum, colNum, rowNum, manualMode]);
+
+  const handleChartClick = (c) => {
+    if (disabled) return;
+    setChart(c);
+    setSubAbbr(c.defaultSub); // auto-fill matching sub from PDF mapping
+  };
+
+  const handlePartInput = (e) => {
+    const raw = e.target.value;
+    setPartInput(raw);
+    if (raw !== "") setPartNum(pad4(raw));
+  };
+  const handlePartBlur = () => {
+    const padded = pad4(partInput);
+    setPartInput(String(parseInt(padded, 10)));
+    setPartNum(padded);
+  };
+
+  // Colour-coded segments for the preview bar
+  const seg_part = derivedCode.slice(0, 4);
+  const seg_chart = chart ? chart.symbol + chart.digit : "";
+  const seg_sub = subAbbr || "";
+  const seg_store = storeNum || "";
+  const seg_col = colNum || "";
+  const seg_row = rowNum || "";
+
+  if (manualMode) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={manualVal}
+            maxLength={11}
+            onChange={(e) => {
+              setManualVal(e.target.value);
+              onChange?.(e.target.value);
+            }}
+            placeholder="Enter 11-char code manually"
+            className="flex-1 p-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-amber-300"
+            disabled={disabled}
+          />
+          <button
+            type="button"
+            onClick={() => setManualMode(false)}
+            className="text-xs px-3 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 whitespace-nowrap"
+          >
+            ← Use Builder
+          </button>
+        </div>
+        <p className="text-xs text-gray-400">Must be exactly 11 characters.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-2 border-amber-200 rounded-xl bg-gradient-to-br from-amber-50 to-white p-4 space-y-4 shadow-sm">
+      {/* ── Live Preview ── */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Code Preview
+          </p>
+          {isComplete ? (
+            <span className="text-xs bg-green-100 text-green-700 border border-green-300 px-2 py-1 rounded-full font-semibold">
+              ✓ 11 / 11
+            </span>
+          ) : (
+            <span className="text-xs bg-amber-100 text-amber-700 border border-amber-300 px-2 py-1 rounded-full">
+              {
+                [
+                  seg_part,
+                  seg_chart,
+                  seg_sub,
+                  seg_store,
+                  seg_col,
+                  seg_row,
+                ].join("").length
+              }{" "}
+              / 11
+            </span>
+          )}
+        </div>
+
+        {/* Code display */}
+        <div className="flex items-center gap-1 bg-white border-2 border-amber-300 rounded-xl px-4 py-3 shadow-inner justify-center font-mono text-2xl tracking-[0.2em] select-all overflow-x-auto">
+          <span className={`${SEG.part}  font-black`}>{seg_part}</span>
+          <span className="text-gray-200 font-thin">·</span>
+          <span className={`${SEG.chart} font-black`}>
+            {seg_chart || <span className="text-gray-200 text-lg">??</span>}
+          </span>
+          <span className="text-gray-200 font-thin">·</span>
+          <span className={`${SEG.sub}   font-black`}>
+            {seg_sub || <span className="text-gray-200 text-lg">??</span>}
+          </span>
+          <span className="text-gray-200 font-thin">·</span>
+          <span className={`${SEG.store} font-black`}>
+            {seg_store || <span className="text-gray-200 text-lg">?</span>}
+          </span>
+          <span className={`${SEG.col}   font-black`}>
+            {seg_col || <span className="text-gray-200 text-lg">?</span>}
+          </span>
+          <span className={`${SEG.row}   font-black`}>
+            {seg_row || <span className="text-gray-200 text-lg">?</span>}
+          </span>
+        </div>
+
+        {/* Segment legend */}
+        <div className="flex gap-3 flex-wrap text-[10px] font-bold pt-0.5">
+          {[
+            [SEG.part, "① NNNN  Part #"],
+            [SEG.chart, "② CC  Chart Pair (e.g. L5)"],
+            [SEG.sub, "③ SS  Sub (e.g. BR)"],
+            [SEG.store, "④ T  Store"],
+            [SEG.col, "⑤ C  Col"],
+            [SEG.row, "⑥ R  Row"],
+          ].map(([cls, lbl]) => (
+            <span key={lbl} className={`${cls} flex items-center gap-0.5`}>
+              <span
+                className="w-1.5 h-1.5 rounded-full inline-block"
+                style={{ background: "currentColor", opacity: 0.7 }}
+              />
+              {lbl}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <hr className="border-amber-100" />
+
+      {/* ── ① Part Number ── */}
+      <div>
+        <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1.5">
+          <span className={`${SEG.part} font-black text-sm`}>①</span>
+          Part Number
+          <span className="font-normal text-gray-400">(0001 – 9999)</span>
+        </label>
+        <div className="flex items-center gap-3">
+          <input
+            type="number"
+            min={1}
+            max={9999}
+            value={partInput}
+            onChange={handlePartInput}
+            onBlur={handlePartBlur}
+            placeholder="1"
+            className="w-28 p-2 border border-gray-300 rounded-lg font-mono text-base focus:ring-2 focus:ring-blue-300 bg-white"
+            disabled={disabled}
+          />
+          <span className="text-gray-400 text-sm">
+            →{" "}
+            <code className={`${SEG.part} font-bold text-base`}>{partNum}</code>
+          </span>
+        </div>
+      </div>
+
+      {/* ── ② Product Chart ── */}
+      <div>
+        <label className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
+          <span className={`${SEG.chart} font-black text-sm`}>②</span>
+          Product Chart
+          <span className="font-normal text-gray-400 ml-1">
+            — 2-char pair, auto-fills Sub Code
+          </span>
+        </label>
+        <div className="grid grid-cols-5 gap-2">
+          {PRODUCT_CHARTS.map((c) => (
+            <button
+              key={c.symbol}
+              type="button"
+              onClick={() => handleChartClick(c)}
+              title={`Auto-fills sub: ${c.defaultSub}`}
+              className={`py-3 px-1 rounded-xl border-2 text-center transition-all duration-150 select-none
+                ${
+                  chart?.symbol === c.symbol
+                    ? "border-purple-500 bg-purple-100 shadow-md scale-105"
+                    : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50"
+                } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+            >
+              {/* Big chart pair e.g. "L5" */}
+              <div
+                className={`text-xl font-black ${SEG.chart} leading-none tracking-tight`}
+              >
+                {c.symbol}
+                <span className="text-gray-400">{c.digit}</span>
+              </div>
+              <div className="text-[10px] font-semibold text-gray-600 mt-1">
+                {c.label}
+              </div>
+              <div className="text-[9px] text-purple-400 mt-0.5">
+                → {c.defaultSub}
+              </div>
+            </button>
+          ))}
+        </div>
+        {chart && (
+          <div className="mt-2 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5 flex items-center gap-2">
+            <span className="font-semibold">{chart.label}</span>
+            <span className="text-gray-400">·</span>
+            <span>
+              Pair:{" "}
+              <code className={`${SEG.chart} font-black`}>
+                {chart.symbol}
+                {chart.digit}
+              </code>
+            </span>
+            <span className="text-gray-400">·</span>
+            <span>
+              Sub auto-set to:{" "}
+              <code className={`${SEG.sub} font-black`}>
+                {chart.defaultSub}
+              </code>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ── ③ Sub Code ── */}
+      <div>
+        <label className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
+          <span className={`${SEG.sub} font-black text-sm`}>③</span>
+          Sub Code
+          <span className="font-normal text-gray-400 ml-1">
+            — 2-char abbreviation
+          </span>
+        </label>
+        {/* Preset quick-pick buttons */}
+        <div className="grid grid-cols-5 gap-1.5 mb-2">
+          {SUB_CODES.map((sc) => (
+            <button
+              key={sc.abbr}
+              type="button"
+              onClick={() => !disabled && setSubAbbr(sc.abbr)}
+              className={`py-2.5 px-1 rounded-lg border-2 text-center transition-all duration-150 select-none
+                ${
+                  subAbbr === sc.abbr
+                    ? "border-green-500 bg-green-100 shadow-sm scale-[1.04]"
+                    : "border-gray-200 bg-white hover:border-green-300 hover:bg-green-50"
+                } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+            >
+              <div className={`text-lg font-black ${SEG.sub} leading-none`}>
+                {sc.abbr}
+              </div>
+              <div className="text-[9px] text-gray-400 mt-0.5 leading-tight">
+                {sc.label}
+              </div>
+            </button>
+          ))}
+        </div>
+        {/* Manual sub-code entry */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400 whitespace-nowrap">
+            Custom:
+          </span>
+          <input
+            type="text"
+            maxLength={2}
+            value={subAbbr}
+            onChange={(e) =>
+              !disabled &&
+              setSubAbbr(
+                e.target.value
+                  .toUpperCase()
+                  .replace(/[^A-Z0-9]/g, "")
+                  .slice(0, 2),
+              )
+            }
+            placeholder="XX"
+            className={`w-16 p-1.5 border-2 rounded-lg font-mono text-base text-center focus:ring-2 focus:ring-green-300 bg-white uppercase transition-colors
+              ${
+                subAbbr && !SUB_CODES.find((s) => s.abbr === subAbbr)
+                  ? "border-green-400 bg-green-50 text-green-700"
+                  : "border-gray-200"
+              }`}
+            disabled={disabled}
+          />
+          {subAbbr && !SUB_CODES.find((s) => s.abbr === subAbbr) && (
+            <span className="text-xs text-green-600 font-semibold bg-green-50 border border-green-200 rounded px-2 py-0.5">
+              Custom: <code>{subAbbr}</code>
+            </span>
+          )}
+          {!subAbbr && (
+            <span className="text-xs text-gray-300">
+              type any 2-char code here
+            </span>
+          )}
+        </div>
+      </div>
+
+      <hr className="border-amber-100" />
+
+      {/* ── ④⑤⑥ Store / Column / Row ── */}
+      <div className="grid grid-cols-3 gap-4">
+        {/* Store */}
+        <div>
+          <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
+            <span className={`${SEG.store} font-black text-sm`}>④</span> Store #{" "}
+            <span className="font-normal text-gray-400">(1 digit)</span>
+          </label>
+          <input
+            type="text"
+            maxLength={1}
+            value={storeNum}
+            onChange={(e) =>
+              !disabled &&
+              setStoreNum(e.target.value.replace(/\D/g, "").slice(0, 1))
+            }
+            placeholder="1"
+            className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-red-300 bg-white"
+            disabled={disabled}
+          />
+        </div>
+
+        {/* Column */}
+        <div>
+          <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
+            <span className={`${SEG.col} font-black text-sm`}>⑤</span> Column{" "}
+            <span className="font-normal text-gray-400">(1 digit)</span>
+          </label>
+          <input
+            type="text"
+            maxLength={1}
+            value={colNum}
+            onChange={(e) =>
+              !disabled &&
+              setColNum(e.target.value.replace(/\D/g, "").slice(0, 1))
+            }
+            placeholder="1"
+            className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-orange-300 bg-white"
+            disabled={disabled}
+          />
+        </div>
+
+        {/* Row — free text input + quick-pick 1–9 (unrestricted) */}
+        <div>
+          <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
+            <span className={`${SEG.row} font-black text-sm`}>⑥</span> Row{" "}
+            <span className="font-normal text-gray-400">(1 digit)</span>
+          </label>
+          <input
+            type="text"
+            maxLength={1}
+            value={rowNum}
+            onChange={(e) =>
+              !disabled &&
+              setRowNum(e.target.value.replace(/\D/g, "").slice(0, 1))
+            }
+            placeholder="1"
+            className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-teal-300 bg-white mb-1.5"
+            disabled={disabled}
+          />
+          {/* Quick-pick 1–9 */}
+          <div className="grid grid-cols-5 gap-1">
+            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => !disabled && setRowNum(r)}
+                className={`py-1 rounded border text-xs font-bold transition-all duration-100
+                  ${
+                    rowNum === r
+                      ? "border-teal-500 bg-teal-100 text-teal-800"
+                      : "border-gray-200 bg-white text-gray-500 hover:border-teal-300 hover:bg-teal-50"
+                  } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Manual override link */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => {
+            setManualMode(true);
+            setManualVal(isComplete ? derivedCode.replace(/_/g, "") : "");
+          }}
+          className="text-xs text-gray-400 hover:text-gray-600 underline"
+        >
+          Enter code manually instead →
+        </button>
+      </div>
+    </div>
+  );
+}
 
 const useFetchStock = () => {
   const [stockItems, setStockItems] = useState([]);
@@ -25,35 +601,42 @@ const useFetchStock = () => {
     let isMounted = true;
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error("Authentication token missing. Please log in again.");
+      const token = localStorage.getItem("token");
+      if (!token)
+        throw new Error("Authentication token missing. Please log in again.");
 
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl =
+        import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
       const url = `${backendUrl}/api/stock?limit=5000&offset=0&force_refresh=true`;
 
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        credentials: 'include',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || `Stock fetch failed: ${response.statusText}`);
+        throw new Error(
+          errorData.error || `Stock fetch failed: ${response.statusText}`,
+        );
       }
 
       const { data, total } = await response.json();
       if (isMounted) {
-        const normalizedData = data.map(item => ({
+        const normalizedData = data.map((item) => ({
           ...item,
           price: item.price !== null ? Number(item.price) : 0,
           stockQuantity: item.stockQuantity ?? 0,
           qtyRequired: item.qtyRequired ?? 0,
-          description: item.description || '',
-          productCode: item.productCode || '',
-          productName: item.productName || '',
+          description: item.description || "",
+          productCode: item.productCode || "",
+          productName: item.productName || "",
           productId: item.productId,
-          createdAt: item.createdAt,
-          location: item.location || '' // NEW
+         createdAt: item.createdAt || item.created_at || null,
+          // location: item.location || "", // NEW
         }));
         setStockItems(normalizedData);
         setTotalItems(total || 0);
@@ -64,10 +647,14 @@ const useFetchStock = () => {
     } finally {
       if (isMounted) setIsLoading(false);
     }
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   return { stockItems, totalItems, isLoading, error, refetchData: fetchData };
 };
@@ -75,37 +662,45 @@ const useFetchStock = () => {
 function StoreStockPage() {
   const [page, setPage] = useState(0);
   const [itemsPerPage] = useState(10);
-  const [searchInput, setSearchInput] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortConfig, setSortConfig] = useState({
+    key: "createdAt",
+    direction: "desc",
+  });
   const [showModal, setShowModal] = useState(false);
-  const [modalMode, setModalMode] = useState('create');
+  const [modalMode, setModalMode] = useState("create");
   const [selectedItem, setSelectedItem] = useState(null);
   const [formData, setFormData] = useState({
-    productName: '',
-    description: '',
-    productCode: '',
-    stockQuantity: '',
-    qtyRequired: '',
-    location: '' // NEW
+    productName: "",
+    description: "",
+    productCode: "",
+    stockQuantity: "",
+    qtyRequired: "",
+    // location: "", // NEW
   });
   const [formErrors, setFormErrors] = useState({});
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
-  const [selectedDescription, setSelectedDescription] = useState('');
+  const [selectedDescription, setSelectedDescription] = useState("");
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
-  const [selectedBarcode, setSelectedBarcode] = useState('');
-  const [selectedProductName, setSelectedProductName] = useState('');
-  const [selectedProductDescription, setSelectedProductDescription] = useState('');
-  const [selectedProductLocation, setSelectedProductLocation] = useState(''); // NEW
+  const [selectedBarcode, setSelectedBarcode] = useState("");
+  const [selectedProductName, setSelectedProductName] = useState("");
+  const [selectedProductDescription, setSelectedProductDescription] =
+    useState("");
+  // const [selectedProductLocation, setSelectedProductLocation] = useState(""); // NEW
 
   const tableRef = useRef(null);
   const fileInputRef = useRef(null);
   const modalRef = useRef(null);
   const searchInputRef = useRef(null);
 
-  const { stockItems, totalItems, isLoading, error, refetchData } = useFetchStock();
+  const { stockItems, totalItems, isLoading, error, refetchData } =
+    useFetchStock();
 
-  const debouncedSearch = useCallback(debounce((value) => setSearchTerm(value.toLowerCase()), 300), []);
+  const debouncedSearch = useCallback(
+    debounce((value) => setSearchTerm(value.toLowerCase()), 300),
+    [],
+  );
 
   useEffect(() => {
     debouncedSearch(searchInput);
@@ -116,15 +711,25 @@ function StoreStockPage() {
 
   // Socket Connection
   useEffect(() => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
-    const socket = io(backendUrl, { withCredentials: true, transports: ['websocket'] });
+    const backendUrl =
+      import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+    const socket = io(backendUrl, {
+      withCredentials: true,
+      transports: ["websocket"],
+    });
 
-    socket.on('connect', () => toast.success('Connected to real-time updates!', { autoClose: 2000 }));
-    socket.on('connect_error', () => toast.error('Failed to connect to real-time updates.', { autoClose: 3000 }));
+    socket.on("connect", () =>
+      toast.success("Connected to real-time updates!", { autoClose: 2000 }),
+    );
+    socket.on("connect_error", () =>
+      toast.error("Failed to connect to real-time updates.", {
+        autoClose: 3000,
+      }),
+    );
 
-    socket.on('stockUpdate', ({ product_id, stock_quantity, location }) => {
-      setStockItems(prev => {
-        const index = prev.findIndex(item => item.productId === product_id);
+    socket.on("stockUpdate", ({ product_id, stock_quantity, location }) => {
+      setStockItems((prev) => {
+        const index = prev.findIndex((item) => item.productId === product_id);
         if (index === -1) {
           refetchData();
           return prev;
@@ -133,9 +738,11 @@ function StoreStockPage() {
         updated[index] = {
           ...updated[index],
           stockQuantity: Number(stock_quantity),
-          location: location ?? updated[index].location
+          // location: location ?? updated[index].location,
         };
-        toast.info(`${updated[index].productName} → ${stock_quantity} @ ${updated[index].location || 'N/A'}`, { autoClose: 2000 });
+        toast.info(`${updated[index].productName} → ${stock_quantity}`, {
+          autoClose: 2000,
+        });
         return updated;
       });
       tableRef.current?.focus();
@@ -145,53 +752,80 @@ function StoreStockPage() {
   }, [refetchData]);
 
   // QR Code
-  const generateQRCode = useCallback(async (productCode, productName, description, location, elementId) => {
-    try {
-      const data = JSON.stringify({
-        productCode,
-        productName,
-        description: description || 'No description',
-        location: location || 'Not set'
-      });
-      await QRCode.toCanvas(document.getElementById(elementId), data, {
-        width: 200, margin: 2, errorCorrectionLevel: 'H'
-      });
-    } catch (err) {
-      toast.error('QR code generation failed', { autoClose: 3000 });
-    }
-  }, []);
+  const generateQRCode = useCallback(
+    async (productCode, productName, description, location, elementId) => {
+      try {
+        const data = JSON.stringify({
+          productCode,
+          productName,
+          description: description || "No description",
+          location: location || "Not set",
+        });
+        await QRCode.toCanvas(document.getElementById(elementId), data, {
+          width: 200,
+          margin: 2,
+          errorCorrectionLevel: "H",
+        });
+      } catch (err) {
+        toast.error("QR code generation failed", { autoClose: 3000 });
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (showBarcodeModal && selectedBarcode) {
-      const item = stockItems.find(i => i.productCode === selectedBarcode);
-      generateQRCode(selectedBarcode, selectedProductName, selectedProductDescription, item?.location, 'qrcode-canvas');
+      const item = stockItems.find((i) => i.productCode === selectedBarcode);
+      generateQRCode(
+        selectedBarcode,
+        selectedProductName,
+        selectedProductDescription,
+        "",
+        "qrcode-canvas",
+      );
     }
-  }, [showBarcodeModal, selectedBarcode, selectedProductName, selectedProductDescription, stockItems, generateQRCode]);
+  }, [
+    showBarcodeModal,
+    selectedBarcode,
+    selectedProductName,
+    selectedProductDescription,
+    stockItems,
+    generateQRCode,
+  ]);
 
   // Sorting & Filtering
   const sortedStock = useMemo(() => {
     const items = [...stockItems];
     if (sortConfig.key) {
       items.sort((a, b) => {
-        let aVal = a[sortConfig.key] ?? '';
-        let bVal = b[sortConfig.key] ?? '';
-        if (['stockQuantity', 'qtyRequired', 'productId'].includes(sortConfig.key)) {
-          aVal = Number(aVal); bVal = Number(bVal);
-        } else if (sortConfig.key === 'createdAt') {
-          aVal = new Date(aVal || 0); bVal = new Date(bVal || 0);
+        let aVal = a[sortConfig.key] ?? "";
+        let bVal = b[sortConfig.key] ?? "";
+        if (
+          ["stockQuantity", "qtyRequired", "productId"].includes(sortConfig.key)
+        ) {
+          aVal = Number(aVal);
+          bVal = Number(bVal);
+        } else if (sortConfig.key === "createdAt") {
+          aVal = new Date(aVal || 0);
+          bVal = new Date(bVal || 0);
         }
-        return (aVal < bVal ? -1 : 1) * (sortConfig.direction === 'asc' ? 1 : -1);
+        return (
+          (aVal < bVal ? -1 : 1) * (sortConfig.direction === "asc" ? 1 : -1)
+        );
       });
     }
     return items;
   }, [stockItems, sortConfig]);
 
   const filteredStock = useMemo(() => {
-    return sortedStock.filter(item => {
+    return sortedStock.filter((item) => {
       const terms = [
-        item.productId, item.productName, item.productCode, item.location
-      ].map(s => String(s || '').toLowerCase());
-      return terms.some(t => t.includes(searchTerm));
+        item.productId,
+        item.productName,
+        item.productCode,
+        // item.location,
+      ].map((s) => String(s || "").toLowerCase());
+      return terms.some((t) => t.includes(searchTerm));
     });
   }, [sortedStock, searchTerm]);
 
@@ -203,127 +837,153 @@ function StoreStockPage() {
   // Import Validation
   const validateImportRow = useCallback((row, index) => {
     const errors = [];
-    if (!row['Product Name']?.trim()) errors.push(`Row ${index + 1}: Product Name required`);
-    if (!row['Product Code']?.trim() || String(row['Product Code']).trim().length !== 10) {
-      errors.push(`Row ${index + 1}: Product Code must be 10 characters`);
+    if (!row["Product Name"]?.trim())
+      errors.push(`Row ${index + 1}: Product Name required`);
+    if (
+      !row["Product Code"]?.trim() ||
+      String(row["Product Code"]).trim().length !== 11
+    ) {
+      errors.push(`Row ${index + 1}: Product Code must be 11 characters`);
     }
-    const stock = parseInt(row['Stock Quantity']);
+    const stock = parseInt(row["Stock Quantity"]);
     if (isNaN(stock) || stock < 0 || !Number.isInteger(stock)) {
-      errors.push(`Row ${index + 1}: Stock Quantity must be non-negative integer`);
+      errors.push(
+        `Row ${index + 1}: Stock Quantity must be non-negative integer`,
+      );
     }
     return errors;
   }, []);
 
   // Import Excel
-  const importFromExcel = useCallback(async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+  const importFromExcel = useCallback(
+    async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(sheet);
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(sheet);
 
-        if (!json.length) throw new Error('Empty file');
+          if (!json.length) throw new Error("Empty file");
 
-        const errors = [], valid = [];
-        json.forEach((row, i) => {
-          const err = validateImportRow(row, i);
-          if (err.length) errors.push(...err);
-          else {
-            valid.push({
-              productName: String(row['Product Name'] || '').trim(),
-              productCode: String(row['Product Code'] || '').trim(),
-              stockQuantity: parseInt(row['Stock Quantity'] || 0),
-              description: String(row['Description'] || '').trim() || undefined,
-              qtyRequired: parseInt(row['Qty Required'] || 0),
-              location: String(row['Location'] || '').trim() || undefined,
-              productId: row['Product ID'] ? parseInt(row['Product ID']) : undefined
-            });
-          }
-        });
-
-        if (errors.length) errors.forEach(e => toast.error(e));
-        if (!valid.length) return;
-
-        const token = localStorage.getItem('token');
-        let created = 0, updated = 0, failed = 0;
-
-        for (const row of valid) {
-          try {
-            const { productId, ...body } = row;
-            const url = productId
-              ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock/${productId}`
-              : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock`;
-            const method = productId ? 'PUT' : 'POST';
-
-            let payload = { ...body, price: 0.01 };
-            if (productId) {
-              const res = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock?limit=1&productId=${productId}`, {
-                headers: { 'Authorization': `Bearer ${token}` }, credentials: 'include'
+          const errors = [],
+            valid = [];
+          json.forEach((row, i) => {
+            const err = validateImportRow(row, i);
+            if (err.length) errors.push(...err);
+            else {
+              valid.push({
+                productName: String(row["Product Name"] || "").trim(),
+                productCode: String(row["Product Code"] || "").trim(),
+                stockQuantity: parseInt(row["Stock Quantity"] || 0),
+                description:
+                  String(row["Description"] || "").trim() || undefined,
+                qtyRequired: parseInt(row["Qty Required"] || 0),
+                // location: String(row["Location"] || "").trim() || undefined,
+                productId: row["Product ID"]
+                  ? parseInt(row["Product ID"])
+                  : undefined,
               });
-              if (res.ok) {
-                const { data } = await res.json();
-                if (data[0]?.price) payload.price = data[0].price;
-              }
             }
+          });
 
-            const res = await fetch(url, {
-              method, headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload), credentials: 'include'
-            });
+          if (errors.length) errors.forEach((e) => toast.error(e));
+          if (!valid.length) return;
 
-            if (!res.ok) throw new Error((await res.json()).error);
-            productId ? updated++ : created++;
-          } catch {
-            failed++;
+          const token = localStorage.getItem("token");
+          let created = 0,
+            updated = 0,
+            failed = 0;
+
+          for (const row of valid) {
+            try {
+              const { productId, ...body } = row;
+              const url = productId
+                ? `${import.meta.env.VITE_BACKEND_URL || "http://localhost:8000"}/api/stock/${productId}`
+                : `${import.meta.env.VITE_BACKEND_URL || "http://localhost:8000"}/api/stock`;
+              const method = productId ? "PUT" : "POST";
+
+              let payload = { ...body, price: 0.01 };
+              if (productId) {
+                const res = await fetch(
+                  `${import.meta.env.VITE_BACKEND_URL || "http://localhost:8000"}/api/stock?limit=1&productId=${productId}`,
+                  {
+                    headers: { Authorization: `Bearer ${token}` },
+                    credentials: "include",
+                  },
+                );
+                if (res.ok) {
+                  const { data } = await res.json();
+                  if (data[0]?.price) payload.price = data[0].price;
+                }
+              }
+
+              const res = await fetch(url, {
+                method,
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+                credentials: "include",
+              });
+
+              if (!res.ok) throw new Error((await res.json()).error);
+              productId ? updated++ : created++;
+            } catch {
+              failed++;
+            }
           }
-        }
 
-        await refetchData();
-        setPage(0);
-        toast.success(`Imported: ${created} created, ${updated} updated${failed ? `, ${failed} failed` : ''}`);
-      } catch (err) {
-        toast.error(`Import failed: ${err.message}`);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    event.target.value = '';
-  }, [validateImportRow, refetchData]);
+          await refetchData();
+          setPage(0);
+          toast.success(
+            `Imported: ${created} created, ${updated} updated${failed ? `, ${failed} failed` : ""}`,
+          );
+        } catch (err) {
+          toast.error(`Import failed: ${err.message}`);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      event.target.value = "";
+    },
+    [validateImportRow, refetchData],
+  );
 
   // Export Excel
   const exportToExcel = useCallback(() => {
-    const data = filteredStock.map(item => ({
-      'Product ID': item.productId,
-      'Product Code': item.productCode,
-      'Product Name': item.productName,
-      'Location': item.location || 'N/A',
-      'Description': item.description || 'N/A',
-      'Stock Quantity': item.stockQuantity,
-      'Qty Required': item.qtyRequired,
-      'Created At (IST)': item.createdAt ? formatDate(item.createdAt) : 'N/A'
+    const data = filteredStock.map((item) => ({
+      "Product ID": item.productId,
+      "Product Code": item.productCode,
+      "Product Name": item.productName,
+      // Location: item.location || "N/A",
+      Description: item.description || "N/A",
+      "Stock Quantity": item.stockQuantity,
+      "Qty Required": item.qtyRequired,
+      "Created At (IST)": item.createdAt ? formatDate(item.createdAt) : "N/A",
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Raw Materials');
-    XLSX.writeFile(wb, 'Raw_Material_Inventory.xlsx');
-    toast.success('Exported to Excel!');
+    XLSX.utils.book_append_sheet(wb, ws, "Raw Materials");
+    XLSX.writeFile(wb, "Raw_Material_Inventory.xlsx");
+    toast.success("Exported to Excel!");
   }, [filteredStock]);
 
   // Handlers
   const handleSort = useCallback((key) => {
-    setSortConfig(prev => ({
+    setSortConfig((prev) => ({
       key,
-      direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+      direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
     }));
   }, []);
 
   const showDescription = useCallback((desc) => {
-    setSelectedDescription(desc || 'No description');
+    setSelectedDescription(desc || "No description");
     setShowDescriptionModal(true);
   }, []);
 
@@ -331,7 +991,7 @@ function StoreStockPage() {
     setSelectedBarcode(code);
     setSelectedProductName(name);
     setSelectedProductDescription(desc);
-    setSelectedProductLocation(location || 'Not set');
+    // setSelectedProductLocation(location || "Not set");
     setShowBarcodeModal(true);
   }, []);
 
@@ -339,18 +999,28 @@ function StoreStockPage() {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
     useEffect(() => {
-      const handle = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
-      document.addEventListener('mousedown', handle);
-      return () => document.removeEventListener('mousedown', handle);
+      const handle = (e) =>
+        ref.current && !ref.current.contains(e.target) && setOpen(false);
+      document.addEventListener("mousedown", handle);
+      return () => document.removeEventListener("mousedown", handle);
     }, []);
     return (
       <div ref={ref} className="relative">
-        <button onClick={() => setOpen(!open)} className="p-2 hover:bg-gray-100 rounded-full">
+        <button
+          onClick={() => setOpen(!open)}
+          className="p-2 hover:bg-gray-100 rounded-full"
+        >
           <MoreVertical size={20} />
         </button>
         {open && (
           <div className="absolute right-0 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5 z-10">
-            <button onClick={() => { onEdit(item); setOpen(false); }} className="flex w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 items-center">
+            <button
+              onClick={() => {
+                onEdit(item);
+                setOpen(false);
+              }}
+              className="flex w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 items-center"
+            >
               <Edit2 size={16} className="mr-2" /> Edit
             </button>
           </div>
@@ -361,78 +1031,95 @@ function StoreStockPage() {
 
   const validateForm = useCallback(() => {
     const errors = {};
-    if (!formData.productName.trim()) errors.productName = 'Required';
-    if (!formData.productCode || formData.productCode.length !== 10) errors.productCode = 'Must be 10 characters';
+    if (!formData.productName.trim()) errors.productName = "Required";
+    if (!formData.productCode || formData.productCode.trim().length !== 11)
+      errors.productCode = "Must be 11 characters";
     const stock = parseInt(formData.stockQuantity);
-    if ((modalMode === 'create' || modalMode === 'edit') && (isNaN(stock) || stock < 0)) {
-      errors.stockQuantity = 'Must be non-negative integer';
+    if (
+      (modalMode === "create" || modalMode === "edit") &&
+      (isNaN(stock) || stock < 0)
+    ) {
+      errors.stockQuantity = "Must be non-negative integer";
     }
     return errors;
   }, [formData, modalMode]);
 
-  const handleSubmit = useCallback(async (e) => {
-    e.preventDefault();
-    const errors = validateForm();
-    if (Object.keys(errors).length) {
-      setFormErrors(errors);
-      Object.values(errors).forEach(e => toast.error(e));
-      return;
-    }
+  const handleSubmit = useCallback(
+    async (e) => {
+      e.preventDefault();
+      const errors = validateForm();
+      if (Object.keys(errors).length) {
+        setFormErrors(errors);
+        Object.values(errors).forEach((e) => toast.error(e));
+        return;
+      }
 
-    try {
-      const token = localStorage.getItem('token');
-      const isCreate = modalMode === 'create';
-      const url = isCreate
-        ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock`
-        : `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/stock/${selectedItem.productId}`;
+      try {
+        const token = localStorage.getItem("token");
+        const isCreate = modalMode === "create";
+        const url = isCreate
+          ? `${import.meta.env.VITE_BACKEND_URL || "http://localhost:8000"}/api/stock`
+          : `${import.meta.env.VITE_BACKEND_URL || "http://localhost:8000"}/api/stock/${selectedItem.productId}`;
 
-      const body = {
-        productName: formData.productName,
-        description: formData.description || undefined,
-        productCode: formData.productCode,
-        stockQuantity: isCreate ? parseInt(formData.stockQuantity) : undefined,
-        qtyRequired: parseInt(formData.qtyRequired) || 0,
-        location: formData.location || undefined,
-        price: isCreate ? 0.01 : selectedItem.price
-      };
+        const body = {
+          productName: formData.productName,
+          description: formData.description || undefined,
+          productCode: formData.productCode,
+          stockQuantity: isCreate
+            ? parseInt(formData.stockQuantity)
+            : undefined,
+          qtyRequired: parseInt(formData.qtyRequired) || 0,
+          // location: formData.location || undefined,
+          price: isCreate ? 0.01 : selectedItem.price,
+        };
 
-      const res = await fetch(url, {
-        method: isCreate ? 'POST' : 'PUT',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        credentials: 'include'
-      });
+        const res = await fetch(url, {
+          method: isCreate ? "POST" : "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+          credentials: "include",
+        });
 
-      if (!res.ok) throw new Error((await res.json()).error);
-      await refetchData();
-      setShowModal(false);
-      setPage(0);
-      toast.success(isCreate ? 'Item created!' : 'Item updated!');
-    } catch (err) {
-      toast.error(err.message);
-    }
-  }, [formData, modalMode, selectedItem, refetchData]);
+        if (!res.ok) throw new Error((await res.json()).error);
+        await refetchData();
+        setShowModal(false);
+        setPage(0);
+        toast.success(isCreate ? "Item created!" : "Item updated!");
+      } catch (err) {
+        toast.error(err.message);
+      }
+    },
+    [formData, modalMode, selectedItem, refetchData],
+  );
 
   const handleCreate = useCallback(() => {
-    setModalMode('create');
+    setModalMode("create");
     setSelectedItem(null);
     setFormData({
-      productName: '', description: '', productCode: '', stockQuantity: '', qtyRequired: '', location: ''
+      productName: "",
+      description: "",
+      productCode: "",
+      stockQuantity: "",
+      qtyRequired: "",
+      // location: "",
     });
     setFormErrors({});
     setShowModal(true);
   }, []);
 
   const handleEdit = useCallback((item) => {
-    setModalMode('edit');
+    setModalMode("edit");
     setSelectedItem(item);
     setFormData({
-      productName: item.productName || '',
-      description: item.description || '',
-      productCode: item.productCode || '',
-      stockQuantity: item.stockQuantity || '',
-      qtyRequired: item.qtyRequired || '',
-      location: item.location || ''
+      productName: item.productName || "",
+      description: item.description || "",
+      productCode: item.productCode || "",
+      stockQuantity: item.stockQuantity || "",
+      qtyRequired: item.qtyRequired || "",
+      // location: item.location || "",
     });
     setFormErrors({});
     setShowModal(true);
@@ -441,20 +1128,25 @@ function StoreStockPage() {
   // Focus Trap
   useEffect(() => {
     if (showModal && modalRef.current) {
-      const first = modalRef.current.querySelector('input');
+      const first = modalRef.current.querySelector("input");
       first?.focus();
       const handle = (e) => {
-        if (e.key !== 'Tab') return;
-        const focusable = modalRef.current.querySelectorAll('button, input, textarea');
-        const firstEl = focusable[0], lastEl = focusable[focusable.length - 1];
+        if (e.key !== "Tab") return;
+        const focusable = modalRef.current.querySelectorAll(
+          "button, input, textarea",
+        );
+        const firstEl = focusable[0],
+          lastEl = focusable[focusable.length - 1];
         if (e.shiftKey && document.activeElement === firstEl) {
-          e.preventDefault(); lastEl.focus();
+          e.preventDefault();
+          lastEl.focus();
         } else if (!e.shiftKey && document.activeElement === lastEl) {
-          e.preventDefault(); firstEl.focus();
+          e.preventDefault();
+          firstEl.focus();
         }
       };
-      document.addEventListener('keydown', handle);
-      return () => document.removeEventListener('keydown', handle);
+      document.addEventListener("keydown", handle);
+      return () => document.removeEventListener("keydown", handle);
     }
   }, [showModal]);
 
@@ -462,7 +1154,9 @@ function StoreStockPage() {
   if (isLoading && !stockItems.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 flex items-center justify-center">
-        <div className="text-gray-600 text-xl animate-pulse">Loading raw materials...</div>
+        <div className="text-gray-600 text-xl animate-pulse">
+          Loading raw materials...
+        </div>
       </div>
     );
   }
@@ -472,7 +1166,10 @@ function StoreStockPage() {
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 flex items-center justify-center">
         <div className="text-red-700 text-lg text-center">
           <p>{error}</p>
-          <button onClick={refetchData} className="mt-4 p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600">
+          <button
+            onClick={refetchData}
+            className="mt-4 p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600"
+          >
             Retry
           </button>
         </div>
@@ -482,9 +1179,10 @@ function StoreStockPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Store Raw Material Inventory</h1>
+      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">
+        Store Raw Material Inventory
+      </h1>
       <div className="max-w-7xl mx-auto">
-
         {/* Toolbar */}
         <div className="flex mb-8 gap-4 flex-wrap">
           <div className="relative flex-grow">
@@ -493,28 +1191,59 @@ function StoreStockPage() {
               placeholder="Search by ID, Name, Code, or Location..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Escape' && (setSearchInput(''), setSearchTerm(''))}
+              onKeyDown={(e) =>
+                e.key === "Escape" && (setSearchInput(""), setSearchTerm(""))
+              }
               ref={searchInputRef}
               className="w-full p-4 pl-12 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md"
             />
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <Search
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+              size={20}
+            />
             {searchInput && (
-              <button onClick={() => { setSearchInput(''); setSearchTerm(''); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <button
+                onClick={() => {
+                  setSearchInput("");
+                  setSearchTerm("");
+                }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
                 <XCircle size={20} />
               </button>
             )}
           </div>
-          <button onClick={refetchData} disabled={isLoading} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md">
+          <button
+            onClick={refetchData}
+            disabled={isLoading}
+            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md"
+          >
             Refresh
           </button>
-          <button onClick={handleCreate} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md">
+          <button
+            onClick={handleCreate}
+            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md"
+          >
             <PlusCircle className="mr-2" size={20} /> Add Item
           </button>
-          <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md"
+          >
             <Upload className="mr-2" size={20} /> Import
           </button>
-          <input type="file" ref={fileInputRef} onChange={importFromExcel} accept=".xlsx,.xls" className="hidden" />
-          <button onClick={exportToExcel} disabled={!filteredStock.length} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={importFromExcel}
+            accept=".xlsx,.xls"
+            className="hidden"
+          />
+          <button
+            onClick={exportToExcel}
+            disabled={!filteredStock.length}
+            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md"
+          >
             <Download className="mr-2" size={20} /> Export
           </button>
         </div>
@@ -525,69 +1254,112 @@ function StoreStockPage() {
             <Package size={48} className="mx-auto mb-4 text-gray-400" />
             <p className="text-lg text-gray-600">No items found.</p>
             {!searchTerm && (
-              <button onClick={handleCreate} className="mt-4 p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto">
+              <button
+                onClick={handleCreate}
+                className="mt-4 p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto"
+              >
                 <PlusCircle className="mr-2" /> Add First Item
               </button>
             )}
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
-            <table className="w-full text-left min-w-[1200px]" ref={tableRef} tabIndex={0}>
+            <table
+              className="w-full text-left min-w-[1200px]"
+              ref={tableRef}
+              tabIndex={0}
+            >
               <thead className="bg-amber-100">
                 <tr>
                   {[
-                    { key: 'productId', label: 'ID' },
-                    { key: 'productCode', label: 'Code' },
-                    { key: 'productName', label: 'Name' },
-                    { key: 'location', label: 'Location' }, // NEW
-                    { key: 'description', label: 'Desc' },
-                    { key: 'stockQuantity', label: 'Stock' },
-                    { key: 'qtyRequired', label: 'Req' },
-                    { key: 'createdAt', label: 'Created' },
-                    { key: 'qrcode', label: 'QR' },
-                    { key: 'actions', label: 'Actions' }
+                    { key: "productId", label: "ID" },
+                    { key: "productCode", label: "Code" },
+                    { key: "productName", label: "Name" },
+                    // { key: "location", label: "Location" }, // NEW
+                    { key: "description", label: "Desc" },
+                    { key: "stockQuantity", label: "Stock" },
+                    { key: "qtyRequired", label: "Req" },
+                    { key: "createdAt", label: "Created" },
+                    { key: "qrcode", label: "QR" },
+                    { key: "actions", label: "Actions" },
                   ].map(({ key, label }) => (
                     <th
                       key={key}
-                      onClick={() => key !== 'actions' && key !== 'qrcode' && handleSort(key)}
-                      className={`py-5 px-3 text-base font-medium ${key !== 'actions' && key !== 'qrcode' ? 'cursor-pointer hover:bg-amber-200' : ''}`}
-                      tabIndex={key !== 'actions' && key !== 'qrcode' ? 0 : -1}
+                      onClick={() =>
+                        key !== "actions" && key !== "qrcode" && handleSort(key)
+                      }
+                      className={`py-5 px-3 text-base font-medium ${key !== "actions" && key !== "qrcode" ? "cursor-pointer hover:bg-amber-200" : ""}`}
+                      tabIndex={key !== "actions" && key !== "qrcode" ? 0 : -1}
                     >
                       <div className="flex items-center">
                         {label}
-                        {key !== 'actions' && key !== 'qrcode' && <ArrowDownUp className="ml-2" size={16} />}
+                        {key !== "actions" && key !== "qrcode" && (
+                          <ArrowDownUp className="ml-2" size={16} />
+                        )}
                       </div>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {paginatedStock.map(item => {
+                {paginatedStock.map((item) => {
                   const isLow = item.stockQuantity < item.qtyRequired;
                   return (
-                    <tr key={item.productId} className="border-t hover:bg-amber-50">
-                      <td className="py-4 px-3 text-gray-700">{item.productId}</td>
-                      <td className="py-4 px-3 text-gray-700 font-mono">{item.productCode}</td>
-                      <td className="py-4 px-3 text-gray-700 font-medium">{item.productName}</td>
-                      <td className="py-4 px-3 text-gray-700">{item.location || <span className="italic text-gray-400">Not set</span>}</td>
+                    <tr
+                      key={item.productId}
+                      className="border-t hover:bg-amber-50"
+                    >
+                      <td className="py-4 px-3 text-gray-700">
+                        {item.productId}
+                      </td>
+                      <td className="py-4 px-3 text-gray-700 font-mono">
+                        {item.productCode}
+                      </td>
+                      <td className="py-4 px-3 text-gray-700 font-medium">
+                        {item.productName}
+                      </td>
+                      {/* <td className="py-4 px-3 text-gray-700">
+                        {item.location || (
+                          <span className="italic text-gray-400">Not set</span>
+                        )}
+                      </td> */}
                       <td className="py-4 px-3">
                         {item.description ? (
-                          <button onClick={() => showDescription(item.description)} className="text-amber-600 hover:text-amber-800 flex items-center">
+                          <button
+                            onClick={() => showDescription(item.description)}
+                            className="text-amber-600 hover:text-amber-800 flex items-center"
+                          >
                             <Eye size={16} className="mr-1" /> View
                           </button>
-                        ) : '-'}
+                        ) : (
+                          "-"
+                        )}
                       </td>
                       <td className="py-4 px-3">
-                        <span className={`px-3 py-1 rounded-full text-white text-sm ${isLow ? 'bg-red-500' : 'bg-green-500'}`}>
+                        <span
+                          className={`px-3 py-1 rounded-full text-white text-sm ${isLow ? "bg-red-500" : "bg-green-500"}`}
+                        >
                           {item.stockQuantity}
                         </span>
                       </td>
-                      <td className="py-4 px-3 text-gray-700">{item.qtyRequired}</td>
+                      <td className="py-4 px-3 text-gray-700">
+                        {item.qtyRequired}
+                      </td>
                       <td className="py-4 px-3 text-sm text-gray-600">
                         {formatDate(item.createdAt)}
                       </td>
                       <td className="py-4 px-3">
-                        <button onClick={() => showBarcode(item.productCode, item.productName, item.description, item.location)} className="text-amber-600 hover:text-amber-800 flex items-center">
+                        <button
+                          onClick={() =>
+                            showBarcode(
+                              item.productCode,
+                              item.productName,
+                              item.description,
+                              item.location,
+                            )
+                          }
+                          className="text-amber-600 hover:text-amber-800 flex items-center"
+                        >
                           <Eye size={16} className="mr-1" /> QR
                         </button>
                       </td>
@@ -602,18 +1374,33 @@ function StoreStockPage() {
 
             <div className="flex justify-between items-center p-4 bg-gray-50">
               <div className="text-gray-600">
-                Showing {paginatedStock.length} of {filteredStock.length} (Total: {totalItems})
+                Showing {paginatedStock.length} of {filteredStock.length}{" "}
+                (Total: {totalItems})
               </div>
               <div className="flex items-center gap-6">
                 <div className="flex gap-4">
-                  <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-green-500 mr-1.5"></div> In Stock</div>
-                  <div className="flex items-center"><div className="w-3 h-3 rounded-full bg-red-500 mr-1.5"></div> Low</div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 rounded-full bg-green-500 mr-1.5"></div>{" "}
+                    In Stock
+                  </div>
+                  <div className="flex items-center">
+                    <div className="w-3 h-3 rounded-full bg-red-500 mr-1.5"></div>{" "}
+                    Low
+                  </div>
                 </div>
                 <div className="flex space-x-2">
-                  <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100">
+                  <button
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                    className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
+                  >
                     <ChevronLeft size={20} />
                   </button>
-                  <button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * itemsPerPage >= filteredStock.length} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100">
+                  <button
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={(page + 1) * itemsPerPage >= filteredStock.length}
+                    className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
+                  >
                     <ChevronRight size={20} />
                   </button>
                 </div>
@@ -625,39 +1412,111 @@ function StoreStockPage() {
 
       {/* Modals */}
       {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[520px]" ref={modalRef}>
-            <button onClick={() => setShowModal(false)} className="absolute top-4 right-4"><XCircle size={24} /></button>
-            <h2 className="text-2xl font-bold mb-6">{modalMode === 'create' ? 'Add Item' : `Edit #${selectedItem?.productId}`}</h2>
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-start justify-center z-50 overflow-y-auto pt-10">
+          <div
+            className="bg-white p-8 rounded-2xl shadow-xl w-[520px] max-h-[90vh] overflow-y-auto relative"
+            ref={modalRef}
+          >
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute top-4 right-4"
+            >
+              <XCircle size={24} />
+            </button>
+            <h2 className="text-2xl font-bold mb-6">
+              {modalMode === "create"
+                ? "Add Item"
+                : `Edit #${selectedItem?.productId}`}
+            </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block font-medium mb-1">Product Name *</label>
-                <input type="text" value={formData.productName} onChange={e => setFormData({ ...formData, productName: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.productName ? 'border-red-500' : ''}`} required />
+                <input
+                  type="text"
+                  value={formData.productName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, productName: e.target.value })
+                  }
+                  className={`w-full p-3 border rounded-lg ${formErrors.productName ? "border-red-500" : ""}`}
+                  required
+                />
               </div>
               <div>
-                <label className="block font-medium mb-1">Product Code (10 chars) *</label>
-                <input type="text" maxLength={10} value={formData.productCode} onChange={e => setFormData({ ...formData, productCode: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.productCode ? 'border-red-500' : ''}`} required />
+                <label className="block font-medium mb-1">
+                  Product Code (11 chars) *
+                </label>
+                <ProductCodeBuilder
+                  value={formData.productCode}
+                  onChange={(code) =>
+                    setFormData({ ...formData, productCode: code })
+                  }
+                />
               </div>
-              <div>
+              {/* <div>
                 <label className="block font-medium mb-1">Location</label>
-                <input type="text" placeholder="e.g., Shelf A-12" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} className="w-full p-3 border rounded-lg" />
-              </div>
+                <input
+                  type="text"
+                  placeholder="e.g., Shelf A-12"
+                  value={formData.location}
+                  onChange={(e) =>
+                    setFormData({ ...formData, location: e.target.value })
+                  }
+                  className="w-full p-3 border rounded-lg"
+                />
+              </div> */}
               <div>
-                <label className="block font-medium mb-1">{modalMode === 'create' ? 'Initial Stock' : 'Stock Quantity'}</label>
-                <input type="number" min="0" step="1" value={formData.stockQuantity} onChange={e => setFormData({ ...formData, stockQuantity: e.target.value })} className={`w-full p-3 border rounded-lg ${formErrors.stockQuantity ? 'border-red-500' : ''}`} required={modalMode === 'create'} />
+                <label className="block font-medium mb-1">
+                  {modalMode === "create" ? "Initial Stock" : "Stock Quantity"}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formData.stockQuantity}
+                  onChange={(e) =>
+                    setFormData({ ...formData, stockQuantity: e.target.value })
+                  }
+                  className={`w-full p-3 border rounded-lg ${formErrors.stockQuantity ? "border-red-500" : ""}`}
+                  required={modalMode === "create"}
+                />
               </div>
               <div>
                 <label className="block font-medium mb-1">Qty Required</label>
-                <input type="number" min="0" step="1" value={formData.qtyRequired} onChange={e => setFormData({ ...formData, qtyRequired: e.target.value })} className="w-full p-3 border rounded-lg" />
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formData.qtyRequired}
+                  onChange={(e) =>
+                    setFormData({ ...formData, qtyRequired: e.target.value })
+                  }
+                  className="w-full p-3 border rounded-lg"
+                />
               </div>
               <div>
                 <label className="block font-medium mb-1">Description</label>
-                <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full p-3 border rounded-lg" rows="2" />
+                <textarea
+                  value={formData.description}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
+                  className="w-full p-3 border rounded-lg"
+                  rows="2"
+                />
               </div>
               <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold">
-                  {modalMode === 'create' ? 'Create' : 'Update'}
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold"
+                >
+                  {modalMode === "create" ? "Create" : "Update"}
                 </button>
               </div>
             </form>
@@ -668,9 +1527,16 @@ function StoreStockPage() {
       {showDescriptionModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative">
-            <button onClick={() => setShowDescriptionModal(false)} className="absolute top-4 right-4"><XCircle size={24} /></button>
+            <button
+              onClick={() => setShowDescriptionModal(false)}
+              className="absolute top-4 right-4"
+            >
+              <XCircle size={24} />
+            </button>
             <h2 className="text-2xl font-bold mb-4">Description</h2>
-            <p className="text-gray-700 whitespace-pre-wrap">{selectedDescription}</p>
+            <p className="text-gray-700 whitespace-pre-wrap">
+              {selectedDescription}
+            </p>
           </div>
         </div>
       )}
@@ -678,21 +1544,38 @@ function StoreStockPage() {
       {showBarcodeModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative">
-            <button onClick={() => setShowBarcodeModal(false)} className="absolute top-4 right-4"><XCircle size={24} /></button>
-            <h2 className="text-2xl font-bold mb-4">QR: {selectedProductName}</h2>
+            <button
+              onClick={() => setShowBarcodeModal(false)}
+              className="absolute top-4 right-4"
+            >
+              <XCircle size={24} />
+            </button>
+            <h2 className="text-2xl font-bold mb-4">
+              QR: {selectedProductName}
+            </h2>
             <div className="space-y-1 text-sm text-gray-700 mb-4">
-              <p><strong>Code:</strong> {selectedBarcode}</p>
-              <p><strong>Location:</strong> {selectedProductLocation}</p>
+              <p>
+                <strong>Code:</strong> {selectedBarcode}
+              </p>
+              {/* <p>
+                <strong>Location:</strong> {selectedProductLocation}
+              </p> */}
             </div>
-            <canvas id="qrcode-canvas" className="w-full max-w-[200px] mx-auto mb-4"></canvas>
-            <button onClick={() => {
-              const canvas = document.getElementById('qrcode-canvas');
-              const a = document.createElement('a');
-              a.href = canvas.toDataURL('image/png');
-              a.download = `QR_${selectedBarcode}.png`;
-              a.click();
-              toast.success('Downloaded!');
-            }} className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto">
+            <canvas
+              id="qrcode-canvas"
+              className="w-full max-w-[200px] mx-auto mb-4"
+            ></canvas>
+            <button
+              onClick={() => {
+                const canvas = document.getElementById("qrcode-canvas");
+                const a = document.createElement("a");
+                a.href = canvas.toDataURL("image/png");
+                a.download = `QR_${selectedBarcode}.png`;
+                a.click();
+                toast.success("Downloaded!");
+              }}
+              className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto"
+            >
               <Download className="mr-2" /> Download
             </button>
           </div>
