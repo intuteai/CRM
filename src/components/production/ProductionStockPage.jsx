@@ -1458,7 +1458,7 @@ function ProductionStockPage() {
               </div>
               <div>
                 <label className="block font-medium mb-1">
-                  Product Code (10 chars) *
+                  Product Code (11 chars) *
                 </label>
                 <ProductCodeBuilder
                   value={formData.productCode}
