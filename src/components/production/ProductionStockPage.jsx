@@ -99,6 +99,14 @@ const PRODUCT_CHARTS = [
     defaultSub: "AL",
     color: "fuchsia",
   },
+  {
+    label: "CO",
+    symbol: "C",
+    digit: "",
+    pair: "CO", // ✅ NEW
+    defaultSub: "",
+    color: "gray",
+  },
 ];
 
 const SUB_CODES = [
@@ -135,7 +143,11 @@ function buildCode({
   rowNum,
 }) {
   const p = (partNum || "0001").padStart(4, "0").slice(0, 4); // 4 chars
-  const cp = (chartSymbol || "") + (chartDigit || ""); // 2 chars e.g. "L5"
+  // const cp = (chartSymbol || "") + (chartDigit || ""); // 2 chars e.g. "L5"
+  const cp =
+    chartSymbol === "C" && !chartDigit
+      ? "CO"
+      : (chartSymbol || "") + (chartDigit || "");
   const s = (subAbbr || "").slice(0, 2).padEnd(2, "_"); // 2 chars e.g. "BR"
   const st = (storeNum || "").slice(0, 1); // 1 char
   const co = (colNum || "").slice(0, 1); // 1 char
@@ -148,8 +160,14 @@ function buildCode({
 function parseCode(code) {
   if (!code || code.length !== 11) return null;
   const partNum = code.slice(0, 4); // e.g. "0042"
-  const chartSymbol = code.slice(4, 5); // e.g. "L"
-  const chartDigit = code.slice(5, 6); // e.g. "5"
+  let chartSymbol = code.slice(4, 5);
+  let chartDigit = code.slice(5, 6);
+
+  // ✅ Handle CO special case
+  if (code.slice(4, 6) === "CO") {
+    chartSymbol = "C";
+    chartDigit = "";
+  }
   const subAbbr = code.slice(6, 8); // e.g. "BR"
   const storeNum = code.slice(8, 9); // e.g. "1"
   const colNum = code.slice(9, 10); // e.g. "2"
@@ -216,7 +234,13 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
   const handleChartClick = (c) => {
     if (disabled) return;
     setChart(c);
-    setSubAbbr(c.defaultSub); // auto-fill matching sub from PDF mapping
+
+    // ✅ Only auto-fill if defaultSub exists
+    if (c.defaultSub) {
+      setSubAbbr(c.defaultSub);
+    } else {
+      setSubAbbr(""); // or keep previous if you want
+    }
   };
 
   const handlePartInput = (e) => {
@@ -232,7 +256,7 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
 
   // Colour-coded segments for the preview bar
   const seg_part = derivedCode.slice(0, 4);
-  const seg_chart = chart ? chart.symbol + chart.digit : "";
+  const seg_chart = chart ? chart.pair || chart.symbol + chart.digit : "";
   const seg_sub = subAbbr || "";
   const seg_store = storeNum || "";
   const seg_col = colNum || "";
@@ -414,8 +438,7 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
             <span>
               Pair:{" "}
               <code className={`${SEG.chart} font-black`}>
-                {chart.symbol}
-                {chart.digit}
+                {chart.pair || chart.symbol + chart.digit}
               </code>
             </span>
             <span className="text-gray-400">·</span>
