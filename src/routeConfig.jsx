@@ -98,7 +98,7 @@ export const routeConfig = [
   },
   {
     path: "/hr-payslips",
-    allowedRoles: ["ia_hr"],           // Intute HR only
+    allowedRoles: ["ia_hr"], // Intute HR only
     component: HRPayslipForm,
   },
 
@@ -316,7 +316,20 @@ export const routeConfig = [
   // Shared Routes (multiple roles)
   {
     path: "/edit-profile",
-    allowedRoles: ["admin", "customer", "sales", "design", "production", "store", "dispatch", "accounts", "employee", "hr", "ia_employee", "ia_hr"],
+    allowedRoles: [
+      "admin",
+      "customer",
+      "sales",
+      "design",
+      "production",
+      "store",
+      "dispatch",
+      "accounts",
+      "employee",
+      "hr",
+      "ia_employee",
+      "ia_hr",
+    ],
     component: EditProfile,
   },
   {
@@ -340,6 +353,8 @@ export const routeConfig = [
     component: (props) =>
       props.userRole === "store" ? (
         <StoreInventoryPage {...props} />
+      ) : props.userRole === "production" ? (
+        <ProductionInventoryPage {...props} />
       ) : (
         <InventoryPage {...props} />
       ),
@@ -433,7 +448,20 @@ export const routeConfig = [
   // Redirect route (typo handling)
   {
     path: "/account-dashboard",
-    allowedRoles: ["admin", "customer", "sales", "design", "production", "store", "dispatch", "accounts", "employee", "hr", "ia_employee", "ia_hr"],
+    allowedRoles: [
+      "admin",
+      "customer",
+      "sales",
+      "design",
+      "production",
+      "store",
+      "dispatch",
+      "accounts",
+      "employee",
+      "hr",
+      "ia_employee",
+      "ia_hr",
+    ],
     isRedirect: true,
     redirectTo: "/accounts-dashboard",
   },

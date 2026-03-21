@@ -29,7 +29,24 @@ const formatCurrency = (amount) =>
 
 /* =====================================================================
    PRODUCT CODE BUILDER
-   Structure: NNNN(4) + ChartPair(2, e.g. L5) + SubAbbr(2, e.g. BR) + Store(1) + Col(1) + Row(1) = 11
+   Data sourced directly from ERP_PART_CODE_LIST.pdf:
+
+   Chart         Symbol  DefaultSubCode  DefaultSubLabel
+   IPT           L       5               Bearing BR
+   Rikshaw       R       1               Shaft SH
+   2Wheeler      W       2               Front Flange FF
+   Autonxt       A       0               Rear Flange RF
+   Special       S       (none)          Aluminium AL
+
+   Sub Codes (alphabetic abbreviations):
+   0 → RF  Rear Flange
+   1 → SH  Shaft
+   2 → FF  Front Flange
+   3 → AL  Aluminium
+   4 → (reserved / custom)
+   5 → BR  Bearing BR
+
+   Code structure: NNNN(4) + ChartPair(2, e.g. L5) + SubAbbr(2, e.g. BR) + Store(1) + Col(1) + Row(1) = 11
    ===================================================================== */
 
 const PRODUCT_CHARTS = [
@@ -63,43 +80,46 @@ function pad4(val) {
   return String(Math.min(n, 9999)).padStart(4, '0');
 }
 
+// Builds the full 11-char code
 function buildCode({ partNum, chartSymbol, chartDigit, subAbbr, storeNum, colNum, rowNum }) {
-  const p  = (partNum     || '0001').padStart(4, '0').slice(0, 4);
-  const cp = (chartSymbol || '') + (chartDigit || '');
-  const s  = (subAbbr     || '').slice(0, 2).padEnd(2, '_');
-  const st = (storeNum    || '').slice(0, 1);
-  const co = (colNum      || '').slice(0, 1);
-  const ro = (rowNum      || '').slice(0, 1);
+  const p  = (partNum     || '0001').padStart(4, '0').slice(0, 4); // 4 chars
+  const cp = (chartSymbol || '') + (chartDigit || '');              // 2 chars e.g. "L5"
+  const s  = (subAbbr     || '').slice(0, 2).padEnd(2, '_');       // 2 chars e.g. "BR"
+  const st = (storeNum    || '').slice(0, 1);                       // 1 char
+  const co = (colNum      || '').slice(0, 1);                       // 1 char
+  const ro = (rowNum      || '').slice(0, 1);                       // 1 char
   return p + cp + s + st + co + ro;
 }
 
 // Parses an existing 11-char code back into builder segments
+// Structure: NNNN(4) + ChartSymbol(1) + ChartDigit(1) + SubAbbr(2) + Store(1) + Col(1) + Row(1)
 function parseCode(code) {
   if (!code || code.length !== 11) return null;
-  const partNum     = code.slice(0, 4);
-  const chartSymbol = code.slice(4, 5);
-  const chartDigit  = code.slice(5, 6);
-  const subAbbr     = code.slice(6, 8);
-  const storeNum    = code.slice(8, 9);
-  const colNum      = code.slice(9, 10);
-  const rowNum      = code.slice(10, 11);
+  const partNum     = code.slice(0, 4);                          // e.g. "0042"
+  const chartSymbol = code.slice(4, 5);                          // e.g. "L"
+  const chartDigit  = code.slice(5, 6);                          // e.g. "5"
+  const subAbbr     = code.slice(6, 8);                          // e.g. "BR"
+  const storeNum    = code.slice(8, 9);                          // e.g. "1"
+  const colNum      = code.slice(9, 10);                         // e.g. "2"
+  const rowNum      = code.slice(10, 11);                        // e.g. "3"
   const chart       = PRODUCT_CHARTS.find(c => c.symbol === chartSymbol && c.digit === chartDigit) || null;
   return { partNum, chartSymbol, chartDigit, subAbbr, storeNum, colNum, rowNum, chart };
 }
 
 function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
+  // Prefill from existing code if provided, otherwise use defaults
   const parsed = parseCode(value);
 
-  const [partNum,    setPartNum   ] = useState(parsed?.partNum  ?? '0001');
-  const [partInput,  setPartInput ] = useState(parsed ? String(parseInt(parsed.partNum, 10)) : '1');
-  const [chart,      setChart     ] = useState(parsed?.chart    ?? null);
-  const [subAbbr,    setSubAbbr   ] = useState(parsed?.subAbbr  ?? '');
-  const [storeNum,   setStoreNum  ] = useState(parsed?.storeNum ?? '');
-  const [colNum,     setColNum    ] = useState(parsed?.colNum   ?? '');
-  const [rowNum,     setRowNum    ] = useState(parsed?.rowNum   ?? '');
-  // If value is 11 chars but chart not recognised → open manual mode so user can still see it
-  const [manualMode, setManualMode] = useState(!parsed && value.length === 11);
-  const [manualVal,  setManualVal ] = useState(value);
+  const [partNum,   setPartNum  ] = useState(parsed?.partNum   ?? '0001');
+  const [partInput, setPartInput] = useState(parsed ? String(parseInt(parsed.partNum, 10)) : '1');
+  const [chart,     setChart    ] = useState(parsed?.chart     ?? null);
+  const [subAbbr,   setSubAbbr  ] = useState(parsed?.subAbbr  ?? '');
+  const [storeNum,  setStoreNum ] = useState(parsed?.storeNum  ?? '');
+  const [colNum,    setColNum   ] = useState(parsed?.colNum    ?? '');
+  const [rowNum,    setRowNum   ] = useState(parsed?.rowNum    ?? '');
+  // If the code can't be parsed into known segments, drop into manual mode so the user can still see and edit it
+  const [manualMode,setManualMode] = useState(!parsed && value.length === 11);
+  const [manualVal, setManualVal ] = useState(value);
 
   const derivedCode = buildCode({
     partNum,
@@ -111,8 +131,10 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
     rowNum,
   });
 
-  const isComplete = derivedCode.length === 11 && !derivedCode.includes('_') && !!chart && !!subAbbr && !!storeNum && !!colNum && !!rowNum;
+  // Count filled segments to show progress
+  const isComplete  = derivedCode.length === 11 && !derivedCode.includes('_') && !!chart && !!subAbbr && !!storeNum && !!colNum && !!rowNum;
 
+  // Fire onChange whenever any builder field changes
   useEffect(() => {
     if (manualMode) return;
     onChange?.(derivedCode.replace(/_/g, ''));
@@ -121,7 +143,7 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
   const handleChartClick = (c) => {
     if (disabled) return;
     setChart(c);
-    setSubAbbr(c.defaultSub);
+    setSubAbbr(c.defaultSub); // auto-fill matching sub from PDF mapping
   };
 
   const handlePartInput = (e) => {
@@ -135,6 +157,7 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
     setPartNum(padded);
   };
 
+  // Colour-coded segments for the preview bar
   const seg_part  = derivedCode.slice(0, 4);
   const seg_chart = chart ? (chart.symbol + chart.digit) : '';
   const seg_sub   = subAbbr || '';
@@ -171,10 +194,12 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
   return (
     <div className="border-2 border-amber-200 rounded-xl bg-gradient-to-br from-amber-50 to-white p-4 space-y-4 shadow-sm">
 
-      {/* Live Preview */}
+      {/* ── Live Preview ── */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Code Preview</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Code Preview
+          </p>
           {isComplete
             ? <span className="text-xs bg-green-100 text-green-700 border border-green-300 px-2 py-1 rounded-full font-semibold">✓ 11 / 11</span>
             : <span className="text-xs bg-amber-100 text-amber-700 border border-amber-300 px-2 py-1 rounded-full">
@@ -183,6 +208,7 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
           }
         </div>
 
+        {/* Code display */}
         <div className="flex items-center gap-1 bg-white border-2 border-amber-300 rounded-xl px-4 py-3 shadow-inner justify-center font-mono text-2xl tracking-[0.2em] select-all overflow-x-auto">
           <span className={`${SEG.part}  font-black`}>{seg_part}</span>
           <span className="text-gray-200 font-thin">·</span>
@@ -195,6 +221,7 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
           <span className={`${SEG.row}   font-black`}>{seg_row   || <span className="text-gray-200 text-lg">?</span>}</span>
         </div>
 
+        {/* Segment legend */}
         <div className="flex gap-3 flex-wrap text-[10px] font-bold pt-0.5">
           {[
             [SEG.part,  '① NNNN  Part #'],
@@ -214,7 +241,7 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
 
       <hr className="border-amber-100" />
 
-      {/* ① Part Number */}
+      {/* ── ① Part Number ── */}
       <div>
         <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1.5">
           <span className={`${SEG.part} font-black text-sm`}>①</span>
@@ -237,12 +264,12 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
         </div>
       </div>
 
-      {/* ② Product Chart */}
+      {/* ── ② Product Chart ── */}
       <div>
         <label className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
           <span className={`${SEG.chart} font-black text-sm`}>②</span>
           Product Chart
-          <span className="font-normal text-gray-400 ml-1">— auto-fills Sub Code</span>
+          <span className="font-normal text-gray-400 ml-1">— 2-char pair, auto-fills Sub Code</span>
         </label>
         <div className="grid grid-cols-5 gap-2">
           {PRODUCT_CHARTS.map(c => (
@@ -257,6 +284,7 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
                   : 'border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50'
                 } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             >
+              {/* Big chart pair e.g. "L5" */}
               <div className={`text-xl font-black ${SEG.chart} leading-none tracking-tight`}>
                 {c.symbol}<span className="text-gray-400">{c.digit}</span>
               </div>
@@ -276,13 +304,14 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
         )}
       </div>
 
-      {/* ③ Sub Code */}
+      {/* ── ③ Sub Code ── */}
       <div>
         <label className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
           <span className={`${SEG.sub} font-black text-sm`}>③</span>
           Sub Code
           <span className="font-normal text-gray-400 ml-1">— 2-char abbreviation</span>
         </label>
+        {/* Preset quick-pick buttons */}
         <div className="grid grid-cols-5 gap-1.5 mb-2">
           {SUB_CODES.map(sc => (
             <button
@@ -300,6 +329,7 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
             </button>
           ))}
         </div>
+        {/* Manual sub-code entry */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-400 whitespace-nowrap">Custom:</span>
           <input
@@ -320,62 +350,85 @@ function ProductCodeBuilder({ value = '', onChange, disabled = false }) {
               Custom: <code>{subAbbr}</code>
             </span>
           )}
+          {!subAbbr && (
+            <span className="text-xs text-gray-300">type any 2-char code here</span>
+          )}
         </div>
       </div>
 
       <hr className="border-amber-100" />
 
-      {/* ④⑤⑥ Store / Column / Row */}
+      {/* ── ④⑤⑥ Store / Column / Row ── */}
       <div className="grid grid-cols-3 gap-4">
+
+        {/* Store */}
         <div>
           <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
             <span className={`${SEG.store} font-black text-sm`}>④</span> Store # <span className="font-normal text-gray-400">(1 digit)</span>
           </label>
           <input
-            type="text" maxLength={1} value={storeNum}
+            type="text"
+            maxLength={1}
+            value={storeNum}
             onChange={e => !disabled && setStoreNum(e.target.value.replace(/\D/g, '').slice(0, 1))}
             placeholder="1"
             className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-red-300 bg-white"
             disabled={disabled}
           />
         </div>
+
+        {/* Column */}
         <div>
           <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
             <span className={`${SEG.col} font-black text-sm`}>⑤</span> Column <span className="font-normal text-gray-400">(1 digit)</span>
           </label>
           <input
-            type="text" maxLength={1} value={colNum}
+            type="text"
+            maxLength={1}
+            value={colNum}
             onChange={e => !disabled && setColNum(e.target.value.replace(/\D/g, '').slice(0, 1))}
             placeholder="1"
             className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-orange-300 bg-white"
             disabled={disabled}
           />
         </div>
+
+        {/* Row — free text input + quick-pick 1–9 (unrestricted) */}
         <div>
           <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
             <span className={`${SEG.row} font-black text-sm`}>⑥</span> Row <span className="font-normal text-gray-400">(1 digit)</span>
           </label>
           <input
-            type="text" maxLength={1} value={rowNum}
+            type="text"
+            maxLength={1}
+            value={rowNum}
             onChange={e => !disabled && setRowNum(e.target.value.replace(/\D/g, '').slice(0, 1))}
             placeholder="1"
             className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-teal-300 bg-white mb-1.5"
             disabled={disabled}
           />
+          {/* Quick-pick 1–9 */}
           <div className="grid grid-cols-5 gap-1">
             {['1','2','3','4','5','6','7','8','9'].map(r => (
               <button
-                key={r} type="button"
+                key={r}
+                type="button"
                 onClick={() => !disabled && setRowNum(r)}
                 className={`py-1 rounded border text-xs font-bold transition-all duration-100
-                  ${rowNum === r ? 'border-teal-500 bg-teal-100 text-teal-800' : 'border-gray-200 bg-white text-gray-500 hover:border-teal-300 hover:bg-teal-50'}
-                  ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-              >{r}</button>
+                  ${rowNum === r
+                    ? 'border-teal-500 bg-teal-100 text-teal-800'
+                    : 'border-gray-200 bg-white text-gray-500 hover:border-teal-300 hover:bg-teal-50'
+                  } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                {r}
+              </button>
             ))}
           </div>
         </div>
+
       </div>
 
+      {/* Manual override link */}
       <div className="flex justify-end">
         <button
           type="button"
