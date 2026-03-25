@@ -3,7 +3,6 @@ import {
   BrowserRouter as Router,
   Route,
   Routes,
-  Navigate,
   useLocation,
   useNavigate,
 } from "react-router-dom";
@@ -18,8 +17,7 @@ import LoginModal from "./components/pages/LoginModal.jsx";
 import Navbar from "./components/pages/Navbar.jsx";
 import NotificationCenter from "./components/pages/NotificationCenter.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
-import logo from "/intute-ai_logo.jpeg";
-import "./styles.css"; 
+import "./styles.css";
 
 function App() {
   const dispatch = useDispatch();
@@ -53,7 +51,7 @@ function App() {
           .replace(":action", "[a-zA-Z]+");
         regexPattern = `^${regexPattern}$`;
         const regex = new RegExp(regexPattern);
-        return regex.test(normalizedPath); 
+        return regex.test(normalizedPath);
       }
       return path === normalizedPath;
     });
@@ -142,45 +140,11 @@ function App() {
           />
         ))}
 
-        {/* Landing page */}
-        <Route
-          path="/"
-          element={
-            !userRole ? (
-              <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-gray-100 to-amber-100">
-                <div className="relative text-center transform transition-all duration-700 animate-fade-in">
-                  <img
-                    src={logo}
-                    alt="Intute.ai Logo"
-                    className="h-72 w-auto mx-auto mb-12 drop-shadow-2xl animate-float"
-                  />
-                  <div className="relative">
-                    <p
-                      className="text-5xl font-semibold text-gray-800 mb-10 tracking-wider uppercase relative z-10"
-                      style={{
-                        textShadow:
-                          "0 2px 4px rgba(0,0,0,0.1), 0 8px 16px rgba(222,170,50,0.2)",
-                        letterSpacing: "0.15em",
-                      }}
-                    >
-                      <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-900">
-                        Business
-                      </span>
-                      <span className="px-3 text-gray-700">Planner</span>
-                    </p>
-                    <div className="absolute -inset-1 blur-sm bg-gradient-to-r from-amber-200 via-transparent to-amber-200 opacity-20 z-0"></div>
-                  </div>
-                  <button
-                    onClick={() => dispatch(toggleLogin(true))}
-                    className="relative overflow-hidden bg-gradient-to-r from-amber-300 to-amber-400 text-gray-900 text-2xl font-medium px-16 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-500 transform hover:-translate-y-1 border border-amber-500 group"
-                  >
-                    <span className="relative z-10">Login</span>
-                    <span className="absolute inset-0 bg-gradient-to-r from-amber-400 to-amber-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-xl"></span>
-                    <span className="absolute -inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-amber-200 to-transparent transform translate-y-0 group-hover:translate-y-full transition-all duration-1000"></span>
-                  </button>
-                </div>
-              </div>
-            ) : (
+        {/* Invalid role fallback — only reached if userRole exists but is unrecognized */}
+        {userRole && (
+          <Route
+            path="/"
+            element={
               <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-gray-100 to-amber-100">
                 <div className="text-center">
                   <h1 className="text-3xl font-bold text-gray-800 mb-4">
@@ -198,11 +162,12 @@ function App() {
                   </button>
                 </div>
               </div>
-            )
-          }
-        />
+            }
+          />
+        )}
       </Routes>
 
+      {/* LoginModal now owns the landing page + login form */}
       {showLogin && (
         <LoginModal
           onClose={() => dispatch(toggleLogin(false))}
