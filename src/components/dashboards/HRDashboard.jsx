@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarCheck, Sparkles } from 'lucide-react';
+import { CalendarCheck, Sparkles, ClipboardList } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -26,7 +26,6 @@ function HRDashboard({ socket, userRole }) {
       <div className="absolute -bottom-32 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
 
       <div className="relative z-10 p-6">
-        {/* Header */}
         <div className="text-center mb-16 mt-8">
           <div className="inline-flex items-center justify-center mb-4">
             <div className="p-3 bg-gradient-to-r from-amber-400 to-orange-400 rounded-2xl shadow-lg">
@@ -44,7 +43,6 @@ function HRDashboard({ socket, userRole }) {
           <div className="w-24 h-1 bg-gradient-to-r from-amber-400 to-orange-400 mx-auto rounded-full"></div>
         </div>
 
-        {/* Cards */}
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto">
             <DashboardCard
@@ -55,6 +53,15 @@ function HRDashboard({ socket, userRole }) {
               gradient="from-teal-100 to-cyan-50"
               hoverGradient="hover:from-teal-200 hover:to-cyan-100"
               iconBg="bg-teal-500"
+            />
+            <DashboardCard
+              to="/hr-activities"
+              icon={<ClipboardList />}
+              title="Activities"
+              desc="Create and manage tasks assigned to Compage employees"
+              gradient="from-amber-100 to-orange-50"
+              hoverGradient="hover:from-amber-200 hover:to-orange-100"
+              iconBg="bg-amber-500"
             />
           </div>
         </div>

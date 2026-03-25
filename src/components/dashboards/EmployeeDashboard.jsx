@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, Sparkles } from "lucide-react";
+import { Clock, Sparkles, ClipboardList } from "lucide-react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -27,7 +27,6 @@ function EmployeeDashboard({ socket, userRole }) {
       <div className="absolute -bottom-32 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
 
       <div className="relative z-10 p-6">
-        {/* Header */}
         {isLoading ? (
           <div className="text-center mb-16 mt-8 animate-pulse">
             <div className="inline-flex items-center justify-center mb-4">
@@ -55,7 +54,6 @@ function EmployeeDashboard({ socket, userRole }) {
           </div>
         )}
 
-        {/* Cards */}
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 max-w-4xl mx-auto">
             {isLoading ? (
@@ -64,15 +62,26 @@ function EmployeeDashboard({ socket, userRole }) {
                 <SkeletonCard />
               </>
             ) : (
-              <DashboardCard
-                to="/attendance-history"
-                icon={<Clock />}
-                title="Attendance History"
-                desc="View your past attendance records"
-                gradient="from-amber-100 to-yellow-50"
-                hoverGradient="hover:from-amber-200 hover:to-yellow-100"
-                iconBg="bg-amber-500"
-              />
+              <>
+                <DashboardCard
+                  to="/attendance-history"
+                  icon={<Clock />}
+                  title="Attendance History"
+                  desc="View your past attendance records"
+                  gradient="from-amber-100 to-yellow-50"
+                  hoverGradient="hover:from-amber-200 hover:to-yellow-100"
+                  iconBg="bg-amber-500"
+                />
+                <DashboardCard
+                  to="/my-activities"
+                  icon={<ClipboardList />}
+                  title="My Activities"
+                  desc="View and update status of tasks assigned to you"
+                  gradient="from-orange-100 to-amber-50"
+                  hoverGradient="hover:from-orange-200 hover:to-amber-100"
+                  iconBg="bg-orange-500"
+                />
+              </>
             )}
           </div>
         </div>

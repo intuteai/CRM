@@ -10,9 +10,11 @@ import StoreDashboard from "./components/dashboards/StoreDashboard";
 import AccountsDashboard from "./components/dashboards/AccountsDashboard";
 import CustomerDashboard from "./components/dashboards/CustomerDashboard";
 import DispatchDashboard from "./components/dashboards/DispatchDashboard";
+
 // Compage
 import EmployeeDashboard from "./components/dashboards/EmployeeDashboard";
 import HRDashboard from "./components/dashboards/HRDashboard";
+
 // Intute
 import IAEmployeeDashboard from "./components/dashboards/Iaemployeedashboard";
 import IAHRDashboard from "./components/dashboards/Iahrdashboard";
@@ -73,19 +75,28 @@ import StoreInventoryPage from "./components/stores/StoreInventoryPage";
 import StoreBOMPage from "./components/stores/StoreBOMPage";
 
 // Pages
-import ActivitiesPage from "./components/pages/ActivitiesPage";
 import OrdersPage from "./components/pages/OrdersPage";
 import EditProfile from "./components/pages/EditProfile";
 import DispatchTrackingPage from "./components/pages/DispatchTrackingPage";
 
-// Employees & HR
-import AttendanceHistory from "./components/employees/AttendanceHistory";
-import HRPayslipForm from "./components/hr/HRPayslipForm";
+// ── Compage HR ───────────────────────────────────────────────
 import AttendanceSummary from "./components/hr/AttendanceSummary";
+import CompageActivitiesPage from "./components/hr/CompageActivitiesPage";
+
+// ── Compage Employee ─────────────────────────────────────────
+import AttendanceHistory from "./components/employees/AttendanceHistory";
+import CompageEmployeeActivitiesPage from "./components/employees/CompageEmployeeActivitiesPage";
+
+// ── Intute (IA) ──────────────────────────────────────────────
+import IAActivitiesPage from "./components/IA/IAActivitiesPage";
+import IAHRPayslipForm from "./components/IA/IAHRPayslipForm";
+import IAAttendanceSummary from "./components/IA/IAAttendanceSummary";
+import IAAttendanceHistory from "./components/IA/IAAttendanceHistory";
 
 // Route configuration array
 export const routeConfig = [
-  // ── Compage HR Routes ────────────────────────────────────
+
+  // ── Compage HR Routes ────────────────────────────────────────
   {
     path: "/hr-dashboard",
     allowedRoles: ["hr"],
@@ -93,16 +104,16 @@ export const routeConfig = [
   },
   {
     path: "/attendance-summary",
-    allowedRoles: ["hr", "ia_hr"],
+    allowedRoles: ["hr"],
     component: AttendanceSummary,
   },
   {
-    path: "/hr-payslips",
-    allowedRoles: ["ia_hr"], // Intute HR only
-    component: HRPayslipForm,
+    path: "/hr-activities",
+    allowedRoles: ["hr"],
+    component: CompageActivitiesPage,
   },
 
-  // ── Compage Employee Routes ──────────────────────────────
+  // ── Compage Employee Routes ──────────────────────────────────
   {
     path: "/employee-dashboard",
     allowedRoles: ["employee"],
@@ -110,32 +121,57 @@ export const routeConfig = [
   },
   {
     path: "/attendance-history",
-    allowedRoles: ["employee", "ia_employee"],
+    allowedRoles: ["employee"],
     component: AttendanceHistory,
   },
+  {
+    path: "/my-activities",
+    allowedRoles: ["employee"],
+    component: CompageEmployeeActivitiesPage,
+  },
 
-  // ── Intute HR Routes ─────────────────────────────────────
+  // ── Intute HR Routes ─────────────────────────────────────────
   {
     path: "/ia-hr-dashboard",
     allowedRoles: ["ia_hr"],
     component: IAHRDashboard,
   },
+  {
+    path: "/ia-attendance-summary",
+    allowedRoles: ["ia_hr"],
+    component: IAAttendanceSummary,
+  },
+  {
+    path: "/hr-payslips",
+    allowedRoles: ["ia_hr"],
+    component: IAHRPayslipForm,
+  },
 
-  // ── Intute Employee Routes ───────────────────────────────
+  // ── Intute Employee Routes ───────────────────────────────────
   {
     path: "/ia-employee-dashboard",
     allowedRoles: ["ia_employee"],
     component: IAEmployeeDashboard,
   },
+  {
+    path: "/ia-attendance-history",
+    allowedRoles: ["ia_employee"],
+    component: IAAttendanceHistory,
+  },
 
-  // ── Shared: Activities (Intute only) ─────────────────────
+  // ── Intute Shared Routes ─────────────────────────────────────
   {
     path: "/activities",
     allowedRoles: ["ia_employee", "ia_hr"],
-    component: ActivitiesPage,
+    component: IAActivitiesPage,
+  },
+  {
+    path: "/ia-orders",
+    allowedRoles: ["ia_employee", "ia_hr"],
+    component: IAOrdersPage,
   },
 
-  // Admin Routes
+  // ── Admin Routes ─────────────────────────────────────────────
   {
     path: "/admin-dashboard",
     allowedRoles: ["admin"],
@@ -177,7 +213,7 @@ export const routeConfig = [
     component: ProblemsPage,
   },
 
-  // Sales Routes
+  // ── Sales Routes ─────────────────────────────────────────────
   {
     path: "/sales-dashboard",
     allowedRoles: ["sales"],
@@ -204,7 +240,7 @@ export const routeConfig = [
     component: SalesInventoryPage,
   },
 
-  // Design Routes
+  // ── Design Routes ─────────────────────────────────────────────
   {
     path: "/design-dashboard",
     allowedRoles: ["design"],
@@ -221,7 +257,7 @@ export const routeConfig = [
     component: DesignPartCreation,
   },
 
-  // Production Routes
+  // ── Production Routes ─────────────────────────────────────────
   {
     path: "/production-dashboard",
     allowedRoles: ["production"],
@@ -268,28 +304,28 @@ export const routeConfig = [
     component: ProductionInventoryPage,
   },
 
-  // Store Routes
+  // ── Store Routes ──────────────────────────────────────────────
   {
     path: "/store-dashboard",
     allowedRoles: ["store"],
     component: StoreDashboard,
   },
 
-  // Dispatch Routes
+  // ── Dispatch Routes ───────────────────────────────────────────
   {
     path: "/dispatch-dashboard",
     allowedRoles: ["dispatch"],
     component: DispatchDashboard,
   },
 
-  // Accounts Routes
+  // ── Accounts Routes ───────────────────────────────────────────
   {
     path: "/accounts-dashboard",
     allowedRoles: ["accounts"],
     component: AccountsDashboard,
   },
 
-  // Customer Routes
+  // ── Customer Routes ───────────────────────────────────────────
   {
     path: "/customer-dashboard",
     allowedRoles: ["customer"],
@@ -306,29 +342,13 @@ export const routeConfig = [
     component: CustomerQueriesPage,
   },
 
-  // ── Intute Orders ────────────────────────────────────────────
-  {
-    path: "/ia-orders",
-    allowedRoles: ["ia_employee", "ia_hr"],
-    component: IAOrdersPage,
-  },
-
-  // Shared Routes (multiple roles)
+  // ── Shared Routes (multiple roles) ───────────────────────────
   {
     path: "/edit-profile",
     allowedRoles: [
-      "admin",
-      "customer",
-      "sales",
-      "design",
-      "production",
-      "store",
-      "dispatch",
-      "accounts",
-      "employee",
-      "hr",
-      "ia_employee",
-      "ia_hr",
+      "admin", "customer", "sales", "design", "production",
+      "store", "dispatch", "accounts", "employee", "hr",
+      "ia_employee", "ia_hr",
     ],
     component: EditProfile,
   },
@@ -445,22 +465,13 @@ export const routeConfig = [
       props.userRole === "sales" ? <SalesProformaForm /> : <ProformaForm />,
   },
 
-  // Redirect route (typo handling)
+  // ── Redirect (typo handling) ──────────────────────────────────
   {
     path: "/account-dashboard",
     allowedRoles: [
-      "admin",
-      "customer",
-      "sales",
-      "design",
-      "production",
-      "store",
-      "dispatch",
-      "accounts",
-      "employee",
-      "hr",
-      "ia_employee",
-      "ia_hr",
+      "admin", "customer", "sales", "design", "production",
+      "store", "dispatch", "accounts", "employee", "hr",
+      "ia_employee", "ia_hr",
     ],
     isRedirect: true,
     redirectTo: "/accounts-dashboard",

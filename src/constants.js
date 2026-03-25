@@ -139,26 +139,27 @@ export const allowedPathsByRole = {
   [ROLES.EMPLOYEE]: [
     "/employee-dashboard",
     "/attendance-history",
+    "/my-activities",         // ← added
     "/edit-profile",
   ],
   [ROLES.HR]: [
     "/hr-dashboard",
     "/attendance-summary",
-    "/hr-payslips",
+    "/hr-activities",         // ← added
     "/edit-profile",
   ],
 
   // ── Intute ───────────────────────────────────────────────
   [ROLES.IA_EMPLOYEE]: [
     "/ia-employee-dashboard",
-    "/attendance-history",
+    "/ia-attendance-history", // ← fixed (was /attendance-history)
     "/activities",
     "/ia-orders",
     "/edit-profile",
   ],
   [ROLES.IA_HR]: [
     "/ia-hr-dashboard",
-    "/attendance-summary",
+    "/ia-attendance-summary", // ← fixed (was /attendance-summary)
     "/activities",
     "/ia-orders",
     "/hr-payslips",

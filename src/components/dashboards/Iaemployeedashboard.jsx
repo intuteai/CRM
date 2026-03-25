@@ -75,7 +75,7 @@ function IAEmployeeDashboard({ socket, userRole }) {
             ) : (
               <>
                 <DashboardCard
-                  to="/attendance-history"
+                  to="/ia-attendance-history"
                   icon={<Clock />}
                   title="Attendance History"
                   desc="View your past attendance records"

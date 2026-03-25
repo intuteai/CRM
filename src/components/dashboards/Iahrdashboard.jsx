@@ -54,7 +54,7 @@ function IAHRDashboard({ socket, userRole }) {
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
             <DashboardCard
-              to="/attendance-summary"
+              to="/ia-attendance-summary"
               icon={<CalendarCheck />}
               title="Attendance Summary"
               desc="Daily / monthly attendance reports for all employees"
