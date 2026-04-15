@@ -9,7 +9,11 @@ const formatDisplayDate = (s) => {
   const [year, month, day] = dateStr.split('-').map(Number);
   if (!year || !month || !day) return '-';
   const date = new Date(year, month - 1, day);
-  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return date.toLocaleDateString('en-GB', { 
+    day: '2-digit', 
+    month: 'short', 
+    year: 'numeric' 
+  });
 };
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
@@ -26,13 +30,13 @@ function EmployeeDetailsPage() {
   const [formData, setFormData] = useState({ phone_number: '', date_of_joining: '', address: '' });
   const [submitting, setSubmitting] = useState(false);
 
-  // New: Full Address Modal State
+  // Full Address Modal State
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [fullAddressEmployee, setFullAddressEmployee] = useState(null);
 
   const abortRef = useRef(null);
 
-  // ── Fetch ALL employees ────────────────────────────────────────
+  // Fetch employees
   const fetchAll = useCallback(async () => {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
@@ -85,7 +89,7 @@ function EmployeeDetailsPage() {
     return () => { if (abortRef.current) abortRef.current.abort(); };
   }, [search, employeeIdFilter]);
 
-  // ── Edit modal ─────────────────────────────────────────────────
+  // Edit Modal
   const openEditModal = (emp) => {
     setSelectedEmployee(emp);
     setFormData({
@@ -121,7 +125,7 @@ function EmployeeDetailsPage() {
     }
   };
 
-  // ── Full Address Modal ─────────────────────────────────────────
+  // Address Modal
   const openAddressModal = (emp) => {
     if (!emp?.address) return;
     setFullAddressEmployee(emp);
@@ -133,7 +137,7 @@ function EmployeeDetailsPage() {
     setFullAddressEmployee(null);
   };
 
-  // ── CSV Export ─────────────────────────────────────────────────
+  // CSV Export
   const exportCSV = useCallback(() => {
     const headers = ['Employee ID', 'Name', 'Email', 'Role', 'Phone', 'Date of Joining', 'Address'];
     const rows = data.map((r) => [
@@ -157,6 +161,7 @@ function EmployeeDetailsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-25 to-gray-100 relative overflow-hidden">
+      {/* Background decorations */}
       <div className="absolute top-0 left-0 w-96 h-96 bg-amber-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
       <div className="absolute top-0 right-0 w-96 h-96 bg-orange-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000"></div>
       <div className="absolute -bottom-32 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
@@ -213,17 +218,17 @@ function EmployeeDetailsPage() {
         {/* Table */}
         <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[1100px]"> {/* Added min-width to prevent squeezing */}
               <thead className="bg-gradient-to-r from-amber-100 to-orange-50">
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Emp ID</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 w-20">Emp ID</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Name</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Email</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Role</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Phone</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Date of Joining</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 w-28">Role</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 w-32">Phone</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 w-40">Date of Joining</th> {/* Fixed width */}
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Address</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Actions</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 w-24">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -257,12 +262,12 @@ function EmployeeDetailsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                          {formatDisplayDate(emp.date_of_joining)}
+                        <div className="flex items-center gap-1 whitespace-nowrap">
+                          <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                          <span>{formatDisplayDate(emp.date_of_joining)}</span>
                         </div>
                       </td>
-                      {/* Updated Clickable Address Column */}
+                      {/* Clickable Address */}
                       <td className="px-6 py-4 text-sm text-gray-600">
                         <div 
                           className="flex items-center gap-1 cursor-pointer group"
@@ -270,11 +275,11 @@ function EmployeeDetailsPage() {
                           title={emp.address || '-'}
                         >
                           <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                          <span className="truncate max-w-[200px] group-hover:text-amber-700 transition-colors">
+                          <span className="truncate max-w-[220px] group-hover:text-amber-700 transition-colors">
                             {emp.address || '-'}
                           </span>
                           {emp.address && (
-                            <span className="text-amber-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity font-medium">
+                            <span className="text-amber-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
                               ↗
                             </span>
                           )}
@@ -283,7 +288,7 @@ function EmployeeDetailsPage() {
                       <td className="px-6 py-4">
                         <button
                           onClick={() => openEditModal(emp)}
-                          className="px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+                          className="px-4 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
                         >
                           Edit
                         </button>
@@ -297,7 +302,7 @@ function EmployeeDetailsPage() {
         </div>
       </div>
 
-      {/* Edit Modal */}
+      {/* Edit Modal - unchanged */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8 relative">
@@ -360,7 +365,7 @@ function EmployeeDetailsPage() {
         </div>
       )}
 
-      {/* Full Address View Modal */}
+      {/* Full Address Modal */}
       {showAddressModal && fullAddressEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
