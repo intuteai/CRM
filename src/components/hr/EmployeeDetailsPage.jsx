@@ -26,6 +26,10 @@ function EmployeeDetailsPage() {
   const [formData, setFormData] = useState({ phone_number: '', date_of_joining: '', address: '' });
   const [submitting, setSubmitting] = useState(false);
 
+  // New: Full Address Modal State
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [fullAddressEmployee, setFullAddressEmployee] = useState(null);
+
   const abortRef = useRef(null);
 
   // ── Fetch ALL employees ────────────────────────────────────────
@@ -115,6 +119,18 @@ function EmployeeDetailsPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // ── Full Address Modal ─────────────────────────────────────────
+  const openAddressModal = (emp) => {
+    if (!emp?.address) return;
+    setFullAddressEmployee(emp);
+    setShowAddressModal(true);
+  };
+
+  const closeAddressModal = () => {
+    setShowAddressModal(false);
+    setFullAddressEmployee(null);
   };
 
   // ── CSV Export ─────────────────────────────────────────────────
@@ -246,10 +262,22 @@ function EmployeeDetailsPage() {
                           {formatDisplayDate(emp.date_of_joining)}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 max-w-[200px] truncate">
-                        <div className="flex items-center gap-1" title={emp.address || '-'}>
+                      {/* Updated Clickable Address Column */}
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        <div 
+                          className="flex items-center gap-1 cursor-pointer group"
+                          onClick={() => openAddressModal(emp)}
+                          title={emp.address || '-'}
+                        >
                           <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                          <span className="truncate">{emp.address || '-'}</span>
+                          <span className="truncate max-w-[200px] group-hover:text-amber-700 transition-colors">
+                            {emp.address || '-'}
+                          </span>
+                          {emp.address && (
+                            <span className="text-amber-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity font-medium">
+                              ↗
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -328,6 +356,43 @@ function EmployeeDetailsPage() {
                 Save Changes
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Address View Modal */}
+      {showAddressModal && fullAddressEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
+            <button 
+              onClick={closeAddressModal} 
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl font-bold transition-colors"
+            >
+              ×
+            </button>
+
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-amber-100 rounded-2xl">
+                <MapPin className="w-7 h-7 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">Full Address</h2>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {fullAddressEmployee.name} • {fullAddressEmployee.employee_id}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-6 text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+              {fullAddressEmployee.address}
+            </div>
+
+            <button
+              onClick={closeAddressModal}
+              className="mt-6 w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-2xl font-medium transition-all"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
