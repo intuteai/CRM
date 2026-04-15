@@ -82,6 +82,7 @@ import DispatchTrackingPage from "./components/pages/DispatchTrackingPage";
 // ── Compage HR ───────────────────────────────────────────────
 import AttendanceSummary from "./components/hr/AttendanceSummary";
 import CompageActivitiesPage from "./components/hr/CompageActivitiesPage";
+import EmployeeDetailsPage from "./components/hr/EmployeeDetailsPage"; // ← added
 
 // ── Compage Employee ─────────────────────────────────────────
 import AttendanceHistory from "./components/employees/AttendanceHistory";
@@ -111,6 +112,11 @@ export const routeConfig = [
     path: "/hr-activities",
     allowedRoles: ["hr"],
     component: CompageActivitiesPage,
+  },
+  {
+    path: "/employee-details",        // ← added
+    allowedRoles: ["hr"],
+    component: EmployeeDetailsPage,
   },
 
   // ── Compage Employee Routes ──────────────────────────────────

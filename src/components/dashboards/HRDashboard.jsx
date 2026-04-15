@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarCheck, Sparkles, ClipboardList } from 'lucide-react';
+import { CalendarCheck, Sparkles, ClipboardList, Users } from 'lucide-react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -62,6 +62,15 @@ function HRDashboard({ socket, userRole }) {
               gradient="from-amber-100 to-orange-50"
               hoverGradient="hover:from-amber-200 hover:to-orange-100"
               iconBg="bg-amber-500"
+            />
+            <DashboardCard
+              to="/employee-details"
+              icon={<Users />}
+              title="Employee Details"
+              desc="View, add and update employee contact and onboarding information"
+              gradient="from-violet-100 to-purple-50"
+              hoverGradient="hover:from-violet-200 hover:to-purple-100"
+              iconBg="bg-violet-500"
             />
           </div>
         </div>
