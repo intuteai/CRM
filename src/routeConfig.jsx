@@ -43,6 +43,7 @@ import CreateMotorProcess from "./components/admin/CreateMotorProcess";
 import CreateNonMotorProcess from "./components/admin/CreateNonMotorProcess";
 import PartCreation from "./components/admin/PartCreation";
 import DeliveryChallanForm from "./components/admin/DeliveryChallanForm";
+import MotorRecipesPage from "./components/admin/MotorRecipesPage";
 
 // Sales
 import SalesQueriesPage from "./components/sales/SalesQueriesPage";
@@ -82,7 +83,7 @@ import DispatchTrackingPage from "./components/pages/DispatchTrackingPage";
 // ── Compage HR ───────────────────────────────────────────────
 import AttendanceSummary from "./components/hr/AttendanceSummary";
 import CompageActivitiesPage from "./components/hr/CompageActivitiesPage";
-import EmployeeDetailsPage from "./components/hr/EmployeeDetailsPage"; // ← added
+import EmployeeDetailsPage from "./components/hr/EmployeeDetailsPage";
 
 // ── Compage Employee ─────────────────────────────────────────
 import AttendanceHistory from "./components/employees/AttendanceHistory";
@@ -114,7 +115,7 @@ export const routeConfig = [
     component: CompageActivitiesPage,
   },
   {
-    path: "/employee-details",        // ← added
+    path: "/employee-details",
     allowedRoles: ["hr"],
     component: EmployeeDetailsPage,
   },
@@ -357,6 +358,11 @@ export const routeConfig = [
       "ia_employee", "ia_hr",
     ],
     component: EditProfile,
+  },
+  {
+    path: "/motor-recipes",
+    allowedRoles: ["admin", "design", "production"],   // ← design + production added
+    component: MotorRecipesPage,
   },
   {
     path: "/orders",

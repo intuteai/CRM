@@ -18,62 +18,17 @@ function ProductionDashboard() {
       </h1>
 
       <div className="max-w-7xl mx-auto space-y-12">
-        {/* Production & Process Management */}
         <Section title="Production Management">
-          <DashboardCard
-            to="/production-orders"
-            icon={<Truck />}
-            title="Orders"
-            desc="Track and manage orders"
-          />
-          <DashboardCard
-            to="/production-queries"
-            icon={<MessageSquare />}
-            title="Queries"
-            desc="Manage production queries"
-          />
-          <DashboardCard
-            to="/production-stock"
-            icon={<Package />}
-            title="Raw Materials"
-            desc="Monitor raw material levels"
-          />
-          <DashboardCard
-            to="/production-inventory"
-            icon={<Package />}
-            title="Finished Goods"
-            desc="Monitor finished goods stock"
-          />
-          <DashboardCard
-            to="/production-part-drawings-raw"
-            icon={<PenTool />}
-            title="Raw Material Drawings"
-            desc="Access raw material drawings"
-          />
-          <DashboardCard
-            to="/production-part-drawings"
-            icon={<PenTool />}
-            title="Finished Goods Drawings"
-            desc="Access finished goods drawings"
-          />
-          <DashboardCard
-            to="/production-pdi"
-            icon={<CheckSquare />}
-            title="PDI Reports"
-            desc="Pre-dispatch inspections"
-          />
-          <DashboardCard
-            to="/production-bom-unpriced"
-            icon={<BarChart />}
-            title="Bill of Materials (Unpriced)"
-            desc="View unpriced BOMs"
-          />
-          <DashboardCard
-            to="/work-orders"
-            icon={<Wrench />}
-            title="Work Orders"
-            desc="Manage work orders for production"
-          />
+          <DashboardCard to="/production-orders" icon={<Truck />} title="Orders" desc="Track and manage orders" />
+          <DashboardCard to="/production-queries" icon={<MessageSquare />} title="Queries" desc="Manage production queries" />
+          <DashboardCard to="/production-stock" icon={<Package />} title="Raw Materials" desc="Monitor raw material levels" />
+          <DashboardCard to="/production-inventory" icon={<Package />} title="Finished Goods" desc="Monitor finished goods stock" />
+          <DashboardCard to="/production-part-drawings-raw" icon={<PenTool />} title="Raw Material Drawings" desc="Access raw material drawings" />
+          <DashboardCard to="/production-part-drawings" icon={<PenTool />} title="Finished Goods Drawings" desc="Access finished goods drawings" />
+          <DashboardCard to="/production-pdi" icon={<CheckSquare />} title="PDI Reports" desc="Pre-dispatch inspections" />
+          <DashboardCard to="/production-bom-unpriced" icon={<BarChart />} title="Bill of Materials (Unpriced)" desc="View unpriced BOMs" />
+          <DashboardCard to="/work-orders" icon={<Wrench />} title="Work Orders" desc="Manage work orders for production" />
+          <DashboardCard to="/motor-recipes" icon={<Wrench />} title="Motor Recipes" desc="View and manage motor winding recipes" />
         </Section>
       </div>
     </div>
@@ -90,9 +45,7 @@ function DashboardCard({ to, icon, title, desc }) {
       <div className="flex items-center justify-center mb-3">
         {React.cloneElement(icon, { className: "w-9 h-9 text-gray-700" })}
       </div>
-      <h2 className="text-xl font-semibold text-gray-800 text-center">
-        {title}
-      </h2>
+      <h2 className="text-xl font-semibold text-gray-800 text-center">{title}</h2>
       <p className="text-gray-600 text-center mt-1 text-base">{desc}</p>
     </Link>
   );

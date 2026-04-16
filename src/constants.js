@@ -60,6 +60,7 @@ export const allowedPathsByRole = {
     "/proforma",
     "/part-creation",
     "/delivery-challan",
+    "/motor-recipes",
   ],
   [ROLES.CUSTOMER]: [
     "/customer-dashboard",
@@ -91,6 +92,7 @@ export const allowedPathsByRole = {
     "/bom",
     "/edit-profile",
     "/design/part-creation",
+    "/motor-recipes",           // ← added
   ],
   [ROLES.PRODUCTION]: [
     "/production-dashboard",
@@ -110,6 +112,7 @@ export const allowedPathsByRole = {
     "/select-component/:orderId/:action",
     "/processes/:orderId",
     "/processes/non-motor/:orderId",
+    "/motor-recipes",           // ← added
   ],
   [ROLES.STORE]: [
     "/store-dashboard",
@@ -146,7 +149,7 @@ export const allowedPathsByRole = {
     "/hr-dashboard",
     "/attendance-summary",
     "/hr-activities",
-    "/employee-details",   // ← added
+    "/employee-details",
     "/edit-profile",
   ],
 
