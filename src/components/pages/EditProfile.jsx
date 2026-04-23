@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useNotify } from '../../hooks/useNotify';
 
 function EditProfile() {
   const [oldPassword, setOldPassword] = useState('');
@@ -11,6 +10,7 @@ function EditProfile() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { notifySuccess, notifyError } = useNotify();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -18,24 +18,24 @@ function EditProfile() {
 
     // Client-side validation
     if (!oldPassword || !newPassword || !confirmPassword) {
-      toast.error('All fields are required.', { autoClose: 3000 });
+      notifyError('All fields are required.', { autoClose: 3000 });
       setIsLoading(false);
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error('New password and confirmation do not match.', { autoClose: 3000 });
+      notifyError('New password and confirmation do not match.', { autoClose: 3000 });
       setIsLoading(false);
       return;
     }
     if (newPassword.length < 6) {
-      toast.error('New password must be at least 6 characters long.', { autoClose: 3000 });
+      notifyError('New password must be at least 6 characters long.', { autoClose: 3000 });
       setIsLoading(false);
       return;
     }
 
     const token = localStorage.getItem('token');
     if (!token) {
-      toast.error('You must be logged in to update your password.', { autoClose: 3000 });
+      notifyError('You must be logged in to update your password.', { autoClose: 3000 });
       setIsLoading(false);
       return;
     }
@@ -56,7 +56,7 @@ function EditProfile() {
         throw new Error(data.error || 'Failed to update password.', { cause: data.code });
       }
 
-      toast.success('Password updated successfully!', { autoClose: 3000 });
+      notifySuccess('Password updated successfully!', { autoClose: 3000 });
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -64,20 +64,20 @@ function EditProfile() {
       const errorCode = err.cause || 'UNKNOWN_ERROR';
       switch (errorCode) {
         case 'AUTH_INVALID_OLD_PASSWORD':
-          toast.error('The old password you entered is incorrect.', { autoClose: 3000 });
+          notifyError('The old password you entered is incorrect.', { autoClose: 3000 });
           break;
         case 'AUTH_PASSWORD_TOO_SHORT':
-          toast.error('New password must be at least 6 characters long.', { autoClose: 3000 });
+          notifyError('New password must be at least 6 characters long.', { autoClose: 3000 });
           break;
         case 'AUTH_NO_TOKEN':
         case 'AUTH_INVALID_TOKEN':
-          toast.error('Your session has expired. Please log in again.', { autoClose: 3000 });
+          notifyError('Your session has expired. Please log in again.', { autoClose: 3000 });
           break;
         case 'USER_NOT_FOUND':
-          toast.error('User not found. Please contact support.', { autoClose: 3000 });
+          notifyError('User not found. Please contact support.', { autoClose: 3000 });
           break;
         default:
-          toast.error(err.message || 'An unexpected error occurred.', { autoClose: 3000 });
+          notifyError(err.message || 'An unexpected error occurred.', { autoClose: 3000 });
       }
     } finally {
       setIsLoading(false);

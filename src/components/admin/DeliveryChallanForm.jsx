@@ -3,8 +3,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import Modal from "react-modal";
 import axios from "axios";
 import { Plus, Download, Trash2, FileText, Search } from "lucide-react";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { useNotify } from '../../hooks/useNotify';
 
 Modal.setAppElement("#root");
 
@@ -106,7 +105,7 @@ export default function DeliveryChallanForm() {
       );
     } catch (err) {
       console.error("Failed to load product lists:", err);
-      toast.error("Failed to load inventory/raw lists.");
+      notifyError("Failed to load inventory/raw lists.");
     } finally {
       setLoadingLists(false);
     }
@@ -265,25 +264,25 @@ export default function DeliveryChallanForm() {
     e.preventDefault();
     const token = localStorage.getItem("token");
     if (!token) {
-      toast.error("Please login first.");
+      notifyError("Please login first.");
       return;
     }
     if (!form.challan_no) {
-      toast.error("Challan No is required.");
+      notifyError("Challan No is required.");
       return;
     }
     if (!form.items.length) {
-      toast.error("Add at least one item.");
+      notifyError("Add at least one item.");
       return;
     }
     for (let i = 0; i < form.items.length; ++i) {
       const it = form.items[i];
       if (!it.productId) {
-        toast.error(`Select product for item #${i + 1}.`);
+        notifyError(`Select product for item #${i + 1}.`);
         return;
       }
       if (it.qty === "" || it.qty === null || isNaN(Number(it.qty)) || Number(it.qty) <= 0) {
-        toast.error(`Enter valid qty for item #${i + 1}.`);
+        notifyError(`Enter valid qty for item #${i + 1}.`);
         return;
       }
     }
@@ -336,12 +335,12 @@ export default function DeliveryChallanForm() {
       a.remove();
       window.URL.revokeObjectURL(url);
 
-      toast.success("Delivery Challan PDF downloaded.");
+      notifySuccess("Delivery Challan PDF downloaded.");
       setIsOpen(false);
       fetchLists();
     } catch (err) {
       console.error("Generate challan error:", err);
-      toast.error("Failed to generate delivery challan.");
+      notifyError("Failed to generate delivery challan.");
     } finally {
       setLoading(false);
       abortRef.current = null;
@@ -486,11 +485,11 @@ export default function DeliveryChallanForm() {
   const stableOnRemove = removeItemByUid;
 
   const itemsForRender = useMemo(() => form.items, [form.items]);
+  const { notifySuccess, notifyError } = useNotify();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-200 to-gray-300 p-6">
-      <ToastContainer position="top-right" />
-      <div className="max-w-5xl mx-auto text-center">
+<div className="max-w-5xl mx-auto text-center">
         <h1 className="text-3xl font-bold text-gray-800 mb-6 tracking-tight">Delivery Challan Generator</h1>
         <div className="flex justify-center mb-12">
           <button

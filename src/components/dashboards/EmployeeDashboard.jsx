@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Clock, Sparkles, ClipboardList } from "lucide-react";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { useNotify } from '../../hooks/useNotify';
 
 function EmployeeDashboard({ socket, userRole }) {
   const [isLoading, setIsLoading] = useState(true);
+  const { notifySuccess } = useNotify();
 
   useEffect(() => {
     if (!socket) return;
     socket.on("attendanceMarked", (attendance) => {
-      toast.success(`Attendance marked for ${attendance.date}`, { autoClose: 3000 });
+      notifySuccess(`Attendance marked for ${attendance.date}`, { autoClose: 3000 });
     });
     return () => socket.off("attendanceMarked");
   }, [socket]);
@@ -87,8 +87,7 @@ function EmployeeDashboard({ socket, userRole }) {
         </div>
       </div>
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

@@ -5,8 +5,6 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 import {
   ArrowDownUp,
   Search,
@@ -24,6 +22,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
@@ -726,6 +725,7 @@ function StockPage({ socket }) {
   const [showPartDropdown, setShowPartDropdown] = useState(false);
   const [partsLoaded, setPartsLoaded] = useState(false);
   const partDropdownRef = useRef(null);
+  const { notifySuccess, notifyError, notifyInfo, notifyWarning } = useNotify();
   // ----------------------------------------
 
   // Fetch Stock
@@ -789,7 +789,7 @@ function StockPage({ socket }) {
     } catch (err) {
       if (err.name !== "AbortError") {
         setError(err.message);
-        toast.error(err.message || "Network error", { autoClose: 3000 });
+        notifyError(err.message || "Network error", { autoClose: 3000 });
         setStockItems([]);
       }
     } finally {
@@ -804,18 +804,18 @@ function StockPage({ socket }) {
     if (!socket) return;
 
     socket.on("connect", () =>
-      toast.success("Connected to real-time updates!", { autoClose: 2000 }),
+      notifySuccess("Connected to real-time updates!", { autoClose: 2000 }),
     );
     socket.on("connect_error", () =>
-      toast.error("Failed to connect to real-time updates.", {
+      notifyError("Failed to connect to real-time updates.", {
         autoClose: 3000,
       }),
     );
     socket.on("disconnect", () =>
-      toast.warn("Real-time connection lost", { autoClose: 3000 }),
+      notifyWarning("Real-time connection lost"),
     );
     socket.on("reconnect", () => {
-      toast.success("Reconnected!", { autoClose: 2000 });
+      notifySuccess("Reconnected!", { autoClose: 2000 });
       fetchStock();
     });
 
@@ -834,7 +834,7 @@ function StockPage({ socket }) {
       setStockItems((prev) => {
         if (!Array.isArray(prev)) return prev || [];
         if (status === "deleted" || status === "Deleted") {
-          toast.info(`Product #${product_id} deleted`, { autoClose: 2000 });
+          notifyInfo(`Product #${product_id} deleted`, { autoClose: 2000 });
           return prev.filter((item) => item.productId !== product_id);
         }
         return prev.map((item) =>
@@ -940,7 +940,7 @@ function StockPage({ socket }) {
       setPartsLoaded(true);
     } catch (err) {
       console.error("Failed to load parts:", err);
-      toast.error(err.message || "Failed to load parts", { autoClose: 3000 });
+      notifyError(err.message || "Failed to load parts", { autoClose: 3000 });
     } finally {
       setIsPartLoading(false);
     }
@@ -1106,7 +1106,7 @@ function StockPage({ socket }) {
           });
 
           if (errors.length)
-            errors.forEach((e) => toast.error(e, { autoClose: 5000 }));
+            errors.forEach((e) => notifyError(e, { autoClose: 5000 }));
           if (!valid.length) return;
 
           const token = localStorage.getItem("token");
@@ -1142,12 +1142,12 @@ function StockPage({ socket }) {
 
           await fetchStock();
           setPage(0);
-          toast.success(
+          notifySuccess(
             `Success: ${created} created, ${updated} updated${failed ? `, ${failed} failed` : ""}`,
             { autoClose: 5000 },
           );
         } catch (err) {
-          toast.error(`Import failed: ${err.message}`, { autoClose: 3000 });
+          notifyError(`Import failed: ${err.message}`, { autoClose: 3000 });
         }
       };
       reader.readAsArrayBuffer(file);
@@ -1174,7 +1174,7 @@ function StockPage({ socket }) {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Raw Materials");
     XLSX.writeFile(wb, "Raw_Material_Inventory.xlsx");
-    toast.success("Exported to Excel!", { autoClose: 2000 });
+    notifySuccess("Exported to Excel!", { autoClose: 2000 });
   }, [filteredStock]);
 
   // Sorting
@@ -1237,9 +1237,9 @@ function StockPage({ socket }) {
         if (!res.ok)
           throw new Error((await res.json()).error || "Delete failed");
         await fetchStock();
-        toast.success(`Product #${productId} deleted`);
+        notifySuccess(`Product #${productId} deleted`);
       } catch (err) {
-        toast.error(err.message);
+        notifyError(err.message);
       }
     },
     [fetchStock],
@@ -1281,7 +1281,7 @@ function StockPage({ socket }) {
       const errors = validateForm();
       if (Object.keys(errors).length) {
         setFormErrors(errors);
-        Object.values(errors).forEach((e) => toast.error(e));
+        Object.values(errors).forEach((e) => notifyError(e));
         return;
       }
 
@@ -1338,9 +1338,9 @@ function StockPage({ socket }) {
         await fetchStock();
         setShowModal(false);
         setPage(0);
-        toast.success(isCreate ? "Product created!" : "Product updated!");
+        notifySuccess(isCreate ? "Product created!" : "Product updated!");
       } catch (err) {
-        toast.error(err.message || "Save failed");
+        notifyError(err.message || "Save failed");
       }
     },
     [formData, modalMode, selectedItem, fetchStock, validateForm],
@@ -1350,7 +1350,7 @@ function StockPage({ socket }) {
   const uploadPhoto = useCallback(async (productId, file) => {
     if (!file) return;
     setUploadingId(productId);
-    const toastId = toast.loading(`Uploading ${file.name}...`);
+    notifyInfo(`Uploading ${file.name}...`);
     const formDataUpload = new FormData();
     formDataUpload.append("photo", file);
     try {
@@ -1374,19 +1374,9 @@ function StockPage({ socket }) {
             : item,
         ),
       );
-      toast.update(toastId, {
-        render: "Image uploaded successfully!",
-        type: "success",
-        isLoading: false,
-        autoClose: 3000,
-      });
+      notifySuccess("Image uploaded successfully!");
     } catch (err) {
-      toast.update(toastId, {
-        render: `Upload failed: ${err.message}`,
-        type: "error",
-        isLoading: false,
-        autoClose: 5000,
-      });
+      notifyError(`Upload failed: ${err.message}`);
     } finally {
       setUploadingId(null);
     }
@@ -1501,7 +1491,7 @@ function StockPage({ socket }) {
       );
       setShowAcceptModal(false);
       setAcceptProduct(null);
-      toast.success("Accept processed (UI updated)", { autoClose: 2000 });
+      notifySuccess("Accept processed (UI updated)", { autoClose: 2000 });
     },
     [],
   );
@@ -2155,8 +2145,7 @@ function StockPage({ socket }) {
           />
         )}
 
-        <ToastContainer position="top-right" autoClose={3000} />
-      </div>
+</div>
     </ErrorBoundary>
   );
 }
@@ -2165,17 +2154,18 @@ function StockPage({ socket }) {
 const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
   const [qty, setQty] = useState(product.returnableQty ?? 0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const handleAccept = async () => {
     const parsed = parseInt(qty, 10);
     if (!Number.isInteger(parsed) || parsed <= 0) {
-      toast.error("Please enter a positive integer quantity to accept.", {
+      notifyError("Please enter a positive integer quantity to accept.", {
         autoClose: 3000,
       });
       return;
     }
     if (parsed > (product.returnableQty ?? 0)) {
-      toast.error(`Cannot accept more than ${product.returnableQty}`, {
+      notifyError(`Cannot accept more than ${product.returnableQty}`, {
         autoClose: 3000,
       });
       return;
@@ -2187,7 +2177,7 @@ const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
       if (onAccepted) onAccepted(product.productId, parsed, data || {});
     } catch (err) {
       console.error("Accept return failed", err);
-      toast.error(err.message || "Accept return failed", { autoClose: 4000 });
+      notifyError(err.message || "Accept return failed", { autoClose: 4000 });
     } finally {
       setIsSubmitting(false);
       onClose();

@@ -1,22 +1,22 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Clock, CalendarDays, Package, Sparkles } from "lucide-react";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { useNotify } from '../../hooks/useNotify';
 
 function IAEmployeeDashboard({ socket, userRole }) {
   const [isLoading, setIsLoading] = useState(true);
+  const { notifySuccess, notifyInfo } = useNotify();
 
   useEffect(() => {
     if (!socket) return;
     socket.on("attendanceMarked", (attendance) => {
-      toast.success(`Attendance marked for ${attendance.date}`, { autoClose: 3000 });
+      notifySuccess(`Attendance marked for ${attendance.date}`, { autoClose: 3000 });
     });
     socket.on("activities:created", (data) => {
-      toast.info(`New activity assigned: ${data?.summary || ''}`, { autoClose: 3000 });
+      notifyInfo(`New activity assigned: ${data?.summary || ''}`, { autoClose: 3000 });
     });
     socket.on("ia_orders:created", (data) => {
-      toast.success(`New order: ${data?.invoice_number || ''}`, { autoClose: 3000 });
+      notifySuccess(`New order: ${data?.invoice_number || ''}`, { autoClose: 3000 });
     });
     return () => {
       socket.off("attendanceMarked");
@@ -107,8 +107,7 @@ function IAEmployeeDashboard({ socket, userRole }) {
         </div>
       </div>
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

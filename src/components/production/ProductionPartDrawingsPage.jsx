@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { formatDate as importedFormatDate } from '../../utils/helpers';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, RefreshCw, Search } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -43,6 +42,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
   const searchInputRef = useRef(null);
   const hasFetched = useRef(false);
   const isFetching = useRef(false);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const socket = useMemo(
     () =>
@@ -107,7 +107,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
       console.error('Error fetching part drawings:', err);
       const errorMessage = err.message || 'Network error. Please try again later.';
       setError(errorMessage);
-      toast.error(errorMessage, { autoClose: 3000 });
+      notifyError(errorMessage, { autoClose: 3000 });
     } finally {
       setIsLoading(false);
       isFetching.current = false;
@@ -124,12 +124,12 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
   useEffect(() => {
     const handleConnect = () => {
       console.log('Connected to Socket.IO in ProductionPartDrawingsPage');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     };
 
     const handleConnectError = (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     };
 
     const handleDrawingsUpdate = ({ type, item, itemId, timestamp }) => {
@@ -148,7 +148,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
           };
           // Only add if on the first page or matches search
           if (page === 0 && (!searchTerm || newDrawing.itemName.toLowerCase().includes(searchTerm.toLowerCase()))) {
-            toast.info(`New drawing #${newDrawing.srNo} added`, { autoClose: 2000 });
+            notifyInfo(`New drawing #${newDrawing.srNo} added`, { autoClose: 2000 });
             return [newDrawing, ...prev].slice(0, limit);
           }
           setTotalItems((prev) => prev + 1);
@@ -183,7 +183,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
 
           const updatedDrawings = [...prev];
           updatedDrawings[drawingIndex] = updatedDrawing;
-          toast.info(`Drawing #${updatedDrawing.srNo} updated`, { autoClose: 2000 });
+          notifyInfo(`Drawing #${updatedDrawing.srNo} updated`, { autoClose: 2000 });
           return updatedDrawings;
         }
 
@@ -191,7 +191,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
           const drawingIndex = prev.findIndex((drawing) => drawing.srNo === itemId);
           if (drawingIndex === -1) return prev;
 
-          toast.info(`Drawing #${itemId} deleted`, { autoClose: 2000 });
+          notifyInfo(`Drawing #${itemId} deleted`, { autoClose: 2000 });
           setTotalItems((prev) => prev - 1);
           return prev.filter((drawing) => drawing.srNo !== itemId);
         }
@@ -485,15 +485,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
         </div>
       </div>
 
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }
 

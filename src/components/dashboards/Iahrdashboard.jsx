@@ -1,23 +1,23 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarCheck, CalendarDays, Download, Package, Sparkles } from 'lucide-react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useNotify } from '../../hooks/useNotify';
 
 function IAHRDashboard({ socket, userRole }) {
+  const { notifySuccess, notifyInfo } = useNotify();
   useEffect(() => {
     if (!socket) return;
     socket.on('leaveRequestCreated', (data) => {
-      toast.info(`New leave request from ${data?.name || 'employee'}`, { autoClose: 4000 });
+      notifyInfo(`New leave request from ${data?.name || 'employee'}`, { autoClose: 4000 });
     });
     socket.on('payrollProcessed', (data) => {
-      toast.success(`Payroll for ${data?.month || 'month'} processed`, { autoClose: 4000 });
+      notifySuccess(`Payroll for ${data?.month || 'month'} processed`, { autoClose: 4000 });
     });
     socket.on('activities:created', (data) => {
-      toast.info(`New activity: ${data?.summary || ''}`, { autoClose: 3000 });
+      notifyInfo(`New activity: ${data?.summary || ''}`, { autoClose: 3000 });
     });
     socket.on('ia_orders:created', (data) => {
-      toast.success(`New order: ${data?.invoice_number || ''}`, { autoClose: 3000 });
+      notifySuccess(`New order: ${data?.invoice_number || ''}`, { autoClose: 3000 });
     });
     return () => {
       socket.off('leaveRequestCreated');
@@ -93,8 +93,7 @@ function IAHRDashboard({ socket, userRole }) {
         </div>
       </div>
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

@@ -3,8 +3,7 @@ import {
   ArrowDownUp, Filter, PlusCircle, XCircle, Search, ChevronLeft, ChevronRight 
 } from 'lucide-react';
 import { io } from 'socket.io-client';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useNotify } from '../../hooks/useNotify';
 
 // Use the environment variable for the backend URL
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -94,6 +93,7 @@ function CustomerOrdersPage() {
   const tableRef = useRef(null);
 
   const { orders, setOrders, totalOrders, products, isLoading, error, refetchData } = useFetchData({ limit: ordersPerPage, cursor });
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   useEffect(() => {
     const socket = io(BASE_URL, {
@@ -104,17 +104,17 @@ function CustomerOrdersPage() {
 
     socket.on('connect', () => {
       console.log('Connected to Socket.IO');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     });
 
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
 
     socket.on('stockUpdate', () => {
       refetchData(true);
-      toast.info('Inventory stock levels updated', { autoClose: 3000 });
+      notifyInfo('Inventory stock levels updated', { autoClose: 3000 });
     });
 
     socket.on('orderUpdate', (updatedOrder) => {
@@ -127,7 +127,7 @@ function CustomerOrdersPage() {
         }
         return prev; // Ignore if page is full
       });
-      toast.info(`Your order #${updatedOrder.id} updated`, { autoClose: 3000 });
+      notifyInfo(`Your order #${updatedOrder.id} updated`, { autoClose: 3000 });
       if (tableRef.current) tableRef.current.focus();
     });
 
@@ -157,7 +157,7 @@ function CustomerOrdersPage() {
     if (!isValid) {
       setFormErrors(errors);
       setIsSubmitting(false);
-      toast.error('Failed to create order. Check the errors below.', { autoClose: 3000 });
+      notifyError('Failed to create order. Check the errors below.', { autoClose: 3000 });
       return;
     }
 
@@ -184,10 +184,10 @@ function CustomerOrdersPage() {
       await refetchData(true);
       setShowCreateForm(false);
       setNewOrder({ targetDeliveryDate: '', items: [{ product_id: '', quantity: 1 }] });
-      toast.success('Order created successfully!', { autoClose: 3000 });
+      notifySuccess('Order created successfully!', { autoClose: 3000 });
     } catch (err) {
       setFormErrors([err.message]);
-      toast.error(err.message, { autoClose: 3000 });
+      notifyError(err.message, { autoClose: 3000 });
     } finally {
       setIsSubmitting(false);
     }
@@ -533,8 +533,7 @@ function CustomerOrdersPage() {
           </div>
         )}
       </div>
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

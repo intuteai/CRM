@@ -5,8 +5,7 @@ import {
   FileText
 } from 'lucide-react';
 import { debounce } from 'lodash';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useNotify } from '../../hooks/useNotify';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -169,7 +168,7 @@ function useDropdownData() {
   useEffect(() => {
     apiFetch('/api/motor-recipes/dropdown-data')
       .then(({ customers, inventory }) => { setCustomers(customers); setInventory(inventory); })
-      .catch(err => toast.error(`Failed to load dropdown data: ${err.message}`))
+      .catch(err => notifyError(`Failed to load dropdown data: ${err.message}`))
       .finally(() => setLoading(false));
   }, []);
 
@@ -369,6 +368,7 @@ function MotorRecipesPage({ userRole }) {
   const canDelete = CAN_DELETE_ROLES.includes(userRole);
 
   const debouncedSearch = useCallback(debounce((v) => { setSearchTerm(v); setPage(0); }, 300), []);
+  const { notifySuccess, notifyError } = useNotify();
   const handleSearchChange = (e) => {
     setSearchInput(e.target.value);
     debouncedSearch(e.target.value.toLowerCase());
@@ -419,12 +419,12 @@ function MotorRecipesPage({ userRole }) {
     setIsSubmitting(true);
     try {
       await apiFetch('/api/motor-recipes', { method: 'POST', body: JSON.stringify(payload) });
-      toast.success('Recipe created successfully');
+      notifySuccess('Recipe created successfully');
       setShowCreate(false);
       setPage(0);
       refetch();
     } catch (err) {
-      toast.error(err.message);
+      notifyError(err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -434,11 +434,11 @@ function MotorRecipesPage({ userRole }) {
     setIsSubmitting(true);
     try {
       await apiFetch('/api/motor-recipes', { method: 'POST', body: JSON.stringify(payload) });
-      toast.success('Recipe updated successfully');
+      notifySuccess('Recipe updated successfully');
       setEditRecipe(null);
       refetch();
     } catch (err) {
-      toast.error(err.message);
+      notifyError(err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -450,10 +450,10 @@ function MotorRecipesPage({ userRole }) {
     )) return;
     try {
       await apiFetch(`/api/motor-recipes/${recipe.customer_id}/${recipe.product_id}`, { method: 'DELETE' });
-      toast.success('Recipe deleted');
+      notifySuccess('Recipe deleted');
       refetch();
     } catch (err) {
-      toast.error(err.message);
+      notifyError(err.message);
     }
   }, [refetch]);
 
@@ -643,8 +643,7 @@ function MotorRecipesPage({ userRole }) {
       {/* Notes Modal */}
       {notesRecipe && <NotesModal recipe={notesRecipe} onClose={() => setNotesRecipe(null)} />}
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

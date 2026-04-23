@@ -21,10 +21,9 @@ import {
 } from "lucide-react";
 import { debounce } from "lodash";
 import { io } from "socket.io-client";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 import * as XLSX from "xlsx";
 import QRCode from "qrcode";
+import { useNotify } from '../../hooks/useNotify';
 
 const formatCurrency = (amount) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(
@@ -728,6 +727,7 @@ function ProductionStockPage() {
   const fileInputRef = useRef(null);
   const modalRef = useRef(null);
   const searchInputRef = useRef(null);
+  const { notifySuccess, notifyError } = useNotify();
 
   const { stockItems, totalItems, isLoading, error, refetchData } =
     useFetchStock();
@@ -754,10 +754,10 @@ function ProductionStockPage() {
     });
 
     socket.on("connect", () =>
-      toast.success("Connected to real-time updates!", { autoClose: 2000 }),
+      notifySuccess("Connected to real-time updates!", { autoClose: 2000 }),
     );
     socket.on("connect_error", () =>
-      toast.error("Failed to connect to real-time updates.", {
+      notifyError("Failed to connect to real-time updates.", {
         autoClose: 3000,
       }),
     );
@@ -797,7 +797,7 @@ function ProductionStockPage() {
           errorCorrectionLevel: "H",
         });
       } catch (err) {
-        toast.error("QR code generation failed", { autoClose: 3000 });
+        notifyError("QR code generation failed", { autoClose: 3000 });
       }
     },
     [],
@@ -922,7 +922,7 @@ function ProductionStockPage() {
     XLSX.utils.book_append_sheet(wb, ws, "Raw Materials");
     XLSX.writeFile(wb, "Production_Raw_Material_Inventory.xlsx");
 
-    toast.success("Exported to Excel!");
+    notifySuccess("Exported to Excel!");
   }, [filteredStock]);
 
   const importFromExcel = useCallback(
@@ -964,7 +964,7 @@ function ProductionStockPage() {
             }
           });
 
-          if (errors.length) errors.forEach((e) => toast.error(e));
+          if (errors.length) errors.forEach((e) => notifyError(e));
           if (!valid.length) return;
 
           const token = localStorage.getItem("token");
@@ -999,11 +999,11 @@ function ProductionStockPage() {
 
           await refetchData();
           setPage(0);
-          toast.success(
+          notifySuccess(
             `Imported: ${created} created, ${updated} updated${failed ? `, ${failed} failed` : ""}`,
           );
         } catch (err) {
-          toast.error(`Import failed: ${err.message}`);
+          notifyError(`Import failed: ${err.message}`);
         }
       };
       reader.readAsArrayBuffer(file);
@@ -1090,7 +1090,7 @@ function ProductionStockPage() {
       const errors = validateForm();
       if (Object.keys(errors).length) {
         setFormErrors(errors);
-        Object.values(errors).forEach((e) => toast.error(e));
+        Object.values(errors).forEach((e) => notifyError(e));
         return;
       }
 
@@ -1127,9 +1127,9 @@ function ProductionStockPage() {
         await refetchData();
         setShowModal(false);
         setPage(0);
-        toast.success(isCreate ? "Item created!" : "Item updated!");
+        notifySuccess(isCreate ? "Item created!" : "Item updated!");
       } catch (err) {
-        toast.error(err.message);
+        notifyError(err.message);
       }
     },
     [formData, modalMode, selectedItem, refetchData],
@@ -1617,7 +1617,7 @@ function ProductionStockPage() {
                 a.href = canvas.toDataURL("image/png");
                 a.download = `QR_${selectedBarcode}.png`;
                 a.click();
-                toast.success("Downloaded!");
+                notifySuccess("Downloaded!");
               }}
               className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto"
             >
@@ -1627,8 +1627,7 @@ function ProductionStockPage() {
         </div>
       )}
 
-      <ToastContainer position="top-right" autoClose={3000} />
-    </div>
+</div>
   );
 }
 

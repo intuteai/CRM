@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { formatDate as importedFormatDate } from '../../utils/helpers';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -45,6 +44,7 @@ function DispatchTrackingPage({ socket: providedSocket }) {
   const searchInputRef = useRef(null);
   const hasFetched = useRef(false);
   const isFetching = useRef(false);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const socket = useMemo(
     () =>
@@ -82,7 +82,7 @@ function DispatchTrackingPage({ socket: providedSocket }) {
     } catch (err) {
       const errorMessage = err.message || 'Network error. Please try again later.';
       setError(errorMessage);
-      toast.error(errorMessage, { autoClose: 3000 });
+      notifyError(errorMessage, { autoClose: 3000 });
     } finally {
       setIsLoading(false);
       isFetching.current = false;
@@ -95,16 +95,16 @@ function DispatchTrackingPage({ socket: providedSocket }) {
       hasFetched.current = true;
     }
     const handleConnect = () => {
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     };
     const handleConnectError = (err) => {
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     };
     const handleDispatchUpdate = ({ tracking_id, docket_number, dispatch_date, delivery_date, status }) => {
       setDispatchRecords((prev) => {
         if (!Array.isArray(prev)) return prev || [];
         if (status === 'Deleted') {
-          toast.info(`Dispatch record #${tracking_id} deleted`, { autoClose: 2000 });
+          notifyInfo(`Dispatch record #${tracking_id} deleted`, { autoClose: 2000 });
           return prev.filter((record) => record.tracking_id !== tracking_id);
         }
         const recordIndex = prev.findIndex((record) => record.tracking_id === tracking_id);
@@ -128,7 +128,7 @@ function DispatchTrackingPage({ socket: providedSocket }) {
           delivery_date,
           status,
         };
-        toast.info(`Dispatch record #${tracking_id} updated`, { autoClose: 2000 });
+        notifyInfo(`Dispatch record #${tracking_id} updated`, { autoClose: 2000 });
         return updatedRecords;
       });
     };
@@ -236,12 +236,12 @@ function DispatchTrackingPage({ socket: providedSocket }) {
           prev.map((r) => (r.tracking_id === updatedRecord.tracking_id ? updatedRecord : r))
         );
         setShowModal(false);
-        toast.success(`Dispatch record #${updatedRecord.tracking_id} updated successfully!`, {
+        notifySuccess(`Dispatch record #${updatedRecord.tracking_id} updated successfully!`, {
           autoClose: 2000,
         });
       } catch (err) {
         console.error('Update error:', err);
-        toast.error(err.message || 'Update failed', { autoClose: 3000 });
+        notifyError(err.message || 'Update failed', { autoClose: 3000 });
       } finally {
         setUploading(false);
       }
@@ -626,15 +626,7 @@ function DispatchTrackingPage({ socket: providedSocket }) {
           </div>
         </div>
       )}
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }
 

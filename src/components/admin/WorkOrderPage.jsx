@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { FileText } from "lucide-react";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { useNotify } from '../../hooks/useNotify';
 
 /* 🔹 Status → Card Style Mapper */
 const getStatusStyles = (status) => {
@@ -48,6 +47,7 @@ function WorkOrderPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const { notifyError } = useNotify();
 
   const backendUrl =
     import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
@@ -73,7 +73,7 @@ function WorkOrderPage() {
       setOrders(data);
     } catch (err) {
       setError(err.message);
-      toast.error(err.message);
+      notifyError(err.message);
     } finally {
       setLoading(false);
     }
@@ -190,8 +190,7 @@ function WorkOrderPage() {
         )}
       </div>
 
-      <ToastContainer position="top-right" autoClose={3000} />
-    </div>
+</div>
   );
 }
 

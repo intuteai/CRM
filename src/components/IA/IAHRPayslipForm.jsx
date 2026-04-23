@@ -6,10 +6,10 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Plus, Loader2, Download, Trash2, Users, Calendar } from 'lucide-react';
-import { toast, ToastContainer } from 'react-toastify';
 import axios from 'axios';
 import Modal from 'react-modal';
 import { toWords } from 'number-to-words';
+import { useNotify } from '../../hooks/useNotify';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -73,6 +73,7 @@ function IAHRPayslipForm({ socket }) {
 
   const mountedRef = useRef(true);
   const abortRef = useRef(null);
+  const { notifySuccess, notifyError } = useNotify();
 
   useEffect(() => {
     mountedRef.current = true;
@@ -122,8 +123,8 @@ function IAHRPayslipForm({ socket }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
-    if (!token) { toast.error('Please log in again'); return; }
-    if (!form.employee.name || !form.period) { toast.error('Employee name and period are required'); return; }
+    if (!token) { notifyError('Please log in again'); return; }
+    if (!form.employee.name || !form.period) { notifyError('Employee name and period are required'); return; }
 
     setLoading(true);
     if (abortRef.current) abortRef.current.abort();
@@ -160,12 +161,12 @@ function IAHRPayslipForm({ socket }) {
       link.remove();
       window.URL.revokeObjectURL(url);
 
-      toast.success('Payslip generated & downloaded!');
+      notifySuccess('Payslip generated & downloaded!');
       setIsModalOpen(false);
       resetForm();
     } catch (err) {
       if (err.name === 'CanceledError') return;
-      toast.error(err.response?.data?.error || 'Failed to generate PDF');
+      notifyError(err.response?.data?.error || 'Failed to generate PDF');
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -450,8 +451,7 @@ function IAHRPayslipForm({ socket }) {
         </form>
       </Modal>
 
-      <ToastContainer position="top-right" />
-    </div>
+</div>
   );
 }
 

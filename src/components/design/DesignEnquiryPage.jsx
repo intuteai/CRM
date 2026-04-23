@@ -7,8 +7,7 @@ import React, {
 } from "react";
 import { ArrowDownUp, X, MoreVertical } from "lucide-react";
 import io from "socket.io-client";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { useNotify } from '../../hooks/useNotify';
 
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
@@ -140,6 +139,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
   const tableRef = useRef(null);
   // const hasFetched = useRef(false);
   const isFetching = useRef(false);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   // Global actions menu
   const [actionsMenuState, setActionsMenuState] = useState({
@@ -233,7 +233,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         const errorMessage =
           err.message || "Network error. Please try again later.";
         setError(errorMessage);
-        toast.error(errorMessage, { autoClose: 3000 });
+        notifyError(errorMessage, { autoClose: 3000 });
       } finally {
         setIsLoading(false);
         isFetching.current = false;
@@ -291,7 +291,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           enqData.assigned_to != null &&
           Number(enqData.assigned_to) !== Number(currentUser.user_id)
         ) {
-          toast.error("You are not allowed to view this enquiry");
+          notifyError("You are not allowed to view this enquiry");
           setDetailEnquiry(null);
           setDetailActivities([]);
           setIsDetailOpen(false);
@@ -318,7 +318,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         Promise.all(markPromises);
       } catch (err) {
         console.error("Error fetching enquiry detail:", err);
-        toast.error(err.message || "Failed to load enquiry detail");
+        notifyError(err.message || "Failed to load enquiry detail");
       } finally {
         setDetailLoading(false);
       }
@@ -330,14 +330,14 @@ function DesignEnquiryPage({ socket: providedSocket }) {
   useEffect(() => {
     socket.on("connect", () => {
       console.log("Connected to Socket.IO (Design)");
-      toast.success("Connected to real-time updates!", {
+      notifySuccess("Connected to real-time updates!", {
         autoClose: 2000,
       });
     });
 
     socket.on("connect_error", (err) => {
       console.error("Socket connection error:", err);
-      toast.error("Failed to connect to real-time updates.", {
+      notifyError("Failed to connect to real-time updates.", {
         autoClose: 3000,
       });
     });
@@ -372,7 +372,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         if (!Array.isArray(prev)) return prev || [];
 
         if (type === "deleted" || status === "Deleted") {
-          toast.info(`Enquiry #${enquiry_id} deleted`);
+          notifyInfo(`Enquiry #${enquiry_id} deleted`);
           return prev.filter((e) => e.enquiry_id !== enquiry_id);
         }
 
@@ -409,7 +409,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
 
         const copy = [...prev];
         copy[idx] = updated;
-        toast.info(`Enquiry #${enquiry_id} updated`);
+        notifyInfo(`Enquiry #${enquiry_id} updated`);
         return copy;
       });
 
@@ -571,11 +571,11 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           );
         }
 
-        toast.success(`Enquiry #${enquiryId} deleted successfully!`);
+        notifySuccess(`Enquiry #${enquiryId} deleted successfully!`);
         fetchEnquiries(true);
       } catch (err) {
         console.error("Delete error:", err);
-        toast.error(err.message || "Failed to delete enquiry");
+        notifyError(err.message || "Failed to delete enquiry");
       }
     },
     [fetchEnquiries],
@@ -584,7 +584,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) {
-      toast.error("Please fix the form errors");
+      notifyError("Please fix the form errors");
       return;
     }
     try {
@@ -641,12 +641,12 @@ function DesignEnquiryPage({ socket: providedSocket }) {
             e.enquiry_id === updatedEnquiry.enquiry_id ? updatedEnquiry : e,
           ),
         );
-        toast.success(
+        notifySuccess(
           `Enquiry #${updatedEnquiry.enquiry_id} updated successfully!`,
         );
       } else {
         setEnquiries((prev) => [updatedEnquiry, ...prev]);
-        toast.success(
+        notifySuccess(
           `Enquiry #${updatedEnquiry.enquiry_id} created successfully!`,
         );
       }
@@ -659,7 +659,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         err.message && err.message.includes("Enquiry ID already exists")
           ? "Enquiry ID already exists. Please use a unique ID."
           : err.message || `${isEditing ? "Update" : "Create"} failed`;
-      toast.error(errorMessage);
+      notifyError(errorMessage);
     }
   };
 
@@ -690,14 +690,14 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         return next;
       });
 
-      toast.success(
+      notifySuccess(
         isCurrentlyFollowed
           ? `Unfollowed enquiry #${enquiryId}`
           : `Following enquiry #${enquiryId}`,
       );
     } catch (err) {
       console.error("Follow toggle error:", err);
-      toast.error(err.message || "Failed to update follow state");
+      notifyError(err.message || "Failed to update follow state");
     }
   };
 
@@ -739,11 +739,11 @@ function DesignEnquiryPage({ socket: providedSocket }) {
   //         ? { ...prev, ...updated }
   //         : prev,
   //     );
-  //     toast.success(`Enquiry #${enquiryId} assigned to Sales`);
+  //     notifySuccess(`Enquiry #${enquiryId} assigned to Sales`);
   //     fetchEnquiries(true);
   //   } catch (err) {
   //     console.error("Assign to Sales error:", err);
-  //     toast.error(err.message || "Failed to assign to Sales");
+  //     notifyError(err.message || "Failed to assign to Sales");
   //   }
   // };
   // ASSIGN TO SALES (simple action - assigns to default SALES_USER_ID)
@@ -784,11 +784,11 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           ? { ...prev, ...updated }
           : prev,
       );
-      toast.success(`Enquiry #${enquiryId} assigned to Sales`);
+      notifySuccess(`Enquiry #${enquiryId} assigned to Sales`);
       fetchEnquiries(true);
     } catch (err) {
       console.error("Assign to Sales error:", err);
-      toast.error(err.message || "Failed to assign to Sales");
+      notifyError(err.message || "Failed to assign to Sales");
     }
   };
 
@@ -830,11 +830,11 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           ? { ...prev, ...updated }
           : prev,
       );
-      toast.success(`Enquiry #${enquiryId} assigned to Admin`);
+      notifySuccess(`Enquiry #${enquiryId} assigned to Admin`);
       fetchEnquiries(true);
     } catch (err) {
       console.error("Assign to Admin error:", err);
-      toast.error(err.message || "Failed to assign to Admin");
+      notifyError(err.message || "Failed to assign to Admin");
     }
   };
 
@@ -873,13 +873,13 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           : prev,
       );
 
-      toast.success(
+      notifySuccess(
         `Enquiry #${updated.enquiry_id} marked done and returned to Sales`,
       );
       fetchEnquiries(true);
     } catch (err) {
       console.error("Mark done error:", err);
-      toast.error(err.message || "Failed to mark done");
+      notifyError(err.message || "Failed to mark done");
     }
   };
 
@@ -2061,7 +2061,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                         <button
                           onClick={async () => {
                             if (!commentText.trim()) {
-                              toast.error("Comment message is required");
+                              notifyError("Comment message is required");
                               return;
                             }
                             try {
@@ -2093,10 +2093,10 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                               ]);
                               setCommentText("");
                               setSelectedTemplateId("");
-                              toast.success("Comment added");
+                              notifySuccess("Comment added");
                             } catch (err) {
                               console.error("Add comment error:", err);
-                              toast.error(
+                              notifyError(
                                 err.message || "Failed to add comment",
                               );
                             }
@@ -2150,8 +2150,7 @@ function DesignEnquiryPage({ socket: providedSocket }) {
           </div>
         </div>
       )}
-      <ToastContainer position="top-right" autoClose={3000} />
-    </div>
+</div>
   );
 }
 

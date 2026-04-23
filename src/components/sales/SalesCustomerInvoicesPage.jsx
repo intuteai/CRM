@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { formatDate as importedFormatDate } from '../utils/helpers';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, RefreshCw, Search } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -49,6 +48,7 @@ function SalesCustomerInvoicesPage({ socket: providedSocket }) {
   const searchInputRef = useRef(null);
   const hasFetched = useRef(false);
   const isFetching = useRef(false);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const socket = useMemo(
     () =>
@@ -121,7 +121,7 @@ function SalesCustomerInvoicesPage({ socket: providedSocket }) {
       console.error('Error fetching invoices:', err);
       const errorMessage = err.message || 'Network error. Please try again later.';
       setError(errorMessage);
-      toast.error(errorMessage, { autoClose: 3000 });
+      notifyError(errorMessage, { autoClose: 3000 });
     } finally {
       setIsLoading(false);
       isFetching.current = false;
@@ -136,12 +136,12 @@ function SalesCustomerInvoicesPage({ socket: providedSocket }) {
 
     const handleConnect = () => {
       console.log('Connected to Socket.IO in SalesCustomerInvoicesPage');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     };
 
     const handleConnectError = (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     };
 
     const handleInvoiceUpdate = ({ invoice_id, invoice_number, total_value, issue_date, status }) => {
@@ -149,7 +149,7 @@ function SalesCustomerInvoicesPage({ socket: providedSocket }) {
         if (!Array.isArray(prev)) return prev || [];
 
         if (status === 'Deleted') {
-          toast.info(`Invoice #${invoice_id} deleted`, { autoClose: 2000 });
+          notifyInfo(`Invoice #${invoice_id} deleted`, { autoClose: 2000 });
           return prev.filter((invoice) => invoice.invoice_id !== invoice_id);
         }
 
@@ -173,7 +173,7 @@ function SalesCustomerInvoicesPage({ socket: providedSocket }) {
           issue_date,
         };
 
-        toast.info(`Invoice #${invoice_id} updated`, { autoClose: 2000 });
+        notifyInfo(`Invoice #${invoice_id} updated`, { autoClose: 2000 });
         return updatedInvoices;
       });
     };
@@ -498,15 +498,7 @@ function SalesCustomerInvoicesPage({ socket: providedSocket }) {
         </div>
       </div>
 
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }
 

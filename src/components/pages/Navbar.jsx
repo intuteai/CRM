@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LogOut, User, Clock, Menu, X } from 'lucide-react';
 import { io } from 'socket.io-client';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useNotify } from '../../hooks/useNotify';
 
 function Navbar({ userRole, userName, token, setUserRole, setShowLogin, handleLogout }) {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   useEffect(() => {
     const updateTime = () => {
@@ -30,31 +30,31 @@ function Navbar({ userRole, userName, token, setUserRole, setShowLogin, handleLo
     socket.on('connect', () => console.log('Connected to Socket.IO'));
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
 
     if (userRole === 'admin') {
       socket.on('orderUpdate', (updatedOrder) => {
-        toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 3000 });
+        notifyInfo(`Order #${updatedOrder.id} updated`, { autoClose: 3000 });
       });
       socket.on('newQuery', (query) => {
-        toast.info(`New query #${query.queryId} received`, { autoClose: 3000 });
+        notifyInfo(`New query #${query.queryId} received`, { autoClose: 3000 });
       });
       socket.on('queryUpdate', (updatedQuery) => {
-        toast.info(`Query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
+        notifyInfo(`Query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
       });
       socket.on('stockUpdate', () => {
-        toast.info('Inventory stock levels updated', { autoClose: 3000 });
+        notifyInfo('Inventory stock levels updated', { autoClose: 3000 });
       });
       socket.on('customerUpdate', (updatedCustomer) => {
-        toast.info(`Customer ${updatedCustomer.name} updated`, { autoClose: 3000 });
+        notifyInfo(`Customer ${updatedCustomer.name} updated`, { autoClose: 3000 });
       });
     } else if (userRole === 'customer') {
       socket.on('orderUpdate', (updatedOrder) => {
-        toast.info(`Your order #${updatedOrder.id} updated`, { autoClose: 3000 });
+        notifyInfo(`Your order #${updatedOrder.id} updated`, { autoClose: 3000 });
       });
       socket.on('queryUpdate', (updatedQuery) => {
-        toast.info(`Your query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
+        notifyInfo(`Your query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
       });
     }
 
@@ -73,11 +73,11 @@ function Navbar({ userRole, userName, token, setUserRole, setShowLogin, handleLo
       .then(() => {
         handleLogout();
         navigate('/');
-        toast.success('Logged out successfully', { autoClose: 3000 });
+        notifySuccess('Logged out successfully', { autoClose: 3000 });
       })
       .catch(err => {
         console.error('Logout error:', err);
-        toast.error('Failed to logout. Please try again.', { autoClose: 3000 });
+        notifyError('Failed to logout. Please try again.', { autoClose: 3000 });
       });
   };
 
@@ -205,16 +205,7 @@ function Navbar({ userRole, userName, token, setUserRole, setShowLogin, handleLo
           </div>
         )}
       </div>
-      <ToastContainer 
-        position="top-right" 
-        autoClose={3000} 
-        hideProgressBar={false} 
-        closeOnClick 
-        pauseOnHover 
-        draggable 
-        className="mt-16"
-      />
-    </nav>
+</nav>
   );
 }
 

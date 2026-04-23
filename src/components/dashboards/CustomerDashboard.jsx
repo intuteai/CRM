@@ -2,13 +2,13 @@ import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Package, MessageSquare } from 'lucide-react'; // Importing lucide-react icons
 import { io } from 'socket.io-client';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useNotify } from '../../hooks/useNotify';
 
 // Use the environment variable for the backend URL
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 function CustomerDashboard() {
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
   useEffect(() => {
     const socket = io(SOCKET_URL, {
       reconnection: true, // Enable reconnection attempts
@@ -18,20 +18,20 @@ function CustomerDashboard() {
 
     socket.on('connect', () => {
       console.log('Connected to Socket.IO');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     });
 
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
 
     // Customer-specific real-time notifications
     socket.on('orderUpdate', (updatedOrder) => {
-      toast.info(`Your order #${updatedOrder.id} updated`, { autoClose: 3000 });
+      notifyInfo(`Your order #${updatedOrder.id} updated`, { autoClose: 3000 });
     });
     socket.on('queryUpdate', (updatedQuery) => {
-      toast.info(`Your query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
+      notifyInfo(`Your query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
     });
 
     // Cleanup on unmount
@@ -71,8 +71,7 @@ function CustomerDashboard() {
           <p className="text-gray-600 text-center mt-3 text-lg">Manage your inquiries</p>
         </Link>
       </div>
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
-import { toast, ToastContainer } from "react-toastify";
 import {
   Search,
   Filter,
@@ -17,7 +16,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from "lucide-react";
-import "react-toastify/dist/ReactToastify.css";
+import { useNotify } from '../../hooks/useNotify';
 
 /* ========================================
    UTILITIES & HELPERS
@@ -112,7 +111,7 @@ function CreateWorkOrderForm({ orderId, instanceGroups, onClose, onCreated }) {
     e.preventDefault();
     
     if (!instanceGroupId) {
-      toast.error("Please select a motor/instance");
+      notifyError("Please select a motor/instance");
       return;
     }
 
@@ -141,11 +140,11 @@ function CreateWorkOrderForm({ orderId, instanceGroups, onClose, onCreated }) {
       }
 
       const workOrder = await res.json();
-      toast.success("Work order created successfully");
+      notifySuccess("Work order created successfully");
       onCreated(workOrder);
       onClose();
     } catch (error) {
-      toast.error(error.message || "Failed to create work order");
+      notifyError(error.message || "Failed to create work order");
     } finally {
       setLoading(false);
     }
@@ -217,12 +216,12 @@ function AddComponentForm({ workOrder, components, onClose, onAdded }) {
     e.preventDefault();
 
     if (!componentId) {
-      toast.error("Please select a component");
+      notifyError("Please select a component");
       return;
     }
 
     if (!Number.isInteger(Number(quantity)) || Number(quantity) <= 0) {
-      toast.error("Quantity must be a positive integer");
+      notifyError("Quantity must be a positive integer");
       return;
     }
 
@@ -251,11 +250,11 @@ function AddComponentForm({ workOrder, components, onClose, onAdded }) {
       }
 
       const component = await res.json();
-      toast.success("Component added to work order");
+      notifySuccess("Component added to work order");
       onAdded(component);
       onClose();
     } catch (error) {
-      toast.error(error.message || "Failed to add component");
+      notifyError(error.message || "Failed to add component");
     } finally {
       setLoading(false);
     }
@@ -351,7 +350,7 @@ function ProcessDetailModal({ workOrderComponent, onClose, onUpdate }) {
 
   useEffect(() => {
     if (!materials.length) {
-      toast.error("⚠️ REQUIRED: Please add raw materials first before updating processes!", {
+      notifyError("⚠️ REQUIRED: Please add raw materials first before updating processes!", {
         autoClose: false,
         closeButton: true,
       });
@@ -402,7 +401,7 @@ function ProcessDetailModal({ workOrderComponent, onClose, onUpdate }) {
 
   const startEditProcess = (process) => {
     if (!canEditProcesses) {
-      toast.error("❌ Cannot edit process: Please add raw materials first in the 'Raw Materials' tab");
+      notifyError("❌ Cannot edit process: Please add raw materials first in the 'Raw Materials' tab");
       setActiveTab("materials");
       return;
     }
@@ -423,22 +422,22 @@ function ProcessDetailModal({ workOrderComponent, onClose, onUpdate }) {
     const inUseQty = Number(processFormData.inUseQuantity);
 
     if (!Number.isInteger(completedQty) || completedQty < 0) {
-      toast.error("Completed quantity must be a non-negative integer");
+      notifyError("Completed quantity must be a non-negative integer");
       return;
     }
 
     if (!Number.isInteger(inUseQty) || inUseQty < 0) {
-      toast.error("In-use quantity must be a non-negative integer");
+      notifyError("In-use quantity must be a non-negative integer");
       return;
     }
 
     if (!canEditProcesses) {
-      toast.error("Cannot update process without raw materials assigned");
+      notifyError("Cannot update process without raw materials assigned");
       return;
     }
 
     if (completedQty > totalPlannedMaterial) {
-      toast.error(
+      notifyError(
         `Completed quantity (${completedQty}) cannot exceed planned material (${totalPlannedMaterial} units)`
       );
       return;
@@ -488,11 +487,11 @@ function ProcessDetailModal({ workOrderComponent, onClose, onUpdate }) {
         )
       );
 
-      toast.success("Process updated successfully");
+      notifySuccess("Process updated successfully");
       setEditingProcess(null);
       if (onUpdate) onUpdate();
     } catch (error) {
-      toast.error(error.message || "Failed to update process");
+      notifyError(error.message || "Failed to update process");
     }
   };
 
@@ -503,7 +502,7 @@ function ProcessDetailModal({ workOrderComponent, onClose, onUpdate }) {
     const quantity = Number(materialFormData.quantity);
 
     if (!rawMaterialId || !Number.isInteger(quantity) || quantity <= 0) {
-      toast.error("Please select a material and enter a valid quantity");
+      notifyError("Please select a material and enter a valid quantity");
       return;
     }
 
@@ -544,14 +543,14 @@ function ProcessDetailModal({ workOrderComponent, onClose, onUpdate }) {
         },
       ]);
 
-      toast.success("✅ Material added! You can now update processes.", {
+      notifySuccess("✅ Material added! You can now update processes.", {
         autoClose: 3000,
       });
       setShowAddMaterial(false);
       setMaterialFormData({ rawMaterialId: "", quantity: 1 });
       if (onUpdate) onUpdate();
     } catch (error) {
-      toast.error(error.message || "Failed to add material");
+      notifyError(error.message || "Failed to add material");
     }
   };
 
@@ -576,10 +575,10 @@ function ProcessDetailModal({ workOrderComponent, onClose, onUpdate }) {
       }
 
       setMaterials((prev) => prev.filter(m => m.workOrderMaterialId !== materialId));
-      toast.success("Material deleted successfully");
+      notifySuccess("Material deleted successfully");
       if (onUpdate) onUpdate();
     } catch (error) {
-      toast.error(error.message || "Failed to delete material");
+      notifyError(error.message || "Failed to delete material");
     }
   };
 
@@ -1052,12 +1051,12 @@ function KanbanBoard({ workOrders, onRefresh }) {
       );
 
       if (!component) {
-        toast.error("Component not found");
+        notifyError("Component not found");
         return;
       }
 
       if (!component.materials || component.materials.length === 0) {
-        toast.error("❌ Cannot update status: Please add raw materials to this component first");
+        notifyError("❌ Cannot update status: Please add raw materials to this component first");
         return;
       }
 
@@ -1066,7 +1065,7 @@ function KanbanBoard({ workOrders, onRefresh }) {
         component.processes[0];
 
       if (!targetProcess) {
-        toast.error("No processes found for this component");
+        notifyError("No processes found for this component");
         return;
       }
 
@@ -1104,10 +1103,10 @@ function KanbanBoard({ workOrders, onRefresh }) {
         throw new Error(data?.error || "Failed to update status");
       }
 
-      toast.success("Status updated");
+      notifySuccess("Status updated");
       onRefresh();
     } catch (error) {
-      toast.error(error.message || "Failed to update status");
+      notifyError(error.message || "Failed to update status");
     }
   };
 
@@ -1259,6 +1258,7 @@ export default function ProcessManagement({ socket }) {
   const [showAddComponent, setShowAddComponent] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState("kanban");
+  const { notifySuccess, notifyError } = useNotify();
 
   useEffect(() => {
     if (!socket) return;
@@ -1296,7 +1296,7 @@ export default function ProcessManagement({ socket }) {
         )
       );
     } catch (error) {
-      toast.error(error.message || "Failed to load work orders");
+      notifyError(error.message || "Failed to load work orders");
     }
   }, [orderId]);
 
@@ -1559,14 +1559,6 @@ export default function ProcessManagement({ socket }) {
         </Modal>
       )}
 
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }

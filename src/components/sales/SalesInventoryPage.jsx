@@ -19,10 +19,9 @@ import {
 } from 'lucide-react';
 import { debounce } from 'lodash';
 import { io } from 'socket.io-client';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
+import { useNotify } from '../../hooks/useNotify';
 
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
@@ -530,7 +529,7 @@ function SalesInventoryPage({ userRole }) {
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-        if (!jsonData.length) { toast.error('Excel file is empty', { autoClose: 3000 }); return; }
+        if (!jsonData.length) { notifyError('Excel file is empty', { autoClose: 3000 }); return; }
 
         const errors = [], validRows = [];
         jsonData.forEach((row, index) => {
@@ -547,11 +546,11 @@ function SalesInventoryPage({ userRole }) {
           });
         });
 
-        if (errors.length > 0) errors.forEach(err => toast.error(err, { autoClose: 5000 }));
-        if (!validRows.length) { toast.error('No valid rows found.', { autoClose: 5000 }); return; }
+        if (errors.length > 0) errors.forEach(err => notifyError(err, { autoClose: 5000 }));
+        if (!validRows.length) { notifyError('No valid rows found.', { autoClose: 5000 }); return; }
 
         const token = localStorage.getItem('token');
-        if (!token) { toast.error('Authentication token missing.', { autoClose: 5000 }); return; }
+        if (!token) { notifyError('Authentication token missing.', { autoClose: 5000 }); return; }
 
         let created = 0, updated = 0, failed = 0;
         for (const row of validRows) {
@@ -570,18 +569,18 @@ function SalesInventoryPage({ userRole }) {
             product_id ? updated++ : created++;
           } catch (err) {
             failed++;
-            toast.error(`Row processing failed: ${err.message}`, { autoClose: 4000 });
+            notifyError(`Row processing failed: ${err.message}`, { autoClose: 4000 });
           }
         }
         if (created > 0 || updated > 0) {
           await refetchData(); setPage(0);
-          toast.success(`Import successful: ${created} new, ${updated} updated${failed ? ` (${failed} failed)` : ''}`, { autoClose: 5000 });
+          notifySuccess(`Import successful: ${created} new, ${updated} updated${failed ? ` (${failed} failed)` : ''}`, { autoClose: 5000 });
         }
       };
       reader.readAsArrayBuffer(file);
       event.target.value = '';
     } catch (err) {
-      toast.error(`Import process failed: ${err.message}`, { autoClose: 4000 });
+      notifyError(`Import process failed: ${err.message}`, { autoClose: 4000 });
     }
   }, [validateImportRow, refetchData]);
 
@@ -591,7 +590,7 @@ function SalesInventoryPage({ userRole }) {
       await QRCode.toCanvas(document.getElementById(elementId), data, { width: 200, margin: 2, errorCorrectionLevel: 'H' });
     } catch (err) {
       console.error('QR code generation failed:', err);
-      toast.error('Failed to generate QR code', { autoClose: 3000 });
+      notifyError('Failed to generate QR code', { autoClose: 3000 });
     }
   }, []);
 
@@ -599,8 +598,8 @@ function SalesInventoryPage({ userRole }) {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
     const socket = io(backendUrl, { withCredentials: true, transports: ['websocket'] });
     socket.on('connect', () => console.log('Connected to Socket.IO'));
-    socket.on('connect_error', (err) => { console.error('Socket connection error:', err); toast.error('Failed to connect to real-time updates.', { autoClose: 3000 }); });
-    socket.on('stockUpdate', () => { refetchData(); toast.info('Inventory updated in real-time', { autoClose: 1200 }); if (tableRef.current) tableRef.current.focus(); });
+    socket.on('connect_error', (err) => { console.error('Socket connection error:', err); notifyError('Failed to connect to real-time updates.', { autoClose: 3000 }); });
+    socket.on('stockUpdate', () => { refetchData(); notifyInfo('Inventory updated in real-time', { autoClose: 1200 }); if (tableRef.current) tableRef.current.focus(); });
     return () => socket.disconnect();
   }, [refetchData]);
 
@@ -680,7 +679,7 @@ function SalesInventoryPage({ userRole }) {
     }, []);
     worksheet['!cols'] = colWidths.map((width) => ({ wch: width }));
     XLSX.writeFile(workbook, 'Finished_Goods_Inventory.xlsx');
-    toast.success('Finished Goods exported to Excel!', { autoClose: 2000 });
+    notifySuccess('Finished Goods exported to Excel!', { autoClose: 2000 });
   }, [filteredInventory]);
 
   const handleDeleteItem = useCallback(async (itemId) => {
@@ -693,8 +692,8 @@ function SalesInventoryPage({ userRole }) {
         method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }, credentials: 'include',
       });
       if (!response.ok) { const ed = await response.json().catch(() => ({})); throw new Error(ed.error || 'Failed to delete item'); }
-      refetchData(); toast.success('Item deleted successfully');
-    } catch (err) { toast.error(err.message); }
+      refetchData(); notifySuccess('Item deleted successfully');
+    } catch (err) { notifyError(err.message); }
   }, [refetchData]);
 
     const handleCreateItem = useCallback(async ({ product_name, stock_quantity, price, description, product_code, returnable_qty = 0 }) => {
@@ -712,8 +711,8 @@ function SalesInventoryPage({ userRole }) {
       setPage(0); setSearchInput(''); setFilterStock('All');
       setTimeout(() => refetchData(), 100);
       setShowCreateForm(false);
-      toast.success('Item created successfully');
-    } catch (err) { toast.error(err.message); throw err; }
+      notifySuccess('Item created successfully');
+    } catch (err) { notifyError(err.message); throw err; }
   }, [refetchData]);
 
   const handleUpdateItem = useCallback(async (itemId, formData) => {
@@ -730,8 +729,8 @@ function SalesInventoryPage({ userRole }) {
       if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error || `Failed to update item (Status: ${response.status})`); }
       setTimeout(() => refetchData(), 100);
       setShowEditForm(false); setSelectedItem(null);
-      toast.success('Item updated successfully');
-    } catch (err) { toast.error(err.message); throw err; }
+      notifySuccess('Item updated successfully');
+    } catch (err) { notifyError(err.message); throw err; }
   }, [refetchData]);
 
   const confirmEdit = useCallback((itemId, formData) => {
@@ -989,7 +988,7 @@ function SalesInventoryPage({ userRole }) {
                 link.href = canvas.toDataURL('image/png');
                 link.download = `qrcode_${selectedBarcode}.png`;
                 link.click();
-                toast.success('QR code downloaded successfully', { autoClose: 2000 });
+                notifySuccess('QR code downloaded successfully', { autoClose: 2000 });
               }} className="w-full p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center justify-center">
                 <Download className="mr-2" /> Download QR Code
               </button>
@@ -1003,8 +1002,7 @@ function SalesInventoryPage({ userRole }) {
       )}
 
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 
@@ -1025,7 +1023,7 @@ const QuantityBreakdownModal = ({ product, onClose }) => {
         const json = await res.json();
         setHolds(json.data || []);
       } catch (err) {
-        toast.error('Failed to load reserved stock', { autoClose: 3000 });
+        notifyError('Failed to load reserved stock', { autoClose: 3000 });
       } finally {
         setLoading(false);
       }
@@ -1093,15 +1091,15 @@ const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
 
   const handleAccept = async () => {
     const parsed = parseInt(qty, 10);
-    if (!Number.isInteger(parsed) || parsed <= 0) { toast.error('Please enter a positive integer quantity to accept.', { autoClose: 3000 }); return; }
-    if (parsed > (product.returnable_qty ?? 0)) { toast.error(`Cannot accept more than ${product.returnable_qty}`, { autoClose: 3000 }); return; }
+    if (!Number.isInteger(parsed) || parsed <= 0) { notifyError('Please enter a positive integer quantity to accept.', { autoClose: 3000 }); return; }
+    if (parsed > (product.returnable_qty ?? 0)) { notifyError(`Cannot accept more than ${product.returnable_qty}`, { autoClose: 3000 }); return; }
     try {
       setIsSubmitting(true);
       await acceptReturnApi(product.product_id, parsed);
-      toast.success('Return accepted and stock updated', { autoClose: 2000 });
+      notifySuccess('Return accepted and stock updated', { autoClose: 2000 });
       if (onAccepted) await onAccepted();
     } catch (err) {
-      toast.error(err.message || 'Accept return failed', { autoClose: 4000 });
+      notifyError(err.message || 'Accept return failed', { autoClose: 4000 });
     } finally {
       setIsSubmitting(false); onClose();
     }
@@ -1175,7 +1173,7 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
       setAllParts(json.data || []);
       setPartsLoaded(true);
     } catch (err) {
-      toast.error(err.message || 'Failed to load parts', { autoClose: 3000 });
+      notifyError(err.message || 'Failed to load parts', { autoClose: 3000 });
     } finally {
       setIsPartLoading(false);
     }
@@ -1316,6 +1314,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     product_name: '', stock_quantity: '', returnable_qty: '', price: '', description: '', product_code: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const handleChange = (e) => {
     const { name, value } = e.target;

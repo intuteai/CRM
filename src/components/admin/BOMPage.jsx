@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle, Plus, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -55,6 +54,7 @@ function BOMPage({ socket: providedSocket }) {
   const [filteredMaterials, setFilteredMaterials] = useState({});
   const [isMaterialDropdownOpen, setIsMaterialDropdownOpen] = useState({});
   const [selectedMaterialIndices, setSelectedMaterialIndices] = useState({});
+  const { notifySuccess, notifyError, notifyInfo, notifyWarning } = useNotify();
 
   const socket = useMemo(
     () =>
@@ -244,7 +244,7 @@ function BOMPage({ socket: providedSocket }) {
       console.error('Error fetching BOMs:', err);
       const errorMessage = err.message || 'Network error. Please try again later.';
       setError(errorMessage);
-      toast.error(errorMessage, { autoClose: 3000 });
+      notifyError(errorMessage, { autoClose: 3000 });
     } finally {
       setIsLoading(false);
       isFetching.current = false;
@@ -292,7 +292,7 @@ function BOMPage({ socket: providedSocket }) {
       setIsDataLoaded(true);
     } catch (err) {
       console.error('Error fetching products/materials:', err);
-      toast.error(`Failed to load products or materials: ${err.message}`, { autoClose: 3000 });
+      notifyError(`Failed to load products or materials: ${err.message}`, { autoClose: 3000 });
       setIsDataLoaded(true);
     }
   }, []);
@@ -366,7 +366,7 @@ function BOMPage({ socket: providedSocket }) {
 
   const handleCreate = useCallback(() => {
     if (!isDataLoaded) {
-      toast.warn('Please wait, loading products and materials...', { autoClose: 2000 });
+      notifyWarning('Please wait, loading products and materials...', { autoClose: 2000 });
       return;
     }
     setModalMode('create');
@@ -435,10 +435,10 @@ function BOMPage({ socket: providedSocket }) {
           throw new Error(errorText || `Delete failed with status: ${response.status}`);
         }
 
-        toast.success(`BOM #${bomId} deleted successfully!`, { autoClose: 2000 });
+        notifySuccess(`BOM #${bomId} deleted successfully!`, { autoClose: 2000 });
       } catch (err) {
         console.error('Delete error:', err);
-        toast.error(err.message || 'Delete failed', { autoClose: 3000 });
+        notifyError(err.message || 'Delete failed', { autoClose: 3000 });
       }
     },
     []
@@ -542,15 +542,15 @@ function BOMPage({ socket: providedSocket }) {
 
         const updatedBom = await response.json();
         if (modalMode === 'create') {
-          toast.success(`BOM #${updatedBom.bomId} created successfully!`, { autoClose: 2000 });
+          notifySuccess(`BOM #${updatedBom.bomId} created successfully!`, { autoClose: 2000 });
         } else {
-          toast.success(`BOM #${updatedBom.bomId} updated successfully!`, { autoClose: 2000 });
+          notifySuccess(`BOM #${updatedBom.bomId} updated successfully!`, { autoClose: 2000 });
         }
 
         setShowModal(false);
       } catch (err) {
         console.error(`${modalMode === 'create' ? 'Create' : 'Update'} error:`, err);
-        toast.error(err.message || `${modalMode === 'create' ? 'Create' : 'Update'} failed`, { autoClose: 3000 });
+        notifyError(err.message || `${modalMode === 'create' ? 'Create' : 'Update'} failed`, { autoClose: 3000 });
       } finally {
         setUploading(false);
       }
@@ -634,18 +634,18 @@ function BOMPage({ socket: providedSocket }) {
 
     const handleConnect = () => {
       console.log('Connected to Socket.IO in BOMPage');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     };
 
     const handleConnectError = (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     };
 
     const handleBomCreated = (bom) => {
       setBoms((prev) => {
         if (!Array.isArray(prev)) return [bom];
-        toast.info(`BOM #${bom.bomId} created`, { autoClose: 2000 });
+        notifyInfo(`BOM #${bom.bomId} created`, { autoClose: 2000 });
         return [bom, ...prev];
       });
     };
@@ -657,7 +657,7 @@ function BOMPage({ socket: providedSocket }) {
         if (index === -1) return prev;
         const updatedBoms = [...prev];
         updatedBoms[index] = bom;
-        toast.info(`BOM #${bom.bomId} updated`, { autoClose: 2000 });
+        notifyInfo(`BOM #${bom.bomId} updated`, { autoClose: 2000 });
         return updatedBoms;
       });
     };
@@ -665,7 +665,7 @@ function BOMPage({ socket: providedSocket }) {
     const handleBomDeleted = ({ bomId }) => {
       setBoms((prev) => {
         if (!Array.isArray(prev)) return prev || [];
-        toast.info(`BOM #${bomId} deleted`, { autoClose: 2000 });
+        notifyInfo(`BOM #${bomId} deleted`, { autoClose: 2000 });
         return prev.filter((item) => item.bomId !== bomId);
       });
     };
@@ -1061,15 +1061,7 @@ function BOMPage({ socket: providedSocket }) {
         </div>
       )}
 
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }
 

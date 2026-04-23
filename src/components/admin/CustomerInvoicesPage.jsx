@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { formatDate as importedFormatDate } from '../../utils/helpers';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle, X } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
@@ -88,6 +87,7 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
   const isFetching = useRef(false);
 
   const debouncedSearch = useDebounce(searchTerm, 300);
+  const { notifySuccess, notifyError, notifyInfo, notifyWarning } = useNotify();
 
   const socket = useMemo(
     () =>
@@ -151,7 +151,7 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
         console.error('Error fetching invoices:', err);
         const errorMessage = err.message || 'Network error. Please try again later.';
         setError(errorMessage);
-        toast.error(errorMessage, { autoClose: 5000 });
+        notifyError(errorMessage, { autoClose: 5000 });
       } finally {
         setIsLoading(false);
         isFetching.current = false;
@@ -174,17 +174,17 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
   useEffect(() => {
     const handleConnect = () => {
       console.log('Connected to Socket.IO in CustomerInvoicesPage');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     };
 
     const handleConnectError = (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     };
 
     const handleDisconnect = () => {
       console.log('Socket.IO disconnected from App');
-      toast.warn('Disconnected from real-time updates. Attempting to reconnect...', { autoClose: 3000 });
+      notifyWarning('Disconnected from real-time updates. Attempting to reconnect...', { autoClose: 3000 });
     };
 
     const handleInvoiceUpdate = ({ invoice_id, invoice_number, total_value, issue_date, status }) => {
@@ -192,7 +192,7 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
         if (!Array.isArray(prev)) return prev || [];
 
         if (status === 'Deleted') {
-          toast.info(`Invoice #${invoice_id} deleted`, { autoClose: 2000 });
+          notifyInfo(`Invoice #${invoice_id} deleted`, { autoClose: 2000 });
           return prev.filter((invoice) => invoice.invoice_id !== invoice_id);
         }
 
@@ -216,7 +216,7 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
           issue_date,
         };
 
-        toast.info(`Invoice #${invoice_id} updated`, { autoClose: 2000 });
+        notifyInfo(`Invoice #${invoice_id} updated`, { autoClose: 2000 });
         return updatedInvoices;
       });
     };
@@ -345,12 +345,12 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
           prev.map((inv) => (inv.invoice_id === updatedInvoice.invoice_id ? updatedInvoice : inv))
         );
         setShowModal(false);
-        toast.success(`Invoice #${updatedInvoice.invoice_id} updated successfully!`, {
+        notifySuccess(`Invoice #${updatedInvoice.invoice_id} updated successfully!`, {
           autoClose: 2000,
         });
       } catch (err) {
         console.error('Update error:', err);
-        toast.error(err.message || 'Update failed', { autoClose: 3000 });
+        notifyError(err.message || 'Update failed', { autoClose: 3000 });
       } finally {
         setUploading(false);
       }
@@ -752,15 +752,7 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
         </div>
       )}
 
-      <ToastContainer
-        position="top-right"
-        autoClose={5000}
-        hideProgressBar={false}
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }
 

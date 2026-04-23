@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Search, Download, Loader2, Sparkles, Phone, MapPin, Calendar, Hash } from 'lucide-react';
-import { toast, ToastContainer } from 'react-toastify';
 import axios from 'axios';
+import { useNotify } from '../../hooks/useNotify';
 
 const formatDisplayDate = (s) => {
   if (!s) return '-';
@@ -35,6 +35,7 @@ function EmployeeDetailsPage() {
   const [fullAddressEmployee, setFullAddressEmployee] = useState(null);
 
   const abortRef = useRef(null);
+  const { notifySuccess, notifyError } = useNotify();
 
   // Fetch employees
   const fetchAll = useCallback(async () => {
@@ -47,7 +48,7 @@ function EmployeeDetailsPage() {
 
     const token = localStorage.getItem('token');
     if (!token) {
-      toast.error('Please log in again');
+      notifyError('Please log in again');
       setLoading(false);
       return;
     }
@@ -77,7 +78,7 @@ function EmployeeDetailsPage() {
       setData(allEmployees);
     } catch (err) {
       if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') return;
-      toast.error(err.response?.data?.error || 'Failed to load employee details');
+      notifyError(err.response?.data?.error || 'Failed to load employee details');
     } finally {
       setLoading(false);
       abortRef.current = null;
@@ -115,11 +116,11 @@ function EmployeeDetailsPage() {
         formData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast.success('Employee updated successfully');
+      notifySuccess('Employee updated successfully');
       closeModal();
       fetchAll();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Update failed');
+      notifyError(err.response?.data?.error || 'Update failed');
     } finally {
       setSubmitting(false);
     }
@@ -402,8 +403,7 @@ function EmployeeDetailsPage() {
         </div>
       )}
 
-      <ToastContainer position="top-right" theme="light" />
-    </div>
+</div>
   );
 }
 

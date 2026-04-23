@@ -2,8 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import Modal from 'react-modal';
 import axios from 'axios';
 import { Plus, Download, Trash2, Eye } from 'lucide-react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useNotify } from '../../hooks/useNotify';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -100,9 +99,9 @@ export default function QuotationForm() {
     try {
       localStorage.setItem(DEFAULT_TERMS_KEY, JSON.stringify(terms));
       setDefaultTerms(terms);
-      toast.success('Default Terms saved');
+      notifySuccess('Default Terms saved');
     } catch (e) {
-      toast.error('Failed to save default terms');
+      notifyError('Failed to save default terms');
     }
   };
 
@@ -170,8 +169,8 @@ export default function QuotationForm() {
   const handleGenerate = async (ev) => {
     ev.preventDefault();
     const token = localStorage.getItem('token');
-    if (!token) { toast.error('Please login to generate quotation (token missing).'); return; }
-    if (!form.quotation_no) { toast.error('Quotation No is required'); return; }
+    if (!token) { notifyError('Please login to generate quotation (token missing).'); return; }
+    if (!form.quotation_no) { notifyError('Quotation No is required'); return; }
 
     setLoading(true);
     if (abortRef.current) abortRef.current.abort();
@@ -227,11 +226,11 @@ export default function QuotationForm() {
       a.remove();
       window.URL.revokeObjectURL(url);
 
-      toast.success('Quotation PDF downloaded');
+      notifySuccess('Quotation PDF downloaded');
       setIsOpen(false);
     } catch (err) {
-      if (err.name === 'CanceledError' || err.name === 'AbortError') toast.info('Request cancelled');
-      else { console.error(err); toast.error(err.response?.data?.error || 'Failed to generate quotation'); }
+      if (err.name === 'CanceledError' || err.name === 'AbortError') notifyInfo('Request cancelled');
+      else { console.error(err); notifyError(err.response?.data?.error || 'Failed to generate quotation'); }
     } finally {
       setLoading(false);
       abortRef.current = null;
@@ -252,6 +251,7 @@ export default function QuotationForm() {
 
   // local state used inside Manage Terms modal so edits aren't auto-saved until "Save" clicked
   const [manageTermsDraft, setManageTermsDraft] = useState(() => defaultTerms.slice());
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
   useEffect(() => { setManageTermsDraft(defaultTerms.slice()); }, [manageTermsOpen]); // refresh when modal opens
 
   const addDefaultTerm = () => setManageTermsDraft(prev => ([...prev, '']));
@@ -259,7 +259,7 @@ export default function QuotationForm() {
   const removeDefaultTermAt = (idx) => setManageTermsDraft(prev => prev.filter((_, i) => i !== idx));
   const saveManagedTerms = () => {
     const clean = manageTermsDraft.map(t => String(t || '').trim()).filter(Boolean);
-    if (clean.length === 0) { toast.error('Please keep at least one term.'); return; }
+    if (clean.length === 0) { notifyError('Please keep at least one term.'); return; }
     saveDefaultTerms(clean);
     closeManageTerms();
   };
@@ -267,8 +267,7 @@ export default function QuotationForm() {
   /* ---------- Render ---------- */
   return (
     <div className="p-6">
-      <ToastContainer position="top-right" />
-      <div className="max-w-5xl mx-auto">
+<div className="max-w-5xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold" style={primaryStyle}>Create Quotation</h2>
           <div className="flex gap-2">
@@ -504,7 +503,7 @@ export default function QuotationForm() {
               <button onClick={addDefaultTerm} className="px-3 py-1 border rounded flex items-center gap-2">
                 <Plus className="w-4 h-4" /> Add Term
               </button>
-              <button onClick={() => { setManageTermsDraft(DEFAULT_TERMS_FALLBACK.slice()); toast.info('Reset to original default terms'); }} className="px-3 py-1 border rounded">
+              <button onClick={() => { setManageTermsDraft(DEFAULT_TERMS_FALLBACK.slice()); notifyInfo('Reset to original default terms'); }} className="px-3 py-1 border rounded">
                 Reset to original
               </button>
             </div>

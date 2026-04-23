@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { X } from "lucide-react";
-import { toast } from "react-toastify";
+import { useNotify } from '../../hooks/useNotify';
 
 const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
 
@@ -37,6 +37,7 @@ export default function AddNonMotorModal({ orderId, customerName, onClose, onCre
   const [instanceName, setInstanceName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { notifySuccess, notifyError } = useNotify();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -74,13 +75,13 @@ export default function AddNonMotorModal({ orderId, customerName, onClose, onCre
         throw new Error(errData?.error || `HTTP ${res.status}`);
       }
 
-      toast.success("Non-motor assembly created successfully");
+      notifySuccess("Non-motor assembly created successfully");
       if (onCreated) onCreated();
       onClose();
     } catch (err) {
       console.error("Create non-motor failed:", err);
       setError(err.message || "Failed to create non-motor assembly");
-      toast.error(err.message || "Failed to create non-motor assembly");
+      notifyError(err.message || "Failed to create non-motor assembly");
     } finally {
       setLoading(false);
     }

@@ -3,10 +3,9 @@ import io from 'socket.io-client';
 import { 
   Search, Filter, PlusCircle, XCircle, ChevronDown, ChevronUp 
 } from 'lucide-react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { useQueries } from '../../hooks/useQueries';
 import { formatDate } from '../../utils/helpers';
+import { useNotify } from '../../hooks/useNotify';
 
 // Use the environment variable for the backend URL
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -23,6 +22,7 @@ function CustomerQueriesPage() {
   const [formIsLoading, setFormIsLoading] = useState(false);
   const [expandedResponses, setExpandedResponses] = useState(null);
   const tableRef = useRef(null);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   useEffect(() => {
     const socket = io(BASE_URL, {
@@ -33,18 +33,18 @@ function CustomerQueriesPage() {
 
     socket.on('connect', () => {
       console.log('Connected to Socket.IO');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     });
 
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
 
     socket.on('newQuery', (query) => {
       setQueries(prev => {
         if (prev.some(q => q.queryId === query.queryId)) return prev;
-        toast.info('New query has been added', { autoClose: 3000 });
+        notifyInfo('New query has been added', { autoClose: 3000 });
         return [...prev, query];
       });
       if (tableRef.current) tableRef.current.focus();
@@ -55,7 +55,7 @@ function CustomerQueriesPage() {
         const updatedQueries = prev.map(q => 
           q.queryId === updatedQuery.queryId ? updatedQuery : q
         );
-        toast.info(`Your query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
+        notifyInfo(`Your query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
         return updatedQueries;
       });
       if (tableRef.current) tableRef.current.focus();
@@ -72,7 +72,7 @@ function CustomerQueriesPage() {
   const handleCreateQuery = async (e) => {
     e.preventDefault();
     if (!newQuery.description.trim()) {
-      toast.error('Description is required', { autoClose: 3000 });
+      notifyError('Description is required', { autoClose: 3000 });
       return;
     }
 
@@ -98,10 +98,10 @@ function CustomerQueriesPage() {
       setShowCreateForm(false);
       setNewQuery({ description: '' });
       setError(null);
-      toast.success('Query created successfully', { autoClose: 3000 });
+      notifySuccess('Query created successfully', { autoClose: 3000 });
     } catch (err) {
       console.error('Error creating query:', err);
-      toast.error(err.message || 'Network error. Please try again.', { autoClose: 3000 });
+      notifyError(err.message || 'Network error. Please try again.', { autoClose: 3000 });
     } finally {
       setFormIsLoading(false);
     }
@@ -136,11 +136,11 @@ function CustomerQueriesPage() {
         q.queryId === data.queryId ? data : q
       ));
       setError(null);
-      toast.success('Query closed successfully', { autoClose: 3000 });
+      notifySuccess('Query closed successfully', { autoClose: 3000 });
     } catch (err) {
       console.error('Error closing query:', err);
       await fetchQueries();
-      toast.error(err.message || 'Network error. Please try again.', { autoClose: 3000 });
+      notifyError(err.message || 'Network error. Please try again.', { autoClose: 3000 });
     } finally {
       setPendingCloseId(null);
       setFormIsLoading(false);
@@ -457,8 +457,7 @@ function CustomerQueriesPage() {
         </div>
       )}
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

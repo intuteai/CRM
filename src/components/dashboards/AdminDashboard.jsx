@@ -4,36 +4,36 @@ import {
   Package, MessageSquare, Truck, Users, FileText, BarChart,
   PenTool, DollarSign, CheckSquare, Mail, MapPin, AlertTriangle, Wrench
 } from 'lucide-react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useNotify } from '../../hooks/useNotify';
 
 function AdminDashboard({ socket }) {
+  const { notifyInfo } = useNotify();
   useEffect(() => {
     if (!socket) return;
 
     socket.on('orderUpdate', (updatedOrder) => {
-      toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 3000 });
+      notifyInfo(`Order #${updatedOrder.id} updated`, { autoClose: 3000 });
     });
     socket.on('newQuery', (query) => {
-      toast.info(`New query #${query.queryId} received`, { autoClose: 3000 });
+      notifyInfo(`New query #${query.queryId} received`, { autoClose: 3000 });
     });
     socket.on('queryUpdate', (updatedQuery) => {
-      toast.info(`Query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
+      notifyInfo(`Query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
     });
     socket.on('stockUpdate', () => {
-      toast.info('Inventory stock levels updated', { autoClose: 3000 });
+      notifyInfo('Inventory stock levels updated', { autoClose: 3000 });
     });
     socket.on('customerUpdate', (updatedCustomer) => {
-      toast.info(`Customer ${updatedCustomer.name} updated`, { autoClose: 3000 });
+      notifyInfo(`Customer ${updatedCustomer.name} updated`, { autoClose: 3000 });
     });
     socket.on('problem:created', (newProblem) => {
-      toast.info(`New problem #${newProblem.id} reported`, { autoClose: 3000 });
+      notifyInfo(`New problem #${newProblem.id} reported`, { autoClose: 3000 });
     });
     socket.on('solution:created', (data) => {
-      toast.info(`Solution added to problem #${data.problem_id}`, { autoClose: 3000 });
+      notifyInfo(`Solution added to problem #${data.problem_id}`, { autoClose: 3000 });
     });
     socket.on('processUpdate', () => {
-      toast.info('Work orders updated', { autoClose: 3000 });
+      notifyInfo('Work orders updated', { autoClose: 3000 });
     });
 
     return () => {
@@ -92,8 +92,7 @@ function AdminDashboard({ socket }) {
         </Section>
       </div> 
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

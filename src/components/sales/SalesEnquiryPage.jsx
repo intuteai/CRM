@@ -7,8 +7,7 @@ import React, {
 } from "react";
 import { ArrowDownUp, X, MoreVertical } from "lucide-react";
 import io from "socket.io-client";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { useNotify } from '../../hooks/useNotify';
 
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
@@ -128,6 +127,7 @@ function SalesEnquiryPage({ socket: providedSocket }) {
   const [assignUserId, setAssignUserId] = useState("");
   const [assignDueDate, setAssignDueDate] = useState("");
   const [assignMessage, setAssignMessage] = useState("");
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   // Global actions menu position (portal)
   const [actionsMenuState, setActionsMenuState] = useState({
@@ -192,7 +192,7 @@ function SalesEnquiryPage({ socket: providedSocket }) {
   //       const errorMessage =
   //         err.message || "Network error. Please try again later.";
   //       setError(errorMessage);
-  //       toast.error(errorMessage, { autoClose: 3000 });
+  //       notifyError(errorMessage, { autoClose: 3000 });
   //     } finally {
   //       setIsLoading(false);
   //       isFetching.current = false;
@@ -275,7 +275,7 @@ const sortNewestFirst = (arr) => {
         const errorMessage =
           err.message || "Network error. Please try again later.";
         setError(errorMessage);
-        toast.error(errorMessage, { autoClose: 3000 });
+        notifyError(errorMessage, { autoClose: 3000 });
       } finally {
         setIsLoading(false);
         isFetching.current = false;
@@ -344,7 +344,7 @@ useEffect(() => {
       Promise.all(markPromises);
     } catch (err) {
       console.error("Error fetching enquiry detail:", err);
-      toast.error(err.message || "Failed to load enquiry detail");
+      notifyError(err.message || "Failed to load enquiry detail");
     } finally {
       setDetailLoading(false);
     }
@@ -353,12 +353,12 @@ useEffect(() => {
   useEffect(() => {
     socket.on("connect", () => {
       console.log("Connected to Socket.IO in EnquiryPage");
-      toast.success("Connected to real-time updates!", { autoClose: 2000 });
+      notifySuccess("Connected to real-time updates!", { autoClose: 2000 });
     });
 
     socket.on("connect_error", (err) => {
       console.error("Socket connection error:", err);
-      toast.error("Failed to connect to real-time updates.", {
+      notifyError("Failed to connect to real-time updates.", {
         autoClose: 3000,
       });
     });
@@ -393,7 +393,7 @@ useEffect(() => {
 
         // Deleted
         if (type === "deleted" || status === "Deleted") {
-          toast.info(`Enquiry #${enquiry_id} deleted`, {
+          notifyInfo(`Enquiry #${enquiry_id} deleted`, {
             className: "bg-amber-100 border-amber-300",
           });
           return prev.filter((e) => e.enquiry_id !== enquiry_id);
@@ -421,7 +421,7 @@ useEffect(() => {
         };
 
         if (idx === -1) {
-          toast.info(`New enquiry #${enquiry_id} added`, {
+          notifyInfo(`New enquiry #${enquiry_id} added`, {
             className: "bg-amber-100 border-amber-300",
           });
           return [baseData, ...prev];
@@ -434,7 +434,7 @@ useEffect(() => {
 
         const copy = [...prev];
         copy[idx] = updated;
-        toast.info(`Enquiry #${enquiry_id} updated`, {
+        notifyInfo(`Enquiry #${enquiry_id} updated`, {
           className: "bg-amber-100 border-amber-300",
         });
         return copy;
@@ -598,7 +598,7 @@ useEffect(() => {
           );
         }
 
-        toast.success(`Enquiry #${enquiryId} deleted successfully!`, {
+        notifySuccess(`Enquiry #${enquiryId} deleted successfully!`, {
           className: "bg-amber-100 border-amber-300",
         });
 
@@ -608,7 +608,7 @@ useEffect(() => {
       } catch (err) {
         console.error("Delete error:", err);
         const errorMessage = err.message || "Failed to delete enquiry";
-        toast.error(errorMessage, {
+        notifyError(errorMessage, {
           className: "bg-amber-100 border-amber-300",
         });
       }
@@ -619,7 +619,7 @@ useEffect(() => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) {
-      toast.error("Please fix the form errors", {
+      notifyError("Please fix the form errors", {
         className: "bg-amber-100 border-amber-300",
       });
       return;
@@ -677,7 +677,7 @@ useEffect(() => {
             e.enquiry_id === updatedEnquiry.enquiry_id ? updatedEnquiry : e,
           ),
         );
-        toast.success(
+        notifySuccess(
           `Enquiry #${updatedEnquiry.enquiry_id} updated successfully!`,
           {
             className: "bg-amber-100 border-amber-300",
@@ -685,7 +685,7 @@ useEffect(() => {
         );
       } else {
         setEnquiries((prev) => [updatedEnquiry, ...prev]);
-        toast.success(
+        notifySuccess(
           `Enquiry #${updatedEnquiry.enquiry_id} created successfully!`,
           {
             className: "bg-amber-100 border-amber-300",
@@ -701,7 +701,7 @@ useEffect(() => {
         err.message && err.message.includes("Enquiry ID already exists")
           ? "Enquiry ID already exists. Please use a unique ID."
           : err.message || `${isEditing ? "Update" : "Create"} failed`;
-      toast.error(errorMessage, {
+      notifyError(errorMessage, {
         className: "bg-amber-100 border-amber-300",
       });
     }
@@ -735,7 +735,7 @@ useEffect(() => {
         return next;
       });
 
-      toast.success(
+      notifySuccess(
         isCurrentlyFollowed
           ? `Unfollowed enquiry #${enquiryId}`
           : `Following enquiry #${enquiryId}`,
@@ -743,7 +743,7 @@ useEffect(() => {
       );
     } catch (err) {
       console.error("Follow toggle error:", err);
-      toast.error(err.message || "Failed to update follow state");
+      notifyError(err.message || "Failed to update follow state");
     }
   };
 
@@ -764,11 +764,11 @@ useEffect(() => {
   const handleAssignSubmit = async (e) => {
     e.preventDefault();
     if (!assignTargetEnquiry) {
-      toast.error("No enquiry selected for assignment");
+      notifyError("No enquiry selected for assignment");
       return;
     }
     if (!assignUserId) {
-      toast.error("Assignee user ID is required");
+      notifyError("Assignee user ID is required");
       return;
     }
 
@@ -811,7 +811,7 @@ useEffect(() => {
           : prev,
       );
 
-      toast.success(
+      notifySuccess(
         `Enquiry #${updated.enquiry_id} assigned to user ID ${assignUserId}`,
         { className: "bg-amber-100 border-amber-300" },
       );
@@ -823,7 +823,7 @@ useEffect(() => {
       setAssignMessage("");
     } catch (err) {
       console.error("Assign error:", err);
-      toast.error(err.message || "Failed to assign enquiry", {
+      notifyError(err.message || "Failed to assign enquiry", {
         className: "bg-amber-100 border-amber-300",
       });
     }
@@ -2044,7 +2044,7 @@ Warm regards,
                       <button
                         onClick={async () => {
                           if (!commentText.trim()) {
-                            toast.error("Comment message is required");
+                            notifyError("Comment message is required");
                             return;
                           }
                           try {
@@ -2073,10 +2073,10 @@ Warm regards,
                             setDetailActivities((prev) => [...prev, activity]);
                             setCommentText("");
                             setSelectedTemplateId("");
-                            toast.success("Comment added");
+                            notifySuccess("Comment added");
                           } catch (err) {
                             console.error("Add comment error:", err);
-                            toast.error(err.message || "Failed to add comment");
+                            notifyError(err.message || "Failed to add comment");
                           }
                         }}
                         className="px-4 py-2 bg-amber-500 text-white rounded-lg text-xs font-semibold hover:bg-amber-600"
@@ -2128,8 +2128,7 @@ Warm regards,
         </div>
       )}
 
-      <ToastContainer position="top-right" autoClose={3000} />
-    </div>
+</div>
   );
 }
 

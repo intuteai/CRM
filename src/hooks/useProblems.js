@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { toast } from 'react-toastify';
+import { useNotify } from './useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -7,6 +7,7 @@ const useProblems = (socket) => {
   const [problems, setProblems] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const { notifyError, notifyInfo } = useNotify();
 
   const fetchProblems = useCallback(async () => {
     setIsLoading(true);
@@ -26,7 +27,7 @@ const useProblems = (socket) => {
     } catch (err) {
       console.error('Error fetching problems:', err);
       setError(err.message || 'Network error');
-      toast.error(err.message || 'Failed to fetch problems');
+      notifyError(err.message || 'Failed to fetch problems');
     } finally {
       setIsLoading(false);
     }
@@ -59,7 +60,7 @@ const useProblems = (socket) => {
         }
         return [newProblem, ...prev];
       });
-      toast.info(`New problem #${newProblem.id} reported`);
+      notifyInfo(`New problem #${newProblem.id} reported`);
     });
 
     socket.on('solution:created', (data) => {
@@ -82,7 +83,7 @@ const useProblems = (socket) => {
             : problem
         )
       );
-      toast.info(`Solution added to problem #${data.problem_id}`);
+      notifyInfo(`Solution added to problem #${data.problem_id}`);
     });
 
     return () => {

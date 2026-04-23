@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { formatDate } from '../../utils/helpers';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, X, RefreshCw, Search, AlertCircle, Edit, Save, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -38,6 +37,7 @@ function PriceListPage({ socket }) {
   const tableRef = useRef(null);
   const searchInputRef = useRef(null);
   const debouncedSearch = useDebounce(searchTerm, 300);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const fetchPriceList = useCallback(
     async (currentPage, search = '', forceRefresh = false) => {
@@ -82,7 +82,7 @@ function PriceListPage({ socket }) {
       } catch (err) {
         console.error('Error fetching price list:', err);
         setError(err.message || 'Network error');
-        toast.error(err.message || 'Network error', { autoClose: 3000 });
+        notifyError(err.message || 'Network error', { autoClose: 3000 });
         setPriceItems([]);
       } finally {
         setIsLoading(false);
@@ -104,18 +104,18 @@ function PriceListPage({ socket }) {
 
     socket.on('connect', () => {
       console.log('Connected to Socket.IO from PriceListPage');
-      toast.info('Connected to real-time updates!', { autoClose: 2000 });
+      notifyInfo('Connected to real-time updates!', { autoClose: 2000 });
     });
 
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
 
     socket.on('priceListUpdate', () => {
       console.log('Price list update received');
       fetchPriceList(page, debouncedSearch);
-      toast.info('Price list updated', { autoClose: 2000 });
+      notifyInfo('Price list updated', { autoClose: 2000 });
       if (tableRef.current) tableRef.current.focus();
     });
 
@@ -159,12 +159,12 @@ function PriceListPage({ socket }) {
           throw new Error(errorData.error || 'Failed to update price');
         }
 
-        toast.success('Price updated successfully!', { autoClose: 2000 });
+        notifySuccess('Price updated successfully!', { autoClose: 2000 });
         setEditingItem(null);
         // Server emits priceListUpdate, triggering fetchPriceList via socket
       } catch (err) {
         console.error('Error updating price:', err);
-        toast.error(err.message || 'Error updating price', { autoClose: 3000 });
+        notifyError(err.message || 'Error updating price', { autoClose: 3000 });
       }
     },
     [editPrice]
@@ -497,8 +497,7 @@ function PriceListPage({ socket }) {
         )}
       </div>
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

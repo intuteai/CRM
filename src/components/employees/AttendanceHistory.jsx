@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { Calendar, Clock, LogIn, LogOut, MapPin, RefreshCw, TrendingUp } from 'lucide-react';
+import { useNotify } from '../../hooks/useNotify';
 
 // ──────────────────────────────────────────────────────────────
 // TIMEZONE-SAFE FORMATTERS (no Date → UTC conversions)
@@ -47,6 +46,7 @@ function AttendanceHistory({ socket }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const abortRef = useRef(null);
+  const { notifyError, notifyInfo } = useNotify();
 
   const fetchAttendance = async () => {
     try {
@@ -76,7 +76,7 @@ function AttendanceHistory({ socket }) {
       if (err?.name === 'AbortError') return;
       console.error('Error fetching attendance:', err?.message || err);
       setError(err?.message || 'Failed to fetch');
-      toast.error(err?.message || 'Failed to fetch');
+      notifyError(err?.message || 'Failed to fetch');
       setLoading(false);
     } finally {
       abortRef.current = null;
@@ -95,7 +95,7 @@ function AttendanceHistory({ socket }) {
         payload,
         ...prev.filter((r) => !(r.user_id === payload.user_id && r.date === payload.date)),
       ]);
-      toast.info(`Attendance updated for ${formatDateLocal(payload.date)}`);
+      notifyInfo(`Attendance updated for ${formatDateLocal(payload.date)}`);
     };
 
     socket.on('attendanceMarked', handler);
@@ -318,8 +318,7 @@ function AttendanceHistory({ socket }) {
           </div>
         )}
       </div>
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

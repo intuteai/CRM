@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { formatDate as importedFormatDate } from '../../utils/helpers';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle, X } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -82,6 +81,7 @@ function PartDrawingsRawPage({ socket: providedSocket }) {
   const searchInputRef = useRef(null);
   const modalRef = useRef(null);
   const debouncedSearch = useDebounce(searchInput, 300);
+  const { notifySuccess, notifyError } = useNotify();
 
   const socket = useMemo(
     () =>
@@ -144,7 +144,7 @@ function PartDrawingsRawPage({ socket: providedSocket }) {
         console.error('Error fetching raw part drawings:', err);
         const errorMessage = err.message || 'Network error. Please try again later.';
         setError(errorMessage);
-        toast.error(errorMessage, { autoClose: 3000 });
+        notifyError(errorMessage, { autoClose: 3000 });
         setDrawings([]);
       }
     } finally {
@@ -176,12 +176,12 @@ function PartDrawingsRawPage({ socket: providedSocket }) {
 
     const handleConnect = () => {
       console.log('Connected to Socket.IO in PartDrawingsRawPage');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     };
 
     const handleConnectError = (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     };
 
     const handleDrawingsUpdate = () => {
@@ -298,14 +298,14 @@ function PartDrawingsRawPage({ socket: providedSocket }) {
           throw new Error(errorText || `Update failed with status: ${response.status}`);
         }
 
-        toast.success(`Drawing #${selectedDrawing.srNo} updated successfully!`, {
+        notifySuccess(`Drawing #${selectedDrawing.srNo} updated successfully!`, {
           autoClose: 2000,
         });
         setShowModal(false);
         fetchDrawings(page, debouncedSearch); // Refetch to ensure consistency
       } catch (err) {
         console.error('Update error:', err);
-        toast.error(err.message || 'Update failed', { autoClose: 3000 });
+        notifyError(err.message || 'Update failed', { autoClose: 3000 });
       } finally {
         setUploading(false);
       }
@@ -647,15 +647,7 @@ function PartDrawingsRawPage({ socket: providedSocket }) {
           </div>
         )}
 
-        <ToastContainer
-          position="top-right"
-          autoClose={3000}
-          hideProgressBar={false}
-          closeOnClick
-          pauseOnHover
-          draggable
-        />
-      </div>
+</div>
     </ErrorBoundary>
   );
 }

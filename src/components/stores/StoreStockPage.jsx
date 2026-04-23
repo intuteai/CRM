@@ -21,10 +21,9 @@ import {
 } from "lucide-react";
 import { debounce } from "lodash";
 import { io } from "socket.io-client";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 import * as XLSX from "xlsx";
 import QRCode from "qrcode";
+import { useNotify } from '../../hooks/useNotify';
 
 const formatDate = (dateString) => {
   if (!dateString) return "N/A";
@@ -716,6 +715,7 @@ function StoreStockPage() {
   const fileInputRef = useRef(null);
   const modalRef = useRef(null);
   const searchInputRef = useRef(null);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const { stockItems, totalItems, isLoading, error, refetchData } =
     useFetchStock();
@@ -742,10 +742,10 @@ function StoreStockPage() {
     });
 
     socket.on("connect", () =>
-      toast.success("Connected to real-time updates!", { autoClose: 2000 }),
+      notifySuccess("Connected to real-time updates!", { autoClose: 2000 }),
     );
     socket.on("connect_error", () =>
-      toast.error("Failed to connect to real-time updates.", {
+      notifyError("Failed to connect to real-time updates.", {
         autoClose: 3000,
       }),
     );
@@ -763,7 +763,7 @@ function StoreStockPage() {
           stockQuantity: Number(stock_quantity),
           // location: location ?? updated[index].location,
         };
-        toast.info(`${updated[index].productName} → ${stock_quantity}`, {
+        notifyInfo(`${updated[index].productName} → ${stock_quantity}`, {
           autoClose: 2000,
         });
         return updated;
@@ -790,7 +790,7 @@ function StoreStockPage() {
           errorCorrectionLevel: "H",
         });
       } catch (err) {
-        toast.error("QR code generation failed", { autoClose: 3000 });
+        notifyError("QR code generation failed", { autoClose: 3000 });
       }
     },
     [],
@@ -914,7 +914,7 @@ function StoreStockPage() {
             }
           });
 
-          if (errors.length) errors.forEach((e) => toast.error(e));
+          if (errors.length) errors.forEach((e) => notifyError(e));
           if (!valid.length) return;
 
           const token = localStorage.getItem("token");
@@ -964,11 +964,11 @@ function StoreStockPage() {
 
           await refetchData();
           setPage(0);
-          toast.success(
+          notifySuccess(
             `Imported: ${created} created, ${updated} updated${failed ? `, ${failed} failed` : ""}`,
           );
         } catch (err) {
-          toast.error(`Import failed: ${err.message}`);
+          notifyError(`Import failed: ${err.message}`);
         }
       };
       reader.readAsArrayBuffer(file);
@@ -994,7 +994,7 @@ function StoreStockPage() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Raw Materials");
     XLSX.writeFile(wb, "Raw_Material_Inventory.xlsx");
-    toast.success("Exported to Excel!");
+    notifySuccess("Exported to Excel!");
   }, [filteredStock]);
 
   // Handlers
@@ -1073,7 +1073,7 @@ function StoreStockPage() {
       const errors = validateForm();
       if (Object.keys(errors).length) {
         setFormErrors(errors);
-        Object.values(errors).forEach((e) => toast.error(e));
+        Object.values(errors).forEach((e) => notifyError(e));
         return;
       }
 
@@ -1110,9 +1110,9 @@ function StoreStockPage() {
         await refetchData();
         setShowModal(false);
         setPage(0);
-        toast.success(isCreate ? "Item created!" : "Item updated!");
+        notifySuccess(isCreate ? "Item created!" : "Item updated!");
       } catch (err) {
-        toast.error(err.message);
+        notifyError(err.message);
       }
     },
     [formData, modalMode, selectedItem, refetchData],
@@ -1595,7 +1595,7 @@ function StoreStockPage() {
                 a.href = canvas.toDataURL("image/png");
                 a.download = `QR_${selectedBarcode}.png`;
                 a.click();
-                toast.success("Downloaded!");
+                notifySuccess("Downloaded!");
               }}
               className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto"
             >
@@ -1605,8 +1605,7 @@ function StoreStockPage() {
         </div>
       )}
 
-      <ToastContainer position="top-right" autoClose={3000} />
-    </div>
+</div>
   );
 }
 

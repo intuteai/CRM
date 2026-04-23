@@ -23,12 +23,11 @@ import {
 } from "lucide-react";
 import { debounce } from "lodash";
 import { io } from "socket.io-client";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 import CreateOrderForm from "../forms/CreateOrderForm";
 import EditOrderForm from "../forms/EditOrderForm";
 import { useDispatch } from "react-redux";
 import { addNotification } from "../../features/notifications/notificationSlice.js";
+import { useNotify } from '../../hooks/useNotify';
 
 const formatDate = (dateString) =>
   dateString ? new Date(dateString).toISOString().split("T")[0] : "";
@@ -368,6 +367,7 @@ function OrdersPage() {
   });
 
   const productsRef = useRef(products);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
   useEffect(() => {
     productsRef.current = products;
   }, [products]);
@@ -383,7 +383,7 @@ function OrdersPage() {
     socket.on("connect", () => console.log("Connected to Socket.IO"));
     socket.on("connect_error", (err) => {
       console.error("Socket connection error:", err);
-      toast.error("Failed to connect to real-time updates.", {
+      notifyError("Failed to connect to real-time updates.", {
         autoClose: 3000,
       });
     });
@@ -419,7 +419,7 @@ function OrdersPage() {
             : o,
         ),
       );
-      toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 2000 });
+      notifyInfo(`Order #${updatedOrder.id} updated`, { autoClose: 2000 });
       if (tableRef.current) tableRef.current.focus();
     });
     socket.on("stockUpdate", async ({ product_id, stock_quantity }) => {
@@ -634,10 +634,10 @@ function OrdersPage() {
           throw new Error(errorData.error || "Failed to cancel order");
         }
         await refetchData();
-        toast.success("Order cancelled successfully", { autoClose: 3000 });
+        notifySuccess("Order cancelled successfully", { autoClose: 3000 });
       } catch (error) {
         console.error("Cancel order error:", error);
-        toast.error(error.message, { autoClose: 5000 });
+        notifyError(error.message, { autoClose: 5000 });
       } finally {
         setIsCancelling(false);
       }
@@ -674,12 +674,12 @@ function OrdersPage() {
           throw new Error(errorData.error || "Failed to update status");
         }
         await refetchData();
-        toast.success(`Order status changed to ${newStatus}`, {
+        notifySuccess(`Order status changed to ${newStatus}`, {
           autoClose: 3000,
         });
       } catch (error) {
         console.error("Status change error:", error);
-        toast.error(error.message, { autoClose: 5000 });
+        notifyError(error.message, { autoClose: 5000 });
       }
     },
     [orders, refetchData],
@@ -1183,15 +1183,7 @@ function OrdersPage() {
         </div>
       )}
 
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }
 

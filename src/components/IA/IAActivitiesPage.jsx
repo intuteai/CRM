@@ -27,10 +27,10 @@ import {
   ChevronUp,
   ChevronDown,
 } from "lucide-react";
-import { toast, ToastContainer } from "react-toastify";
 import axios from "axios";
 import debounce from "lodash.debounce";
 import Modal from "react-modal";
+import { useNotify } from '../../hooks/useNotify';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 const MAX_CACHED_ACTIVITIES = 200;
@@ -151,7 +151,7 @@ function IAActivitiesPage({ socket }) {
       });
       if (mountedRef.current) setAssignees(res.data || []);
     } catch (err) {
-      if (mountedRef.current) toast.error("Could not load team members");
+      if (mountedRef.current) notifyError("Could not load team members");
     }
   }, []);
 
@@ -183,7 +183,7 @@ function IAActivitiesPage({ socket }) {
   const fetchActivities = useCallback(async (reset = false, currentCursor = null) => {
     if (loadingRef.current) return;
     const token = localStorage.getItem("token");
-    if (!token) { toast.error("Please log in again"); return; }
+    if (!token) { notifyError("Please log in again"); return; }
 
     loadingRef.current = true;
     setLoading(true);
@@ -215,7 +215,7 @@ function IAActivitiesPage({ socket }) {
       setHasMore(Boolean(res.data?.cursor));
     } catch (err) {
       if (err?.name === "CanceledError") return;
-      if (mountedRef.current) toast.error(err.response?.data?.error || "Failed to load activities");
+      if (mountedRef.current) notifyError(err.response?.data?.error || "Failed to load activities");
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -233,7 +233,7 @@ function IAActivitiesPage({ socket }) {
   }, [search, statusFilter, assigneeFilter, priorityFilter, fetchActivities]);
 
   useEffect(() => {
-    if (!API_URL) { toast.error("Backend URL not configured"); return; }
+    if (!API_URL) { notifyError("Backend URL not configured"); return; }
     fetchAssignees();
     fetchActivities(true, null);
     return () => { mountedRef.current = false; };
@@ -248,18 +248,18 @@ function IAActivitiesPage({ socket }) {
         return [activity, ...filtered].slice(0, MAX_CACHED_ACTIVITIES);
       });
       setTotal((t) => t + 1);
-      if (matchesFiltersRef.current(activity)) toast.success(`New: ${activity.summary}`);
+      if (matchesFiltersRef.current(activity)) notifySuccess(`New: ${activity.summary}`);
     };
 
     const handleUpdate = (activity) => {
       setActivities((prev) => prev.map((a) => (a.id === activity.id ? activity : a)));
-      if (matchesFiltersRef.current(activity)) toast.info(`Updated: ${activity.summary}`);
+      if (matchesFiltersRef.current(activity)) notifyInfo(`Updated: ${activity.summary}`);
     };
 
     const handleDelete = ({ id }) => {
       setActivities((prev) => {
         const item = prev.find((a) => a.id === id);
-        if (item && matchesFiltersRef.current(item)) toast.warn("Activity deleted");
+        if (item && matchesFiltersRef.current(item)) notifyWarning("Activity deleted");
         return prev.filter((a) => a.id !== id);
       });
       setTotal((t) => Math.max(0, t - 1));
@@ -281,6 +281,7 @@ function IAActivitiesPage({ socket }) {
   }, [cursor, loading, fetchActivities]);
 
   const debouncedLoadMore = useMemo(() => debounce(handleLoadMore, 300), [handleLoadMore]);
+  const { notifySuccess, notifyError, notifyInfo, notifyWarning } = useNotify();
   const debouncedSetSearch = useMemo(
     () => debounce((v) => { if (mountedRef.current) setSearch(v); }, 400),
     []
@@ -339,7 +340,7 @@ function IAActivitiesPage({ socket }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem("token");
-    if (!token) { toast.error("Please log in again"); return; }
+    if (!token) { notifyError("Please log in again"); return; }
 
     const payload = {
       ...form,
@@ -348,7 +349,7 @@ function IAActivitiesPage({ socket }) {
       comments: form.comments?.trim() || "",
     };
 
-    if (payload.assignee_ids.length === 0) { toast.error("Select at least one assignee"); return; }
+    if (payload.assignee_ids.length === 0) { notifyError("Select at least one assignee"); return; }
 
     const isEdit = !!editingActivity;
     const url = isEdit
@@ -361,25 +362,25 @@ function IAActivitiesPage({ socket }) {
       } else {
         await axios.post(url, payload, { headers: { Authorization: `Bearer ${token}` } });
       }
-      toast.success(isEdit ? "Updated!" : "Created!");
+      notifySuccess(isEdit ? "Updated!" : "Created!");
       setIsCreateOpen(false);
       setIsEditOpen(false);
       setEditingActivity(null);
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed");
+      notifyError(err.response?.data?.error || "Failed");
     }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this activity?")) return;
     const token = localStorage.getItem("token");
-    if (!token) { toast.error("Please log in again"); return; }
+    if (!token) { notifyError("Please log in again"); return; }
     try {
       await axios.delete(`${API_URL}/api/activities/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
     } catch (err) {
-      toast.error(err.response?.data?.error || "Delete failed");
+      notifyError(err.response?.data?.error || "Delete failed");
     }
   };
 
@@ -601,8 +602,7 @@ function IAActivitiesPage({ socket }) {
         </form>
       </Modal>
 
-      <ToastContainer position="top-right" />
-    </div>
+</div>
   );
 }
 

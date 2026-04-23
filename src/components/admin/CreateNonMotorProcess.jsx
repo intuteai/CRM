@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { toast, ToastContainer } from "react-toastify";
 import {
   Search,
   PlusCircle,
@@ -13,8 +12,8 @@ import {
   Package,
   Trash2,
 } from "lucide-react";
-import "react-toastify/dist/ReactToastify.css";
 import AddNonMotorModal from "./Addnonmotormodal";
+import { useNotify } from '../../hooks/useNotify';
 
 /* ---------- shared utils ---------- */
 const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
@@ -120,20 +119,20 @@ function ComponentEditorModal({ nonMotor, workOrder, onClose, onAfterChange }) {
       const newWO = await res.json();
       return newWO;
     } catch (err) {
-      toast.error("Failed to create work order");
+      notifyError("Failed to create work order");
       throw err;
     }
   };
 
   const handleAddComponent = async () => {
     if (!componentName.trim() || !quantity) {
-      toast.error("Please enter component name and quantity");
+      notifyError("Please enter component name and quantity");
       return;
     }
 
     const qty = Number(quantity);
     if (!Number.isInteger(qty) || qty <= 0) {
-      toast.error("Quantity must be a positive integer");
+      notifyError("Quantity must be a positive integer");
       return;
     }
 
@@ -216,7 +215,7 @@ function ComponentEditorModal({ nonMotor, workOrder, onClose, onAfterChange }) {
         throw new Error(errData?.error || "Failed to attach component");
       }
 
-      toast.success("Component added");
+      notifySuccess("Component added");
       setComponentName("");
       setQuantity(1);
 
@@ -233,7 +232,7 @@ function ComponentEditorModal({ nonMotor, workOrder, onClose, onAfterChange }) {
       if (onAfterChange) onAfterChange();
     } catch (err) {
       console.error(err);
-      toast.error(err.message || "Failed to add component");
+      notifyError(err.message || "Failed to add component");
     } finally {
       setAdding(false);
     }
@@ -407,6 +406,7 @@ export default function CreateNonMotorProcess({ socket }) {
   const [showAddNonMotor, setShowAddNonMotor] = useState(false);
   const [openComponentEditor, setOpenComponentEditor] = useState(null);
   const [editStage, setEditStage] = useState(null);
+  const { notifySuccess, notifyError, notifyWarning } = useNotify();
 
   useEffect(() => {
     if (!socket) return;
@@ -461,7 +461,7 @@ export default function CreateNonMotorProcess({ socket }) {
       }
     } catch (err) {
       console.error(err);
-      toast.error("Failed to refresh data");
+      notifyError("Failed to refresh data");
     } finally {
       setLoadingList(false);
     }
@@ -486,7 +486,7 @@ export default function CreateNonMotorProcess({ socket }) {
 
         await refetchAll();
       } catch (err) {
-        toast.error("Failed to load initial data");
+        notifyError("Failed to load initial data");
       } finally {
         setLoading(false);
       }
@@ -515,7 +515,7 @@ export default function CreateNonMotorProcess({ socket }) {
   const handleEditStageDate = (nonMotor, stageName) => {
     const wo = getWorkOrderForNonMotor(nonMotor.instance_group_id);
     if (!wo) {
-      toast.warn("Work order not created yet. Add at least one component first.");
+      notifyWarning("Work order not created yet. Add at least one component first.");
       return;
     }
 
@@ -553,12 +553,12 @@ export default function CreateNonMotorProcess({ socket }) {
         throw new Error(err?.error || "Failed to update stage date");
       }
 
-      toast.success(date ? "Date saved" : "Date cleared");
+      notifySuccess(date ? "Date saved" : "Date cleared");
       setEditStage(null);
       await refetchAll();
     } catch (err) {
       console.error(err);
-      toast.error(err.message || "Could not save date");
+      notifyError(err.message || "Could not save date");
     }
   };
 
@@ -743,14 +743,6 @@ export default function CreateNonMotorProcess({ socket }) {
         />
       )}
 
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }

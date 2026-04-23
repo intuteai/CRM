@@ -16,8 +16,7 @@ import {
   RefreshCw,
   Edit2,
 } from "lucide-react";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
@@ -49,6 +48,7 @@ function DesignPartCreation() {
   const [formErrors, setFormErrors] = useState({});
 
   const modalRef = useRef(null);
+  const { notifySuccess, notifyError } = useNotify();
 
   // ----------------------------
   // Helpers
@@ -88,7 +88,7 @@ function DesignPartCreation() {
       setPartTypes(data || []);
     } catch (err) {
       console.error("Part types error:", err);
-      toast.error(err.message || "Failed to load part types");
+      notifyError(err.message || "Failed to load part types");
       setPartTypes([]);
     }
   }, []);
@@ -118,7 +118,7 @@ function DesignPartCreation() {
       setTotal(total || data.length);
     } catch (err) {
       console.error("Parts error:", err);
-      toast.error(err.message || "Failed to load parts");
+      notifyError(err.message || "Failed to load parts");
       setParts([]);
       setTotal(0);
     } finally {
@@ -148,7 +148,7 @@ function DesignPartCreation() {
       setPreviewCode(data.partCode || "");
     } catch (err) {
       console.error("Next code error:", err);
-      toast.error(err.message || "Failed to preview part code");
+      notifyError(err.message || "Failed to preview part code");
       setPreviewCode("");
     }
   }, []);
@@ -325,7 +325,7 @@ function DesignPartCreation() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) {
-      toast.error("Please fix the validation errors");
+      notifyError("Please fix the validation errors");
       return;
     }
 
@@ -371,14 +371,14 @@ function DesignPartCreation() {
       }
 
       const saved = await res.json();
-      toast.success(isCreate ? "Part created" : "Part updated");
+      notifySuccess(isCreate ? "Part created" : "Part updated");
 
       // Refresh from backend so we also get partTypeName, etc
       await fetchParts();
       setShowModal(false);
     } catch (err) {
       console.error("Save part error:", err);
-      toast.error(err.message || "Failed to save part");
+      notifyError(err.message || "Failed to save part");
     }
   };
 
@@ -400,11 +400,11 @@ function DesignPartCreation() {
 //         throw new Error(err.error || "Failed to delete part");
 //       }
 
-//       toast.success(`Part ${part.partCode} deleted`);
+//       notifySuccess(`Part ${part.partCode} deleted`);
 //       await fetchParts();
 //     } catch (err) {
 //       console.error("Delete part error:", err);
-//       toast.error(err.message || "Failed to delete part");
+//       notifyError(err.message || "Failed to delete part");
 //     }
 //   };
 
@@ -877,8 +877,7 @@ function DesignPartCreation() {
         </div>
       )}
 
-      <ToastContainer position="top-right" autoClose={3000} />
-    </div>
+</div>
   );
 }
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { Search, Download, Loader2, Sparkles } from 'lucide-react';
-import { toast, ToastContainer } from 'react-toastify';
 import axios from 'axios';
 import { debounce } from 'lodash';
+import { useNotify } from '../../hooks/useNotify';
 
 const todayIST = () => {
   return new Intl.DateTimeFormat('en-CA', {
@@ -118,7 +118,7 @@ function AttendanceSummary({ socket }) {
 
         const token = localStorage.getItem('token');
         if (!token) {
-          toast.error('Please log in again');
+          notifyError('Please log in again');
           return;
         }
 
@@ -137,7 +137,7 @@ function AttendanceSummary({ socket }) {
       } catch (err) {
         if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') return;
         const msg = err.response?.data?.error || 'Failed to load attendance';
-        toast.error(msg);
+        notifyError(msg);
       } finally {
         setLoading(false);
         abortRef.current = null;
@@ -174,7 +174,7 @@ function AttendanceSummary({ socket }) {
 
       if (!isViewingToday) return;
 
-      toast.info(`${payload.name || 'Employee'} marked attendance`, {
+      notifyInfo(`${payload.name || 'Employee'} marked attendance`, {
         autoClose: 2500,
       });
 
@@ -202,7 +202,7 @@ function AttendanceSummary({ socket }) {
       
       if (isViewingToday) {
         fetchData(true);
-        toast.success('Reconnected - Data refreshed', { autoClose: 2000 });
+        notifySuccess('Reconnected - Data refreshed', { autoClose: 2000 });
       }
     };
 
@@ -217,6 +217,7 @@ function AttendanceSummary({ socket }) {
   }, [loading, hasMore, cursor, fetchData]);
 
   const debouncedLoadMore = useMemo(() => debounce(loadMore, 300), [loadMore]);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   useEffect(() => {
     return () => debouncedLoadMore.cancel();
@@ -406,8 +407,7 @@ function AttendanceSummary({ socket }) {
         </div>
       </div>
 
-      <ToastContainer position="top-right" theme="light" />
-    </div>
+</div>
   );
 }
 

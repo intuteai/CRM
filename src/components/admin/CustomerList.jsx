@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowDownUp, X } from 'lucide-react';
 import io from 'socket.io-client';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useNotify } from '../../hooks/useNotify';
 
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -93,13 +92,14 @@ function CustomerList() {
         if (prev.length < limit) return [...prev, updatedCustomer];
         return prev;
       });
-      toast.info(`Customer ${updatedCustomer.name} updated`, { className: 'bg-amber-100 border-amber-300' });
+      notifyInfo(`Customer ${updatedCustomer.name} updated`, { className: 'bg-amber-100 border-amber-300' });
     });
 
     return () => socket.disconnect();
   }, [fetchCustomers]);
 
   const debounceSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const handleSearch = (e) => debounceSearch(e.target.value);
 
@@ -156,13 +156,13 @@ function CustomerList() {
       ...prev,
       billing_address: prev.shipping_address,
     }));
-    toast.info('Billing address copied from shipping address', { className: 'bg-amber-100 border-amber-300' });
+    notifyInfo('Billing address copied from shipping address', { className: 'bg-amber-100 border-amber-300' });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) {
-      toast.error('Please fix the form errors');
+      notifyError('Please fix the form errors');
       return;
     }
     try {
@@ -176,13 +176,13 @@ function CustomerList() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create customer');
-      toast.success('Customer added successfully!');
+      notifySuccess('Customer added successfully!');
       setIsModalOpen(false);
       resetForm();
       fetchCustomers();
     } catch (err) {
       console.error('Error creating customer:', err);
-      toast.error(`Error: ${err.message}`);
+      notifyError(`Error: ${err.message}`);
     }
   };
 
@@ -462,8 +462,7 @@ function CustomerList() {
             </div>
           )}
         </div>
-        <ToastContainer position="top-right" autoClose={3000} />
-      </div>
+</div>
     </ErrorBoundary>
   );
 }

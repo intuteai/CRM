@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { formatDate as importedFormatDate } from '../../utils/helpers';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -47,6 +46,7 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
   const searchInputRef = useRef(null);
   const hasFetched = useRef(false);
   const isFetching = useRef(false);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const socket = useMemo(
     () =>
@@ -120,7 +120,7 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
       console.error('Error fetching PDI reports:', err);
       const errorMessage = err.message || 'Network error. Please try again later.';
       setError(errorMessage);
-      toast.error(errorMessage, { autoClose: 3000 });
+      notifyError(errorMessage, { autoClose: 3000 });
     } finally {
       setIsLoading(false);
       isFetching.current = false;
@@ -135,12 +135,12 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
 
     const handleConnect = () => {
       console.log('Connected to Socket.IO in ProductionPDIPage');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     };
 
     const handleConnectError = (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     };
 
     const handlePdiUpdate = ({ report_id, status, inspection_date, report_link }) => {
@@ -167,7 +167,7 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
           report_link,
         };
 
-        toast.info(`PDI report #${report_id} updated`, { autoClose: 2000 });
+        notifyInfo(`PDI report #${report_id} updated`, { autoClose: 2000 });
         return updatedReports;
       });
     };
@@ -281,12 +281,12 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
           prev.map((r) => (r.report_id === updatedReport.report_id ? updatedReport : r))
         );
         setShowModal(false);
-        toast.success(`PDI report #${updatedReport.report_id} updated successfully!`, {
+        notifySuccess(`PDI report #${updatedReport.report_id} updated successfully!`, {
           autoClose: 2000,
         });
       } catch (err) {
         console.error('Update error:', err);
-        toast.error(err.message || 'Update failed', { autoClose: 3000 });
+        notifyError(err.message || 'Update failed', { autoClose: 3000 });
       } finally {
         setUploading(false);
       }
@@ -678,15 +678,7 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
         </div>
       )}
 
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }
 

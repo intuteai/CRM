@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { toast } from "react-toastify";
 import { X } from "lucide-react";
+import { useNotify } from '../../hooks/useNotify';
 
 const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
 
@@ -29,6 +29,7 @@ function AddMotorModal({ orderId, customerName, onClose, onCreated }) {
   const [instanceName, setInstanceName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const { notifySuccess, notifyError } = useNotify();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -74,12 +75,12 @@ function AddMotorModal({ orderId, customerName, onClose, onCreated }) {
       }
 
       const newMotor = await response.json();
-      toast.success(`Motor "${newMotor.instanceName}" created`);
+      notifySuccess(`Motor "${newMotor.instanceName}" created`);
       onCreated(); // Call refetchAll to refresh motor list
       onClose(); // Close modal
     } catch (e) {
       setError(e.message || "Failed to create motor");
-      toast.error(e.message || "Failed to create motor");
+      notifyError(e.message || "Failed to create motor");
     } finally {
       setBusy(false);
     }

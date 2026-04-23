@@ -23,10 +23,10 @@ import {
   ChevronUp,
   ChevronDown,
 } from "lucide-react";
-import { toast, ToastContainer } from "react-toastify";
 import axios from "axios";
 import debounce from "lodash.debounce";
 import Modal from "react-modal";
+import { useNotify } from '../../hooks/useNotify';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 const MAX_CACHED_ACTIVITIES = 200;
@@ -127,7 +127,7 @@ function CompageEmployeeActivitiesPage({ socket }) {
   const fetchActivities = useCallback(async (reset = false, currentCursor = null) => {
     if (loadingRef.current) return;
     const token = localStorage.getItem("token");
-    if (!token) { toast.error("Please log in again"); return; }
+    if (!token) { notifyError("Please log in again"); return; }
 
     loadingRef.current = true;
     setLoading(true);
@@ -159,7 +159,7 @@ function CompageEmployeeActivitiesPage({ socket }) {
       setHasMore(Boolean(res.data?.cursor));
     } catch (err) {
       if (err?.name === "CanceledError") return;
-      if (mountedRef.current) toast.error(err.response?.data?.error || "Failed to load activities");
+      if (mountedRef.current) notifyError(err.response?.data?.error || "Failed to load activities");
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -177,7 +177,7 @@ function CompageEmployeeActivitiesPage({ socket }) {
   }, [search, statusFilter, priorityFilter, fetchActivities]);
 
   useEffect(() => {
-    if (!API_URL) { toast.error("Backend URL not configured"); return; }
+    if (!API_URL) { notifyError("Backend URL not configured"); return; }
     fetchActivities(true, null);
     return () => { mountedRef.current = false; };
   }, [fetchActivities]);
@@ -208,6 +208,7 @@ function CompageEmployeeActivitiesPage({ socket }) {
   }, [debouncedLoadMore, debouncedSetSearch]);
 
   const filteredActivities = useMemo(() => activities.filter(matchesFilters), [activities, matchesFilters]);
+  const { notifySuccess, notifyError } = useNotify();
 
   const sortedActivities = useMemo(() => {
     if (!sortConfig.key) return filteredActivities;
@@ -242,7 +243,7 @@ function CompageEmployeeActivitiesPage({ socket }) {
       return;
     }
     const token = localStorage.getItem("token");
-    if (!token) { toast.error("Please log in again"); return; }
+    if (!token) { notifyError("Please log in again"); return; }
 
     setUpdatingStatus(true);
     try {
@@ -252,10 +253,10 @@ function CompageEmployeeActivitiesPage({ socket }) {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setActivities((prev) => prev.map((a) => (a.id === statusModal.id ? res.data : a)));
-      toast.success("Status updated!");
+      notifySuccess("Status updated!");
       setStatusModal(null);
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to update status");
+      notifyError(err.response?.data?.error || "Failed to update status");
     } finally {
       setUpdatingStatus(false);
     }
@@ -456,8 +457,7 @@ function CompageEmployeeActivitiesPage({ socket }) {
         )}
       </Modal>
 
-      <ToastContainer position="top-right" />
-    </div>
+</div>
   );
 }
 

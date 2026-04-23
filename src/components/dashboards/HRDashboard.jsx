@@ -1,17 +1,17 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarCheck, Sparkles, ClipboardList, Users } from 'lucide-react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useNotify } from '../../hooks/useNotify';
 
 function HRDashboard({ socket, userRole }) {
+  const { notifySuccess, notifyInfo } = useNotify();
   useEffect(() => {
     if (!socket) return;
     socket.on('leaveRequestCreated', (data) => {
-      toast.info(`New leave request from ${data?.name || 'employee'}`, { autoClose: 4000 });
+      notifyInfo(`New leave request from ${data?.name || 'employee'}`, { autoClose: 4000 });
     });
     socket.on('payrollProcessed', (data) => {
-      toast.success(`Payroll for ${data?.month || 'month'} processed`, { autoClose: 4000 });
+      notifySuccess(`Payroll for ${data?.month || 'month'} processed`, { autoClose: 4000 });
     });
     return () => {
       socket.off('leaveRequestCreated');
@@ -76,8 +76,7 @@ function HRDashboard({ socket, userRole }) {
         </div>
       </div>
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import {
   ArrowDownUp,
   RefreshCw,
@@ -15,6 +13,7 @@ import {
 } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const userRole = localStorage.getItem('role');
@@ -67,6 +66,7 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
   const [filteredMaterials, setFilteredMaterials] = useState({});
   const [isMaterialDropdownOpen, setIsMaterialDropdownOpen] = useState({});
   const [selectedMaterialIndices, setSelectedMaterialIndices] = useState({});
+  const { notifySuccess, notifyError, notifyInfo, notifyWarning } = useNotify();
 
   const socket = useMemo(
     () =>
@@ -131,7 +131,7 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       console.error('Error fetching BOMs:', err);
       const errorMessage = err.message || 'Network error. Please try again later.';
       setError(errorMessage);
-      toast.error(errorMessage, { autoClose: 3000 });
+      notifyError(errorMessage, { autoClose: 3000 });
     } finally {
       setIsLoading(false);
       isFetching.current = false;
@@ -177,7 +177,7 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       setIsDataLoaded(true);
     } catch (err) {
       console.error('Error fetching products/materials:', err);
-      toast.error(`Failed to load products or materials: ${err.message}`, { autoClose: 3000 });
+      notifyError(`Failed to load products or materials: ${err.message}`, { autoClose: 3000 });
       setIsDataLoaded(true);
     }
   }, []);
@@ -191,18 +191,18 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
 
     const handleConnect = () => {
       console.log('Connected to Socket.IO in ProductionBOMPage');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     };
 
     const handleConnectError = (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     };
 
     const handleBomCreated = (bom) => {
       setBoms((prev) => {
         if (!Array.isArray(prev)) return [bom];
-        toast.info(`BOM #${bom.bomId} created`, { autoClose: 2000 });
+        notifyInfo(`BOM #${bom.bomId} created`, { autoClose: 2000 });
         return [bom, ...prev];
       });
     };
@@ -214,7 +214,7 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         if (index === -1) return prev;
         const updatedBoms = [...prev];
         updatedBoms[index] = bom;
-        toast.info(`BOM #${bom.bomId} updated`, { autoClose: 2000 });
+        notifyInfo(`BOM #${bom.bomId} updated`, { autoClose: 2000 });
         return updatedBoms;
       });
     };
@@ -299,7 +299,7 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
 
   const handleCreate = useCallback(() => {
     if (!isDataLoaded) {
-      toast.warn('Please wait, loading products and materials...', { autoClose: 2000 });
+      notifyWarning('Please wait, loading products and materials...', { autoClose: 2000 });
       return;
     }
     setModalMode('create');
@@ -437,15 +437,15 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
 
         const updatedBom = await response.json();
         if (modalMode === 'create') {
-          toast.success(`BOM #${updatedBom.bomId} created successfully!`, { autoClose: 2000 });
+          notifySuccess(`BOM #${updatedBom.bomId} created successfully!`, { autoClose: 2000 });
         } else {
-          toast.success(`BOM #${updatedBom.bomId} updated successfully!`, { autoClose: 2000 });
+          notifySuccess(`BOM #${updatedBom.bomId} updated successfully!`, { autoClose: 2000 });
         }
 
         setShowModal(false);
       } catch (err) {
         console.error(`${modalMode === 'create' ? 'Create' : 'Update'} error:`, err);
-        toast.error(err.message || `${modalMode === 'create' ? 'Create' : 'Update'} failed`, { autoClose: 3000 });
+        notifyError(err.message || `${modalMode === 'create' ? 'Create' : 'Update'} failed`, { autoClose: 3000 });
       } finally {
         setUploading(false);
       }
@@ -944,8 +944,7 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         </div>
       )}
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-    </div>
+</div>
   );
 }
 

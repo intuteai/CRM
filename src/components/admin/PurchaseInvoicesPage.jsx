@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle, Plus } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -47,6 +46,7 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
   const searchInputRef = useRef(null);
   const hasFetched = useRef(false);
   const isFetching = useRef(false);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const socket = useMemo(
     () =>
@@ -90,7 +90,7 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
       console.error('Error fetching purchase invoices:', err);
       const errorMessage = err.message || 'Network error. Please try again later.';
       setError(errorMessage);
-      toast.error(errorMessage, { autoClose: 3000 });
+      notifyError(errorMessage, { autoClose: 3000 });
     } finally {
       setIsLoading(false);
       isFetching.current = false;
@@ -105,12 +105,12 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
 
     const handleConnect = () => {
       console.log('Connected to Socket.IO in PurchaseInvoicesPage');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     };
 
     const handleConnectError = (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     };
 
     const handleInvoiceUpdate = ({ invoiceId, ...updatedData }) => {
@@ -118,13 +118,13 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
         if (!Array.isArray(prev)) return prev || [];
 
         if (updatedData.status === 'Deleted') {
-          toast.info(`Invoice #${invoiceId} deleted`, { autoClose: 2000 });
+          notifyInfo(`Invoice #${invoiceId} deleted`, { autoClose: 2000 });
           return prev.filter((invoice) => invoice.invoiceId !== invoiceId);
         }
 
         const invoiceIndex = prev.findIndex((invoice) => invoice.invoiceId === invoiceId);
         if (invoiceIndex === -1) {
-          toast.info(`Invoice #${invoiceId} created`, { autoClose: 2000 });
+          notifyInfo(`Invoice #${invoiceId} created`, { autoClose: 2000 });
           return [{ ...updatedData, invoiceId }, ...prev];
         }
 
@@ -146,7 +146,7 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
 
         const updatedInvoices = [...prev];
         updatedInvoices[invoiceIndex] = { ...invoiceToUpdate, ...updatedData };
-        toast.info(`Invoice #${invoiceId} updated`, { autoClose: 2000 });
+        notifyInfo(`Invoice #${invoiceId} updated`, { autoClose: 2000 });
         return updatedInvoices;
       });
     };
@@ -271,10 +271,10 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
       }
 
       socket.emit('invoiceUpdate', { invoiceId, status: 'Deleted' });
-      toast.success(`Invoice #${invoiceId} deleted successfully!`, { autoClose: 2000 });
+      notifySuccess(`Invoice #${invoiceId} deleted successfully!`, { autoClose: 2000 });
     } catch (err) {
       console.error('Delete error:', err);
-      toast.error(err.message || 'Delete failed', { autoClose: 3000 });
+      notifyError(err.message || 'Delete failed', { autoClose: 3000 });
     }
   }, [socket]);
 
@@ -318,19 +318,19 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
         const updatedInvoice = await response.json();
         if (modalMode === 'create') {
           setInvoices((prev) => [updatedInvoice, ...prev]);
-          toast.success(`Invoice #${updatedInvoice.invoiceId} created successfully!`, { autoClose: 2000 });
+          notifySuccess(`Invoice #${updatedInvoice.invoiceId} created successfully!`, { autoClose: 2000 });
         } else {
           setInvoices((prev) =>
             prev.map((inv) => (inv.invoiceId === updatedInvoice.invoiceId ? updatedInvoice : inv))
           );
-          toast.success(`Invoice #${updatedInvoice.invoiceId} updated successfully!`, { autoClose: 2000 });
+          notifySuccess(`Invoice #${updatedInvoice.invoiceId} updated successfully!`, { autoClose: 2000 });
         }
 
         socket.emit('invoiceUpdate', updatedInvoice);
         setShowModal(false);
       } catch (err) {
         console.error(`${modalMode === 'create' ? 'Create' : 'Update'} error:`, err);
-        toast.error(err.message || `${modalMode === 'create' ? 'Create' : 'Update'} failed`, { autoClose: 3000 });
+        notifyError(err.message || `${modalMode === 'create' ? 'Create' : 'Update'} failed`, { autoClose: 3000 });
       } finally {
         setUploading(false);
       }
@@ -783,15 +783,7 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
         </div>
       )}
 
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }
 

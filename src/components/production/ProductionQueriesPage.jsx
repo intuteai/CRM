@@ -2,9 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import { formatDate } from '../../utils/helpers';
 import { useQueries } from '../../hooks/useQueries';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { ArrowDownUp, X } from 'lucide-react';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'; 
 
@@ -19,6 +18,7 @@ function ProductionQueriesPage() {
   const [expandedResponses, setExpandedResponses] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'desc' });
   const tableRef = useRef(null);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   useEffect(() => {
     const socket = io(BASE_URL, {
@@ -31,18 +31,18 @@ function ProductionQueriesPage() {
 
     socket.on('connect', () => {
       console.log('Connected to Socket.IO');
-      toast.success('Connected to real-time updates!', { autoClose: 2000 });
+      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
     });
 
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err);
-      toast.error('Failed to connect to real-time updates.', { autoClose: 3000 });
+      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
 
     socket.on('newQuery', (query) => {
       setQueries(prev => {
         if (prev.some(q => q.queryId === query.queryId)) return prev;
-        toast.info('New query added!', { autoClose: 2000 });
+        notifyInfo('New query added!', { autoClose: 2000 });
         return [...prev, query];
       });
       if (tableRef.current) tableRef.current.focus();
@@ -51,7 +51,7 @@ function ProductionQueriesPage() {
     socket.on('queryUpdate', (updatedQuery) => {
       setQueries(prev => {
         const updatedQueries = prev.map(q => q.queryId === updatedQuery.queryId ? updatedQuery : q);
-        toast.info(`Query #${updatedQuery.queryId} updated`, { autoClose: 2000 });
+        notifyInfo(`Query #${updatedQuery.queryId} updated`, { autoClose: 2000 });
         return updatedQueries;
       });
       if (tableRef.current) tableRef.current.focus();
@@ -109,7 +109,7 @@ function ProductionQueriesPage() {
   const handleSubmitResponse = async (e) => {
     e.preventDefault();
     if (!responseText.trim()) {
-      toast.error('Response text is required');
+      notifyError('Response text is required');
       return;
     }
     setIsLoading(true);
@@ -127,13 +127,13 @@ function ProductionQueriesPage() {
         setRespondingQuery(null);
         setResponseText('');
         setError(null);
-        toast.success('Response submitted successfully!');
+        notifySuccess('Response submitted successfully!');
       } else {
         throw new Error(data.error || 'Failed to submit response');
       }
     } catch (err) {
       console.error('Error submitting response:', err);
-      toast.error(err.message || 'Network error');
+      notifyError(err.message || 'Network error');
     } finally {
       setIsLoading(false);
     }
@@ -152,14 +152,14 @@ function ProductionQueriesPage() {
       if (res.ok) {
         setQueries(prev => prev.map(q => q.queryId === data.queryId ? data : q));
         setError(null);
-        toast.success('Query set to In Progress');
+        notifySuccess('Query set to In Progress');
       } else {
         throw new Error(data.error || 'Failed to update status');
       }
     } catch (err) {
       console.error('Error updating status:', err);
       await fetchQueries();
-      toast.error(err.message || 'Network error');
+      notifyError(err.message || 'Network error');
     } finally {
       setIsLoading(false);
     }
@@ -429,8 +429,7 @@ function ProductionQueriesPage() {
         </div>
       )}
 
-      <ToastContainer position="top-right" autoClose={3000} />
-    </div>
+</div>
   );
 }
 

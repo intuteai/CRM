@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import useProblems from '../../hooks/useProblems';
-import { toast } from 'react-toastify';
 import { formatDate } from '../../utils/helpers';
 import { RefreshCw, Search, AlertCircle, CheckCircle, XCircle, Filter } from 'lucide-react';
+import { useNotify } from '../../hooks/useNotify';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -19,6 +19,7 @@ function ProblemsPage({ socket }) {
   // Search and filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredProblems, setFilteredProblems] = useState([]);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
   const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'solved', 'unsolved'
 
   // Fetch products for problem form
@@ -48,7 +49,7 @@ function ProblemsPage({ socket }) {
       } catch (err) {
         console.error('Product fetch error:', err);
         setProductsError(err.message || 'Failed to fetch products');
-        toast.error(err.message || 'Failed to fetch products');
+        notifyError(err.message || 'Failed to fetch products');
       } finally {
         setProductsLoading(false);
       }
@@ -107,7 +108,7 @@ function ProblemsPage({ socket }) {
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success('Problem reported successfully');
+        notifySuccess('Problem reported successfully');
         setProblemData({ product_id: '', problem_description: '' });
         // Force refresh to ensure latest data
         await fetchProblems();
@@ -116,7 +117,7 @@ function ProblemsPage({ socket }) {
       }
     } catch (err) {
       console.error('Problem submission error:', err);
-      toast.error(err.message || 'Failed to report problem');
+      notifyError(err.message || 'Failed to report problem');
     } finally {
       setIsSubmittingProblem(false);
     }
@@ -140,7 +141,7 @@ function ProblemsPage({ socket }) {
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success('Solution added successfully');
+        notifySuccess('Solution added successfully');
         setSolutionData({ problem_id: '', solution_description: '', is_successful: false });
         // Force refresh to ensure latest data
         await fetchProblems();
@@ -149,7 +150,7 @@ function ProblemsPage({ socket }) {
       }
     } catch (err) {
       console.error('Solution submission error:', err);
-      toast.error(err.message || 'Failed to add solution');
+      notifyError(err.message || 'Failed to add solution');
     } finally {
       setIsSubmittingSolution(false);
     }
@@ -157,7 +158,7 @@ function ProblemsPage({ socket }) {
 
   const handleRefresh = () => {
     fetchProblems();
-    toast.info('Refreshed problems list');
+    notifyInfo('Refreshed problems list');
   };
 
   const handleSearch = (e) => {

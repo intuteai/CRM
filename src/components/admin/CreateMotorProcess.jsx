@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { toast, ToastContainer } from "react-toastify";
 import {
   Search,
   PlusCircle,
@@ -14,8 +13,8 @@ import {
   Trash2,
   AlertCircle,
 } from "lucide-react";
-import "react-toastify/dist/ReactToastify.css";
 import AddMotorModal from "./AddMotorModal";
+import { useNotify } from '../../hooks/useNotify';
 
 /* ---------- shared utils ---------- */
 const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
@@ -366,7 +365,7 @@ function AddMaterialModal({ wocId, onClose, onAdded }) {
         setStockItems(normalizedItems);
       } catch (err) {
         console.error("Failed to load stock items:", err);
-        if (mounted) toast.error("Could not load raw materials list");
+        if (mounted) notifyError("Could not load raw materials list");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -395,13 +394,13 @@ function AddMaterialModal({ wocId, onClose, onAdded }) {
 
   const handleAdd = async () => {
     if (!selectedItem) {
-      toast.error("Please select a raw material");
+      notifyError("Please select a raw material");
       return;
     }
 
     const qty = Number(quantity);
     if (!Number.isInteger(qty) || qty <= 0) {
-      toast.error("Please enter a positive integer quantity");
+      notifyError("Please enter a positive integer quantity");
       return;
     }
 
@@ -429,12 +428,12 @@ function AddMaterialModal({ wocId, onClose, onAdded }) {
         throw new Error(errData?.error || `HTTP ${res.status}`);
       }
 
-      toast.success("Material added successfully");
+      notifySuccess("Material added successfully");
       onAdded();
       onClose();
     } catch (err) {
       console.error("Add material failed:", err);
-      toast.error(`Failed to add material: ${err.message}`);
+      notifyError(`Failed to add material: ${err.message}`);
     } finally {
       setAddBusy(false);
     }
@@ -742,11 +741,11 @@ function ComponentDetailModal({
       setWorkOrderComponent(newWOC);
       await loadMaterialsAndProcesses(newWOC.workOrderComponentId);
 
-      toast.success("Component added to work order");
+      notifySuccess("Component added to work order");
       if (onAfterChange) onAfterChange();
       return newWOC;
     } catch (err) {
-      toast.error(err.message || "Failed to initialize component");
+      notifyError(err.message || "Failed to initialize component");
       return null;
     } finally {
       setBusy(false);
@@ -765,7 +764,7 @@ function ComponentDetailModal({
 
   const guardMaterialsExist = useCallback(() => {
     if (materials.length === 0) {
-      toast.error("Please add at least one raw material first");
+      notifyError("Please add at least one raw material first");
       return false;
     }
     return true;
@@ -777,7 +776,7 @@ function ComponentDetailModal({
 
     const token = localStorage.getItem("token");
     if (!token) {
-      toast.error("Authentication token missing");
+      notifyError("Authentication token missing");
       return;
     }
 
@@ -813,9 +812,9 @@ function ComponentDetailModal({
 
       if (onAfterChange) onAfterChange();
       setEditRow(null);
-      toast.success("Process updated");
+      notifySuccess("Process updated");
     } catch (err) {
-      toast.error(err.message || "Failed to save process");
+      notifyError(err.message || "Failed to save process");
     }
   };
 
@@ -843,11 +842,11 @@ function ComponentDetailModal({
       }
 
       await loadMaterialsAndProcesses(workOrderComponent.workOrderComponentId);
-      toast.success("Material updated");
+      notifySuccess("Material updated");
       if (onAfterChange) onAfterChange();
       setEditMaterial(null);
     } catch (err) {
-      toast.error(err.message || "Failed to save material");
+      notifyError(err.message || "Failed to save material");
     }
   };
 
@@ -872,10 +871,10 @@ function ComponentDetailModal({
       if (!res.ok) throw new Error("Failed to delete material");
 
       await loadMaterialsAndProcesses(workOrderComponent.workOrderComponentId);
-      toast.success("Material deleted");
+      notifySuccess("Material deleted");
       if (onAfterChange) onAfterChange();
     } catch (err) {
-      toast.error(err.message || "Failed to delete material");
+      notifyError(err.message || "Failed to delete material");
     }
   };
 
@@ -1107,6 +1106,7 @@ export default function CreateMotorProcess({ socket }) {
 
   const [editingCell, setEditingCell] = useState(null);
   const [editingValue, setEditingValue] = useState("Pending");
+  const { notifySuccess, notifyError, notifyWarning } = useNotify();
 
   // ────────────────────────────────────────────────
   //  refetchAll – now filters only Motor type
@@ -1145,7 +1145,7 @@ export default function CreateMotorProcess({ socket }) {
       setWorkOrders(woData.workOrders || []);
     } catch (err) {
       console.error("Refresh failed:", err);
-      toast.error("Failed to refresh data");
+      notifyError("Failed to refresh data");
     } finally {
       setLoadingList(false);
     }
@@ -1347,11 +1347,11 @@ export default function CreateMotorProcess({ socket }) {
           throw new Error(errData?.error || "Failed to update stage");
         }
 
-        toast.success("Stage updated");
+        notifySuccess("Stage updated");
         setEditStage(null);
         await refetchAll();
       } catch (e) {
-        toast.error(e.message || "Failed to save stage");
+        notifyError(e.message || "Failed to save stage");
       }
     },
     [editStage, refetchAll]
@@ -1381,7 +1381,7 @@ export default function CreateMotorProcess({ socket }) {
 
         await refetchAll();
       } catch (err) {
-        toast.error("Failed to load initial data");
+        notifyError("Failed to load initial data");
       } finally {
         setLoading(false);
       }
@@ -1424,7 +1424,7 @@ export default function CreateMotorProcess({ socket }) {
 
   const startEditStatus = (motorId, component, current) => {
     if (component.missing) {
-      toast.warn(`Component "${component.label}" is not defined in master data`);
+      notifyWarning(`Component "${component.label}" is not defined in master data`);
       return;
     }
     setEditingCell({ motorId, componentId: component.componentId });
@@ -1453,16 +1453,16 @@ export default function CreateMotorProcess({ socket }) {
       );
       const mats = matRes.ok ? await matRes.json() : [];
       if (!Array.isArray(mats) || mats.length === 0) {
-        toast.error("Cannot update status — please add raw materials first");
+        notifyError("Cannot update status — please add raw materials first");
         return;
       }
 
       await updateComponentStatus(woc, newStatus);
-      toast.success("Status updated");
+      notifySuccess("Status updated");
       setEditingCell(null);
       await refetchAll();
     } catch (err) {
-      toast.error(`Failed to update status: ${err.message}`);
+      notifyError(`Failed to update status: ${err.message}`);
     }
   };
 
@@ -1686,14 +1686,6 @@ export default function CreateMotorProcess({ socket }) {
         />
       )}
 
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }

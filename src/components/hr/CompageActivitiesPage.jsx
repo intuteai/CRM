@@ -26,10 +26,10 @@ import {
   ChevronUp,
   ChevronDown,
 } from "lucide-react";
-import { toast, ToastContainer } from "react-toastify";
 import axios from "axios";
 import debounce from "lodash.debounce";
 import Modal from "react-modal";
+import { useNotify } from '../../hooks/useNotify';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 const MAX_CACHED_ACTIVITIES = 200;
@@ -145,7 +145,7 @@ function CompageActivitiesPage({ socket }) {
       });
       if (mountedRef.current) setAssignees(res.data || []);
     } catch {
-      if (mountedRef.current) toast.error("Could not load team members");
+      if (mountedRef.current) notifyError("Could not load team members");
     }
   }, []);
 
@@ -171,7 +171,7 @@ function CompageActivitiesPage({ socket }) {
   const fetchActivities = useCallback(async (reset = false, currentCursor = null) => {
     if (loadingRef.current) return;
     const token = localStorage.getItem("token");
-    if (!token) { toast.error("Please log in again"); return; }
+    if (!token) { notifyError("Please log in again"); return; }
 
     loadingRef.current = true;
     setLoading(true);
@@ -203,7 +203,7 @@ function CompageActivitiesPage({ socket }) {
       setHasMore(Boolean(res.data?.cursor));
     } catch (err) {
       if (err?.name === "CanceledError") return;
-      if (mountedRef.current) toast.error(err.response?.data?.error || "Failed to load activities");
+      if (mountedRef.current) notifyError(err.response?.data?.error || "Failed to load activities");
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -221,7 +221,7 @@ function CompageActivitiesPage({ socket }) {
   }, [search, statusFilter, assigneeFilter, priorityFilter, fetchActivities]);
 
   useEffect(() => {
-    if (!API_URL) { toast.error("Backend URL not configured"); return; }
+    if (!API_URL) { notifyError("Backend URL not configured"); return; }
     fetchAssignees();
     fetchActivities(true, null);
     return () => { mountedRef.current = false; };
@@ -232,16 +232,16 @@ function CompageActivitiesPage({ socket }) {
     const handleCreate = (activity) => {
       setActivities((prev) => [activity, ...prev.filter((a) => a.id !== activity.id)].slice(0, MAX_CACHED_ACTIVITIES));
       setTotal((t) => t + 1);
-      if (matchesFiltersRef.current(activity)) toast.success(`New: ${activity.summary}`);
+      if (matchesFiltersRef.current(activity)) notifySuccess(`New: ${activity.summary}`);
     };
     const handleUpdate = (activity) => {
       setActivities((prev) => prev.map((a) => (a.id === activity.id ? activity : a)));
-      if (matchesFiltersRef.current(activity)) toast.info(`Updated: ${activity.summary}`);
+      if (matchesFiltersRef.current(activity)) notifyInfo(`Updated: ${activity.summary}`);
     };
     const handleDelete = ({ id }) => {
       setActivities((prev) => {
         const item = prev.find((a) => a.id === id);
-        if (item && matchesFiltersRef.current(item)) toast.warn("Activity deleted");
+        if (item && matchesFiltersRef.current(item)) notifyWarning("Activity deleted");
         return prev.filter((a) => a.id !== id);
       });
       setTotal((t) => Math.max(0, t - 1));
@@ -272,6 +272,7 @@ function CompageActivitiesPage({ socket }) {
   }, [debouncedLoadMore, debouncedSetSearch]);
 
   const filteredActivities = useMemo(() => activities.filter(matchesFilters), [activities, matchesFilters]);
+  const { notifySuccess, notifyError, notifyInfo, notifyWarning } = useNotify();
 
   const sortedActivities = useMemo(() => {
     if (!sortConfig.key) return filteredActivities;
@@ -317,14 +318,14 @@ function CompageActivitiesPage({ socket }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem("token");
-    if (!token) { toast.error("Please log in again"); return; }
+    if (!token) { notifyError("Please log in again"); return; }
     const payload = {
       ...form,
       assignee_ids: form.assignee_ids.filter(Boolean),
       due_date: toYMD(form.due_date),
       comments: form.comments?.trim() || "",
     };
-    if (payload.assignee_ids.length === 0) { toast.error("Select at least one assignee"); return; }
+    if (payload.assignee_ids.length === 0) { notifyError("Select at least one assignee"); return; }
     const isEdit = !!editingActivity;
     const url = isEdit ? `${API_URL}/api/activities/${editingActivity.id}` : `${API_URL}/api/activities`;
     try {
@@ -333,23 +334,23 @@ function CompageActivitiesPage({ socket }) {
       } else {
         await axios.post(url, payload, { headers: { Authorization: `Bearer ${token}` } });
       }
-      toast.success(isEdit ? "Updated!" : "Created!");
+      notifySuccess(isEdit ? "Updated!" : "Created!");
       setIsCreateOpen(false);
       setIsEditOpen(false);
       setEditingActivity(null);
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed");
+      notifyError(err.response?.data?.error || "Failed");
     }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this activity?")) return;
     const token = localStorage.getItem("token");
-    if (!token) { toast.error("Please log in again"); return; }
+    if (!token) { notifyError("Please log in again"); return; }
     try {
       await axios.delete(`${API_URL}/api/activities/${id}`, { headers: { Authorization: `Bearer ${token}` } });
     } catch (err) {
-      toast.error(err.response?.data?.error || "Delete failed");
+      notifyError(err.response?.data?.error || "Delete failed");
     }
   };
 
@@ -569,8 +570,7 @@ function CompageActivitiesPage({ socket }) {
         </form>
       </Modal>
 
-      <ToastContainer position="top-right" />
-    </div>
+</div>
   );
 }
 

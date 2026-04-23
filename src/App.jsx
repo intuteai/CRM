@@ -17,6 +17,7 @@ import LoginModal from "./components/pages/LoginModal.jsx";
 import Navbar from "./components/pages/Navbar.jsx";
 import NotificationCenter from "./components/pages/NotificationCenter.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
+import ChatbotWidget from "./chatbot/ChatbotWidget.jsx";
 import "./styles.css";
 
 function App() {
@@ -129,6 +130,7 @@ function App() {
         />
       )}
       <NotificationCenter />
+      {userRole === ROLES.ADMIN && <ChatbotWidget />}
 
       <Routes>
         {/* Generate routes from config */}

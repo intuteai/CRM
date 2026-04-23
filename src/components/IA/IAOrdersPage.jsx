@@ -8,10 +8,10 @@ import {
   ChevronDown, ChevronRight, StickyNote, Filter,
   ArrowUpDown, Hash, Cpu, Monitor, RotateCcw,
 } from 'lucide-react';
-import { toast, ToastContainer } from 'react-toastify';
 import axios from 'axios';
 import debounce from 'lodash.debounce';
 import Modal from 'react-modal';
+import { useNotify } from '../../hooks/useNotify';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 const MAX_CACHED = 200;
@@ -125,7 +125,7 @@ function IAOrdersPage({ socket }) {
   const fetchOrders = useCallback(async (reset = false, currentCursor = null) => {
     if (loadingRef.current) return;
     const token = localStorage.getItem('token');
-    if (!token) { toast.error('Please log in again'); return; }
+    if (!token) { notifyError('Please log in again'); return; }
 
     loadingRef.current = true;
     setLoading(true);
@@ -148,7 +148,7 @@ function IAOrdersPage({ socket }) {
       setHasMore(Boolean(res.data?.cursor));
     } catch (err) {
       if (err?.name === 'CanceledError') return;
-      if (mountedRef.current) toast.error(err.response?.data?.error || 'Failed to load orders');
+      if (mountedRef.current) notifyError(err.response?.data?.error || 'Failed to load orders');
     } finally {
       if (mountedRef.current) { setLoading(false); loadingRef.current = false; abortRef.current = null; }
     }
@@ -159,9 +159,9 @@ function IAOrdersPage({ socket }) {
   // ── Socket ────────────────────────────────────────────────────
   useEffect(() => {
     if (!socket) return;
-    const onCreate = (o) => { setOrders(prev => [o, ...prev.filter(x => x.order_id !== o.order_id)].slice(0, MAX_CACHED)); setTotal(t => t + 1); toast.success(`New order: ${o.invoice_number}`); };
-    const onUpdate = (o) => { setOrders(prev => prev.map(x => x.order_id === o.order_id ? o : x)); toast.info(`Order updated: ${o.invoice_number}`); };
-    const onDelete = ({ order_id }) => { setOrders(prev => prev.filter(x => x.order_id !== order_id)); setTotal(t => Math.max(0, t - 1)); toast.warn('Order deleted'); };
+    const onCreate = (o) => { setOrders(prev => [o, ...prev.filter(x => x.order_id !== o.order_id)].slice(0, MAX_CACHED)); setTotal(t => t + 1); notifySuccess(`New order: ${o.invoice_number}`); };
+    const onUpdate = (o) => { setOrders(prev => prev.map(x => x.order_id === o.order_id ? o : x)); notifyInfo(`Order updated: ${o.invoice_number}`); };
+    const onDelete = ({ order_id }) => { setOrders(prev => prev.filter(x => x.order_id !== order_id)); setTotal(t => Math.max(0, t - 1)); notifyWarning('Order deleted'); };
     socket.on('ia_orders:created', onCreate);
     socket.on('ia_orders:updated', onUpdate);
     socket.on('ia_orders:deleted', onDelete);
@@ -174,6 +174,7 @@ function IAOrdersPage({ socket }) {
 
   // ── Debounced search ──────────────────────────────────────────
   const debouncedSearch = useMemo(() => debounce(v => { if (mountedRef.current) setSearch(v); }, 300), []);
+  const { notifySuccess, notifyError, notifyInfo, notifyWarning } = useNotify();
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
   // ── Filter + sort ─────────────────────────────────────────────
@@ -279,13 +280,13 @@ function IAOrdersPage({ socket }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
-    if (!token) { toast.error('Please log in again'); return; }
+    if (!token) { notifyError('Please log in again'); return; }
 
     // VCU fields are required; HMI fields are optional (but all-or-nothing)
     const validItems = form.items.filter(i =>
       i.vcu_serial.trim() && i.vcu_make.trim() && i.vcu_model.trim()
     );
-    if (validItems.length === 0) { toast.error('Add at least one complete VCU unit'); return; }
+    if (validItems.length === 0) { notifyError('Add at least one complete VCU unit'); return; }
 
     // Validate HMI: if any HMI field is filled, all must be filled
     for (let idx = 0; idx < validItems.length; idx++) {
@@ -293,7 +294,7 @@ function IAOrdersPage({ socket }) {
       const hmiFields = [i.hmi_imei.trim(), i.hmi_make.trim(), i.hmi_model.trim()];
       const filledCount = hmiFields.filter(Boolean).length;
       if (filledCount > 0 && filledCount < 3) {
-        toast.error(`Unit ${idx + 1}: Fill all HMI fields (IMEI, Make, Model) or leave all blank`);
+        notifyError(`Unit ${idx + 1}: Fill all HMI fields (IMEI, Make, Model) or leave all blank`);
         return;
       }
     }
@@ -306,21 +307,21 @@ function IAOrdersPage({ socket }) {
       isEdit
         ? await axios.put(url, payload,  { headers: { Authorization: `Bearer ${token}` } })
         : await axios.post(url, payload, { headers: { Authorization: `Bearer ${token}` } });
-      toast.success(isEdit ? 'Order updated!' : 'Order created!');
+      notifySuccess(isEdit ? 'Order updated!' : 'Order created!');
       closeModal();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed');
+      notifyError(err.response?.data?.error || 'Failed');
     }
   };
 
   const handleDelete = async (order) => {
     if (!window.confirm(`Delete order ${order.invoice_number}? This cannot be undone.`)) return;
     const token = localStorage.getItem('token');
-    if (!token) { toast.error('Please log in again'); return; }
+    if (!token) { notifyError('Please log in again'); return; }
     try {
       await axios.delete(`${API_URL}/api/ia-orders/${order.order_id}`, { headers: { Authorization: `Bearer ${token}` } });
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Delete failed');
+      notifyError(err.response?.data?.error || 'Delete failed');
     }
   };
 
@@ -819,8 +820,7 @@ function IAOrdersPage({ socket }) {
         </form>
       </Modal>
 
-      <ToastContainer position="top-right" />
-    </div>
+</div>
   );
 }
 

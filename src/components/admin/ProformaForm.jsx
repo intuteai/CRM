@@ -3,8 +3,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import Modal from 'react-modal';
 import axios from 'axios';
 import { Plus, Download, Trash2, FileText } from 'lucide-react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useNotify } from '../../hooks/useNotify';
     
 Modal.setAppElement('#root');
 
@@ -27,6 +26,7 @@ export default function ProformaForm() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const abortRef = useRef(null);
+  const { notifySuccess, notifyError } = useNotify();
 
   // Proforma no kept as previous default, but the main screen will NOT display it.
   const DEFAULT_PROFORMA = '086/25-26';
@@ -114,12 +114,12 @@ export default function ProformaForm() {
     const token = localStorage.getItem('token');
 
     if (!token) {
-      toast.error('Please login first.');
+      notifyError('Please login first.');
       return;
     }
 
     if (!form.proforma_no) {
-      toast.error('Proforma No is required.');
+      notifyError('Proforma No is required.');
       return;
     }
 
@@ -179,10 +179,10 @@ export default function ProformaForm() {
       a.remove();
       window.URL.revokeObjectURL(url);
 
-      toast.success('Proforma PDF downloaded.');
+      notifySuccess('Proforma PDF downloaded.');
       setIsOpen(false);
     } catch (err) {
-      toast.error('Failed to generate PDF.');
+      notifyError('Failed to generate PDF.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -203,9 +203,7 @@ export default function ProformaForm() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
-      <ToastContainer position="top-right" />
-
-      <div className="max-w-5xl mx-auto text-center">
+<div className="max-w-5xl mx-auto text-center">
         <h1 className="text-3xl font-bold text-gray-800 mb-6 tracking-tight">Proforma Generator</h1>
 
         {/* NOTE: removed the small "Proforma No / Date" text from the main screen as requested */}

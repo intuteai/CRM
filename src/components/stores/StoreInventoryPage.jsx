@@ -21,10 +21,9 @@ import {
 } from "lucide-react";
 import { debounce } from "lodash";
 import { io } from "socket.io-client";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 import * as XLSX from "xlsx";
 import QRCode from "qrcode";
+import { useNotify } from '../../hooks/useNotify';
 
 const formatDate = (dateString) => {
   const date = new Date(dateString);
@@ -724,11 +723,11 @@ function StoreInventoryPage({ userRole }) {
       transports: ["websocket"],
     });
     socket.on("connect", () => {
-      toast.success("Connected to real-time updates!", { autoClose: 2000 });
+      notifySuccess("Connected to real-time updates!", { autoClose: 2000 });
     });
     socket.on("connect_error", (err) => {
       console.error("Socket error:", err);
-      toast.error("Failed to connect to real-time updates.", {
+      notifyError("Failed to connect to real-time updates.", {
         autoClose: 3000,
       });
     });
@@ -747,7 +746,7 @@ function StoreInventoryPage({ userRole }) {
           ...updatedItems[itemIndex],
           stock_quantity: Number(stock_quantity),
         };
-        toast.info(
+        notifyInfo(
           `Stock for ${updatedItems[itemIndex].product_name} updated to ${stock_quantity}`,
           { autoClose: 2000 },
         );
@@ -773,7 +772,7 @@ function StoreInventoryPage({ userRole }) {
         });
       } catch (err) {
         console.error("QR code generation failed:", err);
-        toast.error("Failed to generate QR code", { autoClose: 3000 });
+        notifyError("Failed to generate QR code", { autoClose: 3000 });
       }
     },
     [],
@@ -875,7 +874,7 @@ function StoreInventoryPage({ userRole }) {
           const worksheet = workbook.Sheets[sheetName];
           const jsonData = XLSX.utils.sheet_to_json(worksheet);
           if (!jsonData.length) {
-            toast.error("Excel file is empty", { autoClose: 3000 });
+            notifyError("Excel file is empty", { autoClose: 3000 });
             return;
           }
           const errors = [];
@@ -897,10 +896,10 @@ function StoreInventoryPage({ userRole }) {
             }
           });
           if (errors.length) {
-            errors.forEach((error) => toast.error(error, { autoClose: 5000 }));
+            errors.forEach((error) => notifyError(error, { autoClose: 5000 }));
           }
           if (!validRows.length) {
-            toast.error("No valid rows to import.", { autoClose: 5000 });
+            notifyError("No valid rows to import.", { autoClose: 5000 });
             return;
           }
           const token = localStorage.getItem("token");
@@ -953,7 +952,7 @@ function StoreInventoryPage({ userRole }) {
               else createdCount++;
             } catch (err) {
               failedCount++;
-              toast.error(`Row ${validRows.indexOf(row) + 1}: ${err.message}`, {
+              notifyError(`Row ${validRows.indexOf(row) + 1}: ${err.message}`, {
                 autoClose: 3000,
               });
             }
@@ -961,12 +960,12 @@ function StoreInventoryPage({ userRole }) {
           if (createdCount || updatedCount) {
             await refetchData();
             setPage(0);
-            toast.success(
+            notifySuccess(
               `Imported: ${createdCount} created, ${updatedCount} updated${failedCount ? `, ${failedCount} failed` : ""}`,
               { autoClose: 5000 },
             );
           } else {
-            toast.error(
+            notifyError(
               `Import failed: ${failedCount} rows could not be processed`,
               { autoClose: 5000 },
             );
@@ -975,7 +974,7 @@ function StoreInventoryPage({ userRole }) {
         reader.readAsArrayBuffer(file);
         event.target.value = "";
       } catch (err) {
-        toast.error(`Import failed: ${err.message}`, { autoClose: 3000 });
+        notifyError(`Import failed: ${err.message}`, { autoClose: 3000 });
       }
     },
     [validateImportRow, refetchData],
@@ -1002,7 +1001,7 @@ function StoreInventoryPage({ userRole }) {
     }, []);
     worksheet["!cols"] = colWidths.map((width) => ({ wch: width }));
     XLSX.writeFile(workbook, "Finished_Goods_Inventory.xlsx");
-    toast.success("Finished Goods exported to Excel!", { autoClose: 2000 });
+    notifySuccess("Finished Goods exported to Excel!", { autoClose: 2000 });
   }, [filteredInventory]);
 
   const handleSearchChange = (e) => {
@@ -1425,7 +1424,7 @@ function StoreInventoryPage({ userRole }) {
                   setSearchTerm("");
                   setShowCreateForm(false);
                   refetchData();
-                  toast.success("Item created successfully");
+                  notifySuccess("Item created successfully");
                 }}
                 onClose={() => setShowCreateForm(false)}
               />
@@ -1486,7 +1485,7 @@ function StoreInventoryPage({ userRole }) {
                   setShowEditForm(false);
                   setSelectedItem(null);
                   refetchData();
-                  toast.success("Item updated successfully");
+                  notifySuccess("Item updated successfully");
                 }}
                 onClose={() => setShowEditForm(false)}
               />
@@ -1560,7 +1559,7 @@ function StoreInventoryPage({ userRole }) {
                   link.href = canvas.toDataURL("image/png");
                   link.download = `qrcode_${selectedBarcode}.png`;
                   link.click();
-                  toast.success("QR code downloaded successfully", {
+                  notifySuccess("QR code downloaded successfully", {
                     autoClose: 2000,
                   });
                 }}
@@ -1572,8 +1571,7 @@ function StoreInventoryPage({ userRole }) {
           </div>
         )}
 
-        <ToastContainer position="top-right" autoClose={3000} />
-      </div>
+</div>
     </div>
   );
 }
@@ -1746,6 +1744,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     product_code: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const validateField = (name, value) => {
     if (name === "product_name" && !value.trim())

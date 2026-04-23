@@ -16,8 +16,7 @@ import {
   X,
   Calendar,
 } from "lucide-react";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { useNotify } from '../../hooks/useNotify';
 
 const STATUS = {
   PENDING: "Pending",
@@ -100,7 +99,7 @@ const useFetchData = ({ userRole }) => {
       setError(null);
     } catch (err) {
       setError(err.message || "Failed to fetch data");
-      toast.error(err.message || "Failed to fetch data");
+      notifyError(err.message || "Failed to fetch data");
     } finally {
       setIsLoading(false);
     }
@@ -134,6 +133,7 @@ function ProductionOrdersPage({ socket, userRole }) {
     direction: "desc",
   });
   const tableRef = useRef(null);
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const {
     orders,
@@ -164,7 +164,7 @@ function ProductionOrdersPage({ socket, userRole }) {
           o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o,
         ),
       );
-      toast.info(`Order #${updatedOrder.id} updated`, { autoClose: 2500 });
+      notifyInfo(`Order #${updatedOrder.id} updated`, { autoClose: 2500 });
     });
 
     return () => {
@@ -273,7 +273,7 @@ function ProductionOrdersPage({ socket, userRole }) {
 
       const updatedOrder = await res.json();
 
-      toast.success(`Order #${orderId} → ${updatedOrder.status}`, {
+      notifySuccess(`Order #${orderId} → ${updatedOrder.status}`, {
         autoClose: 2000,
       });
 
@@ -283,7 +283,7 @@ function ProductionOrdersPage({ socket, userRole }) {
       );
     } catch (err) {
       console.error("Status update error:", err);
-      toast.error(err.message || "Failed to update status");
+      notifyError(err.message || "Failed to update status");
 
       // Rollback optimistic UI
       setOrders((prev) =>
@@ -628,15 +628,7 @@ function ProductionOrdersPage({ socket, userRole }) {
         </div>
       </div>
 
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        closeOnClick
-        pauseOnHover
-        draggable
-      />
-    </div>
+</div>
   );
 }
 
