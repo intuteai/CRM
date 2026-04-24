@@ -3,7 +3,9 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import Modal from "react-modal";
 import axios from "axios";
 import { Plus, Download, Trash2, FileText, Search } from "lucide-react";
+import { useSelector } from 'react-redux';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 Modal.setAppElement("#root");
 
@@ -41,6 +43,8 @@ export default function DeliveryChallanForm() {
   const DEFAULT_DATE = new Date().toISOString().slice(0, 10);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
+  const socketStatus = useSelector(state => state.auth.socketStatus);
   const abortRef = useRef(null);
   const [form, setForm] = useState({
     challan_no: "",
@@ -105,7 +109,7 @@ export default function DeliveryChallanForm() {
       );
     } catch (err) {
       console.error("Failed to load product lists:", err);
-      notifyError("Failed to load inventory/raw lists.");
+      setFetchError("Failed to load inventory/raw lists.");
     } finally {
       setLoadingLists(false);
     }
@@ -340,7 +344,7 @@ export default function DeliveryChallanForm() {
       fetchLists();
     } catch (err) {
       console.error("Generate challan error:", err);
-      notifyError("Failed to generate delivery challan.");
+      setFetchError("Failed to generate delivery challan.");
     } finally {
       setLoading(false);
       abortRef.current = null;
@@ -486,6 +490,8 @@ export default function DeliveryChallanForm() {
 
   const itemsForRender = useMemo(() => form.items, [form.items]);
   const { notifySuccess, notifyError } = useNotify();
+
+  if (socketStatus === 'error' || fetchError) return <ConnectionError onRetry={() => setFetchError(null)} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-200 to-gray-300 p-6">

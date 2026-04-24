@@ -31,16 +31,6 @@ function CustomerQueriesPage() {
       reconnectionDelay: 1000, // Delay between reconnection attempts (ms)
     });
 
-    socket.on('connect', () => {
-      console.log('Connected to Socket.IO');
-      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
-      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
-    });
-
     socket.on('newQuery', (query) => {
       setQueries(prev => {
         if (prev.some(q => q.queryId === query.queryId)) return prev;

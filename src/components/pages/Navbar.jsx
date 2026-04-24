@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LogOut, User, Clock, Menu, X } from 'lucide-react';
-import { io } from 'socket.io-client';
 import { useNotify } from '../../hooks/useNotify';
 
 function Navbar({ userRole, userName, token, setUserRole, setShowLogin, handleLogout }) {
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { notifySuccess, notifyError, notifyInfo } = useNotify();
+  const { notifySuccess, notifyError } = useNotify();
 
   useEffect(() => {
     const updateTime = () => {
@@ -19,47 +18,6 @@ function Navbar({ userRole, userName, token, setUserRole, setShowLogin, handleLo
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    console.log('Socket.IO connecting to:', backendUrl);
-    const socket = io(backendUrl, {
-      withCredentials: true,
-      transports: ['websocket'],
-    });
-    socket.on('connect', () => console.log('Connected to Socket.IO'));
-    socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
-      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
-    });
-
-    if (userRole === 'admin') {
-      socket.on('orderUpdate', (updatedOrder) => {
-        notifyInfo(`Order #${updatedOrder.id} updated`, { autoClose: 3000 });
-      });
-      socket.on('newQuery', (query) => {
-        notifyInfo(`New query #${query.queryId} received`, { autoClose: 3000 });
-      });
-      socket.on('queryUpdate', (updatedQuery) => {
-        notifyInfo(`Query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
-      });
-      socket.on('stockUpdate', () => {
-        notifyInfo('Inventory stock levels updated', { autoClose: 3000 });
-      });
-      socket.on('customerUpdate', (updatedCustomer) => {
-        notifyInfo(`Customer ${updatedCustomer.name} updated`, { autoClose: 3000 });
-      });
-    } else if (userRole === 'customer') {
-      socket.on('orderUpdate', (updatedOrder) => {
-        notifyInfo(`Your order #${updatedOrder.id} updated`, { autoClose: 3000 });
-      });
-      socket.on('queryUpdate', (updatedQuery) => {
-        notifyInfo(`Your query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
-      });
-    }
-
-    return () => socket.disconnect();
-  }, [userRole]);
 
   const handleLogoutClick = () => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';

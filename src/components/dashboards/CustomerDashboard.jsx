@@ -1,45 +1,29 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, MessageSquare } from 'lucide-react'; // Importing lucide-react icons
-import { io } from 'socket.io-client';
+import { Package, MessageSquare } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 
-// Use the environment variable for the backend URL
-const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+function CustomerDashboard({ socket }) {
+  const { notifyInfo } = useNotify();
 
-function CustomerDashboard() {
-  const { notifySuccess, notifyError, notifyInfo } = useNotify();
   useEffect(() => {
-    const socket = io(SOCKET_URL, {
-      reconnection: true, // Enable reconnection attempts
-      reconnectionAttempts: 5, // Number of reconnection attempts
-      reconnectionDelay: 1000, // Delay between reconnection attempts (ms)
-    });
+    if (!socket) return;
 
-    socket.on('connect', () => {
-      console.log('Connected to Socket.IO');
-      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
-      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
-    });
-
-    // Customer-specific real-time notifications
-    socket.on('orderUpdate', (updatedOrder) => {
+    const onOrderUpdate = (updatedOrder) => {
       notifyInfo(`Your order #${updatedOrder.id} updated`, { autoClose: 3000 });
-    });
-    socket.on('queryUpdate', (updatedQuery) => {
-      notifyInfo(`Your query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
-    });
-
-    // Cleanup on unmount
-    return () => {
-      socket.disconnect();
-      console.log('Socket.IO disconnected');
     };
-  }, []); // Empty dependency array since SOCKET_URL is constant
+    const onQueryUpdate = (updatedQuery) => {
+      notifyInfo(`Your query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
+    };
+
+    socket.on('orderUpdate', onOrderUpdate);
+    socket.on('queryUpdate', onQueryUpdate);
+
+    return () => {
+      socket.off('orderUpdate', onOrderUpdate);
+      socket.off('queryUpdate', onQueryUpdate);
+    };
+  }, [socket]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">

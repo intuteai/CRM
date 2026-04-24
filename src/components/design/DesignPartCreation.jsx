@@ -17,6 +17,7 @@ import {
   Edit2,
 } from "lucide-react";
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
@@ -26,6 +27,7 @@ function DesignPartCreation() {
   const [partTypes, setPartTypes] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const [sortConfig, setSortConfig] = useState({
     key: "partCode",
     direction: "asc",
@@ -118,9 +120,7 @@ function DesignPartCreation() {
       setTotal(total || data.length);
     } catch (err) {
       console.error("Parts error:", err);
-      notifyError(err.message || "Failed to load parts");
-      setParts([]);
-      setTotal(0);
+      setFetchError(err.message || "Failed to load parts");
     } finally {
       setIsLoading(false);
     }
@@ -463,6 +463,8 @@ function DesignPartCreation() {
       </div>
     );
   }
+
+  if (fetchError) return <ConnectionError onRetry={fetchParts} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">

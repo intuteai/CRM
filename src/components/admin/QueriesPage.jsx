@@ -4,6 +4,7 @@ import { formatDate } from '../../utils/helpers';
 import { useQueries } from '../../hooks/useQueries';
 import { ArrowDownUp, X } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -29,16 +30,6 @@ function QueriesPage() {
       reconnectionDelay: 1000,
       withCredentials: true,
       transports: ['websocket'],
-    });
-
-    socket.on('connect', () => {
-      console.log('Connected to Socket.IO');
-      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
-      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
 
     socket.on('newQuery', (query) => {
@@ -223,6 +214,8 @@ function QueriesPage() {
       </div>
     );
   }
+
+  if (queryError) return <ConnectionError />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6 md:p-10">

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowDownUp, X } from 'lucide-react';
 import io from 'socket.io-client';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -221,11 +222,7 @@ function CustomerList() {
       </div>
     </div>
   );
-  if (error && !customers.length) return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
-      <div className="text-red-600 text-xl font-medium bg-red-100 px-6 py-3 rounded-lg shadow">{error}</div>
-    </div>
-  );
+  if (error && !customers.length) return <ConnectionError />;
 
   return (
     <ErrorBoundary>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, Clock, LogIn, LogOut, MapPin, RefreshCw, TrendingUp } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 // ──────────────────────────────────────────────────────────────
 // TIMEZONE-SAFE FORMATTERS (no Date → UTC conversions)
@@ -110,6 +111,8 @@ function IAAttendanceHistory({ socket }) {
     present: attendance.filter((r) => r.present_absent?.toLowerCase() === 'present').length,
     absent: attendance.filter((r) => r.present_absent?.toLowerCase() === 'absent').length,
   };
+
+  if (error) return <ConnectionError onRetry={fetchAttendance} />;
 
   return (
     <div className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-amber-50 via-orange-50 to-gray-100">

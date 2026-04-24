@@ -5,6 +5,7 @@ const initialState = {
   userName: null,
   token: null,
   showLogin: false,
+  socketStatus: "idle", // 'idle' | 'connected' | 'error'
 };
 
 const authSlice = createSlice({
@@ -22,13 +23,17 @@ const authSlice = createSlice({
       state.userName = null;
       state.token = null;
       state.showLogin = false;
+      state.socketStatus = "idle";
     },
     toggleLogin: (state, action) => {
       state.showLogin = action.payload;
     },
+    setSocketStatus: (state, action) => {
+      state.socketStatus = action.payload;
+    },
   },
 });
 
-export const { setAuth, logout, toggleLogin } = authSlice.actions;
+export const { setAuth, logout, toggleLogin, setSocketStatus } = authSlice.actions;
 
 export default authSlice.reducer;

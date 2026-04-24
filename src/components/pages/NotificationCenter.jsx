@@ -7,7 +7,7 @@ export default function NotificationCenter() {
   const dispatch = useDispatch();
 
   return (
-    <div className="fixed top-5 right-5 flex flex-col space-y-4 z-50">
+    <div className="fixed bottom-5 right-5 flex flex-col-reverse space-y-4 space-y-reverse z-50">
       {notifications.map((n) => (
         <NotificationItem
           key={n.id}

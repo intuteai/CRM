@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { debounce } from 'lodash';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -474,14 +475,7 @@ function MotorRecipesPage({ userRole }) {
     );
   }
 
-  if (error && !recipes.length) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-red-700" role="alert">
-        {error}
-        <button onClick={refetch} className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600">Retry</button>
-      </div>
-    );
-  }
+  if (error && !recipes.length) return <ConnectionError onRetry={refetch} />;
 
   const columns = [
     { key: 'recipe_id',     label: 'ID'           },

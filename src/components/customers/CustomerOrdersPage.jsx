@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 // Use the environment variable for the backend URL
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -100,16 +101,6 @@ function CustomerOrdersPage() {
       reconnection: true, // Enable reconnection attempts
       reconnectionAttempts: 5, // Number of reconnection attempts
       reconnectionDelay: 1000, // Delay between reconnection attempts (ms)
-    });
-
-    socket.on('connect', () => {
-      console.log('Connected to Socket.IO');
-      notifySuccess('Connected to real-time updates!', { autoClose: 2000 });
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
-      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
     });
 
     socket.on('stockUpdate', () => {
@@ -231,19 +222,7 @@ function CustomerOrdersPage() {
     </div>
   );
 
-  if (error && !showCreateForm) return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" role="alert">
-      <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg flex items-center">
-        {error}
-        <button 
-          onClick={() => refetchData(true)} 
-          className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
-        >
-          Retry
-        </button>
-      </div>
-    </div>
-  );
+  if (error && !showCreateForm) return <ConnectionError onRetry={refetchData} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">

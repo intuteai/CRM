@@ -8,6 +8,7 @@ import React, {
 import { ArrowDownUp, X, MoreVertical } from "lucide-react";
 import io from "socket.io-client";
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
@@ -352,17 +353,6 @@ useEffect(() => {
 
   useEffect(() => {
 
-    socket.on("connect", () => {
-      console.log("Connected to Socket.IO in EnquiryPage");
-      notifySuccess("Connected to real-time updates!", { autoClose: 2000 });
-    });
-
-    socket.on("connect_error", (err) => {
-      console.error("Socket connection error:", err);
-      notifyError("Failed to connect to real-time updates.", {
-        autoClose: 3000,
-      });
-    });
 
     socket.on("enquiryUpdate", (payload) => {
       const {
@@ -958,15 +948,7 @@ useEffect(() => {
     );
   }
 
-  if (error && !enquiries.length) {
-    return (
-      <div className="min-h-screen.bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
-        <div className="text-red-600 text-xl font-medium bg-red-100 px-6 py-3 rounded-lg shadow">
-          {error}
-        </div>
-      </div>
-    );
-  }
+  if (error && !enquiries.length) return <ConnectionError onRetry={() => fetchEnquiries(true)} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6 md:p-10">

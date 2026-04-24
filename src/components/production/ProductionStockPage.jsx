@@ -24,6 +24,7 @@ import { io } from "socket.io-client";
 import * as XLSX from "xlsx";
 import QRCode from "qrcode";
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const formatCurrency = (amount) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(
@@ -753,15 +754,6 @@ function ProductionStockPage() {
       transports: ["websocket"],
     });
 
-    socket.on("connect", () =>
-      notifySuccess("Connected to real-time updates!", { autoClose: 2000 }),
-    );
-    socket.on("connect_error", () =>
-      notifyError("Failed to connect to real-time updates.", {
-        autoClose: 3000,
-      }),
-    );
-
     // ────────────────────────────────────────────────
     // FIXED: safest approach — refetch full list on any update
     // Avoids desync, duplicate items, missing items, stale data
@@ -1201,21 +1193,7 @@ function ProductionStockPage() {
     );
   }
 
-  if (error && !showModal && !showDescriptionModal && !showBarcodeModal) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 flex items-center justify-center">
-        <div className="text-red-700 text-lg text-center">
-          <p>{error}</p>
-          <button
-            onClick={refetchData}
-            className="mt-4 p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (error && !showModal && !showDescriptionModal && !showBarcodeModal) return <ConnectionError onRetry={refetchData} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">

@@ -24,6 +24,7 @@ import { io } from "socket.io-client";
 import * as XLSX from "xlsx";
 import QRCode from "qrcode";
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const formatDate = (dateString) => {
   const date = new Date(dateString);
@@ -722,15 +723,6 @@ function StoreInventoryPage({ userRole }) {
       withCredentials: true,
       transports: ["websocket"],
     });
-    socket.on("connect", () => {
-      notifySuccess("Connected to real-time updates!", { autoClose: 2000 });
-    });
-    socket.on("connect_error", (err) => {
-      console.error("Socket error:", err);
-      notifyError("Failed to connect to real-time updates.", {
-        autoClose: 3000,
-      });
-    });
     socket.on("inventoryUpdate", ({ product_id, stock_quantity }) => {
       setInventoryItems((prev) => {
         if (!Array.isArray(prev)) return prev || [];
@@ -1101,21 +1093,7 @@ function StoreInventoryPage({ userRole }) {
     !showEditForm &&
     !showDescriptionModal &&
     !showBarcodeModal
-  )
-    return (
-      <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 flex items-center justify-center"
-        role="alert"
-      >
-        <div className="text-red-700 text-lg">{error}</div>
-        <button
-          onClick={() => refetchData()}
-          className="ml-4 p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-        >
-          Retry
-        </button>
-      </div>
-    );
+  ) return <ConnectionError onRetry={refetchData} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">

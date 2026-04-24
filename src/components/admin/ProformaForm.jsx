@@ -3,7 +3,9 @@ import React, { useState, useMemo, useRef } from 'react';
 import Modal from 'react-modal';
 import axios from 'axios';
 import { Plus, Download, Trash2, FileText } from 'lucide-react';
+import { useSelector } from 'react-redux';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
     
 Modal.setAppElement('#root');
 
@@ -25,6 +27,8 @@ const FIXED_RTGS = {
 export default function ProformaForm() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
+  const socketStatus = useSelector(state => state.auth.socketStatus);
   const abortRef = useRef(null);
   const { notifySuccess, notifyError } = useNotify();
 
@@ -182,8 +186,8 @@ export default function ProformaForm() {
       notifySuccess('Proforma PDF downloaded.');
       setIsOpen(false);
     } catch (err) {
-      notifyError('Failed to generate PDF.');
       console.error(err);
+      setFetchError('Failed to generate PDF.');
     } finally {
       setLoading(false);
       abortRef.current = null;
@@ -200,6 +204,8 @@ export default function ProformaForm() {
     const yyyy = d.getFullYear();
     return `${dd}/${mm}/${yyyy}`;
   };
+
+  if (socketStatus === 'error' || fetchError) return <ConnectionError onRetry={() => setFetchError(null)} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">

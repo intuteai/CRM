@@ -22,6 +22,7 @@ import { io } from 'socket.io-client';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
@@ -814,8 +815,6 @@ function ProductionInventoryPage() {
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
     const socket = io(backendUrl, { withCredentials: true, transports: ['websocket'] });
-    socket.on('connect', () => console.log('Connected to Socket.IO'));
-    socket.on('connect_error', (err) => { console.error('Socket connection error:', err); notifyError('Failed to connect to real-time updates.', { autoClose: 3000 }); });
     socket.on('stockUpdate', () => { refetchData(); notifyInfo('Inventory updated in real-time', { autoClose: 1200 }); if (tableRef.current) tableRef.current.focus(); });
     return () => socket.disconnect();
   }, [refetchData]);
@@ -995,13 +994,7 @@ function ProductionInventoryPage() {
   if (isLoading && !allInventory.length)
     return <div className="min-h-screen flex items-center justify-center" aria-live="polite"><div className="text-gray-600 text-xl animate-pulse">Loading inventory...</div></div>;
 
-  if (error && !showEditForm && !showCreateForm)
-    return (
-      <div className="min-h-screen flex items-center justify-center text-red-700" role="alert">
-        {error}
-        <button onClick={() => refetchData()} className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300">Retry</button>
-      </div>
-    );
+  if (error && !showEditForm && !showCreateForm) return <ConnectionError onRetry={refetchData} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">

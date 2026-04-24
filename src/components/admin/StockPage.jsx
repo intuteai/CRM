@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
@@ -803,14 +804,6 @@ function StockPage({ socket }) {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on("connect", () =>
-      notifySuccess("Connected to real-time updates!", { autoClose: 2000 }),
-    );
-    socket.on("connect_error", () =>
-      notifyError("Failed to connect to real-time updates.", {
-        autoClose: 3000,
-      }),
-    );
     socket.on("disconnect", () =>
       notifyWarning("Real-time connection lost"),
     );
@@ -1507,24 +1500,7 @@ function StockPage({ socket }) {
     );
   }
 
-  if (error && !showModal && !showDescriptionModal) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg text-center">
-          <p className="mb-4">{error}</p>
-          <button
-            onClick={() => {
-              setError(null);
-              fetchStock();
-            }}
-            className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (error && !showModal && !showDescriptionModal) return <ConnectionError onRetry={fetchStock} />;
 
   return (
     <ErrorBoundary>

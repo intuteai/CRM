@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { FileText } from "lucide-react";
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 /* 🔹 Status → Card Style Mapper */
 const getStatusStyles = (status) => {
@@ -83,6 +84,8 @@ function WorkOrderPage() {
     fetchOrders();
   }, []);
 
+  if (error) return <ConnectionError onRetry={fetchOrders} />;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
       <div className="w-full max-w-full px-6 space-y-10">
@@ -137,7 +140,6 @@ function WorkOrderPage() {
         </div>
 
         {loading && <p className="text-gray-600">Loading orders...</p>}
-        {error && <p className="text-red-600">{error}</p>}
 
         {!loading && orders.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

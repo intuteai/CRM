@@ -2,7 +2,9 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import Modal from 'react-modal';
 import axios from 'axios';
 import { Plus, Download, Trash2, Eye } from 'lucide-react';
+import { useSelector } from 'react-redux';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -58,6 +60,8 @@ const formatINR = (n) => {
 export default function QuotationForm() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
+  const socketStatus = useSelector(state => state.auth.socketStatus);
   const abortRef = useRef(null);
 
   // Load default terms from localStorage (if present) or fallback
@@ -230,7 +234,7 @@ export default function QuotationForm() {
       setIsOpen(false);
     } catch (err) {
       if (err.name === 'CanceledError' || err.name === 'AbortError') notifyInfo('Request cancelled');
-      else { console.error(err); notifyError(err.response?.data?.error || 'Failed to generate quotation'); }
+      else { console.error(err); setFetchError(err.response?.data?.error || 'Failed to generate quotation'); }
     } finally {
       setLoading(false);
       abortRef.current = null;
@@ -265,6 +269,8 @@ export default function QuotationForm() {
   };
 
   /* ---------- Render ---------- */
+  if (socketStatus === 'error' || fetchError) return <ConnectionError onRetry={() => setFetchError(null)} />;
+
   return (
     <div className="p-6">
 <div className="max-w-5xl mx-auto">

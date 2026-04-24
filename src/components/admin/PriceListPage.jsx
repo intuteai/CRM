@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { formatDate } from '../../utils/helpers';
 import { ArrowDownUp, X, RefreshCw, Search, AlertCircle, Edit, Save, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -102,16 +103,6 @@ function PriceListPage({ socket }) {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('connect', () => {
-      console.log('Connected to Socket.IO from PriceListPage');
-      notifyInfo('Connected to real-time updates!', { autoClose: 2000 });
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
-      notifyError('Failed to connect to real-time updates.', { autoClose: 3000 });
-    });
-
     socket.on('priceListUpdate', () => {
       console.log('Price list update received');
       fetchPriceList(page, debouncedSearch);
@@ -120,8 +111,6 @@ function PriceListPage({ socket }) {
     });
 
     return () => {
-      socket.off('connect');
-      socket.off('connect_error');
       socket.off('priceListUpdate');
     };
   }, [socket, fetchPriceList, page, debouncedSearch]);
@@ -245,25 +234,7 @@ function PriceListPage({ socket }) {
     );
   }
 
-  if (error && !priceItems.length) {
-    return (
-      <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
-        role="alert"
-      >
-        <div className="text-red-700 flex items-center gap-4">
-          <AlertCircle size={24} />
-          {error}
-          <button
-            onClick={() => fetchPriceList(0, '', true)}
-            className="ml-4 px-4 py-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (error && !priceItems.length) return <ConnectionError onRetry={() => fetchPriceList(0, '', true)} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">

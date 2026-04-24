@@ -3,6 +3,7 @@ import useProblems from '../../hooks/useProblems';
 import { formatDate } from '../../utils/helpers';
 import { RefreshCw, Search, AlertCircle, CheckCircle, XCircle, Filter } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -173,19 +174,7 @@ function ProblemsPage({ socket }) {
     return <div className="p-6 text-center text-gray-600">Loading...</div>;
   }
 
-  if (error) {
-    return (
-      <div className="p-6 text-center">
-        <p className="text-red-600 mb-4">Error: {error}</p>
-        <button
-          onClick={handleRefresh}
-          className="flex items-center mx-auto bg-amber-400 text-white p-2 rounded-xl hover:bg-amber-500 transition-all duration-300"
-        >
-          <RefreshCw className="w-5 h-5 mr-2" /> Try Again
-        </button>
-      </div>
-    );
-  }
+  if (error) return <ConnectionError onRetry={handleRefresh} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">

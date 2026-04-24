@@ -6,6 +6,7 @@ const notificationSlice = createSlice({
   reducers: {
     addNotification: {
       reducer: (state, action) => {
+        if (state.some((n) => n.message === action.payload.message)) return;
         state.push(action.payload);
       },
       prepare: ({ type, message }) => ({

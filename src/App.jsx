@@ -8,7 +8,7 @@ import {
 } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 
-import { setAuth, logout, toggleLogin } from "./features/auth/authSlice.js";
+import { setAuth, logout, toggleLogin, setSocketStatus } from "./features/auth/authSlice.js";
 import { connectSocket, disconnectSocket, getSocket } from "./services/socket.js";
 import { ROLES, DASHBOARD_ROUTES, allowedPathsByRole } from "./constants.js";
 import { routeConfig, renderRoute } from "./routeConfig.jsx";
@@ -16,13 +16,14 @@ import { routeConfig, renderRoute } from "./routeConfig.jsx";
 import LoginModal from "./components/pages/LoginModal.jsx";
 import Navbar from "./components/pages/Navbar.jsx";
 import NotificationCenter from "./components/pages/NotificationCenter.jsx";
+import ConnectionBanner from "./components/pages/ConnectionBanner.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import ChatbotWidget from "./chatbot/ChatbotWidget.jsx";
 import "./styles.css";
 
 function App() {
   const dispatch = useDispatch();
-  const { userRole, userName, token, showLogin } = useSelector(
+  const { userRole, userName, token, showLogin, socketStatus } = useSelector(
     (state) => state.auth
   );
   const location = useLocation();
@@ -31,11 +32,23 @@ function App() {
   // Socket connection management
   useEffect(() => {
     if (!userRole || !token) return;
-    const socket = connectSocket(token);
+    const sock = connectSocket(token);
+
+    if (sock.connected) dispatch(setSocketStatus("connected"));
+
+    const onConnect = () => dispatch(setSocketStatus("connected"));
+    const onConnectError = () => dispatch(setSocketStatus("error"));
+
+    sock.on("connect", onConnect);
+    sock.on("connect_error", onConnectError);
+
     return () => {
+      sock.off("connect", onConnect);
+      sock.off("connect_error", onConnectError);
       disconnectSocket();
+      dispatch(setSocketStatus("idle"));
     };
-  }, [token]);
+  }, [token, userRole, dispatch]);
 
   // Role-based redirect
   useEffect(() => {
@@ -130,6 +143,12 @@ function App() {
         />
       )}
       <NotificationCenter />
+      {socketStatus === "error" && userRole && !showLogin && (
+        <ConnectionBanner
+          onReconnect={handleLogout}
+          onDismiss={() => dispatch(setSocketStatus("idle"))}
+        />
+      )}
       {userRole === ROLES.ADMIN && <ChatbotWidget />}
 
       <Routes>

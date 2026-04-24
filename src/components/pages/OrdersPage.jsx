@@ -28,6 +28,7 @@ import EditOrderForm from "../forms/EditOrderForm";
 import { useDispatch } from "react-redux";
 import { addNotification } from "../../features/notifications/notificationSlice.js";
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from './ConnectionError.jsx';
 
 const formatDate = (dateString) =>
   dateString ? new Date(dateString).toISOString().split("T")[0] : "";
@@ -379,13 +380,6 @@ function OrdersPage() {
     const socket = io(backendUrl, {
       withCredentials: true,
       transports: ["websocket"],
-    });
-    socket.on("connect", () => console.log("Connected to Socket.IO"));
-    socket.on("connect_error", (err) => {
-      console.error("Socket connection error:", err);
-      notifyError("Failed to connect to real-time updates.", {
-        autoClose: 3000,
-      });
     });
     socket.on("orderUpdate", (updatedOrder) => {
       setOrders((prev) =>
@@ -807,31 +801,7 @@ function OrdersPage() {
       </div>
     );
 
-  if (error && !showCreateForm && !showEditForm && !showPaymentDetails)
-    return (
-      <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
-        role="alert"
-      >
-        <div className="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md text-lg flex flex-col items-center">
-          <p className="mb-4">{error}</p>
-          <div className="flex gap-4">
-            <button
-              onClick={() => refetchData()}
-              className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-300"
-            >
-              Retry
-            </button>
-            <button
-              onClick={handleCreateButtonClick}
-              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-green-300"
-            >
-              Create New Order
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  if (error && !showCreateForm && !showEditForm && !showPaymentDetails) return <ConnectionError onRetry={refetchData} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
