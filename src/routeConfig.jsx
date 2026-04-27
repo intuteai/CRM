@@ -18,6 +18,10 @@ import HRDashboard from "./components/dashboards/HRDashboard";
 // Intute
 import IAEmployeeDashboard from "./components/dashboards/Iaemployeedashboard";
 import IAHRDashboard from "./components/dashboards/Iahrdashboard";
+
+// Service & Repair
+import ServiceRepairDashboard from "./components/dashboards/ServiceRepairDashboard";
+import ServiceRepairPage from "./components/service/ServiceRepairPage";
 import IAOrdersPage from "./components/IA/IAOrdersPage";
 
 // Admin
@@ -349,13 +353,25 @@ export const routeConfig = [
     component: CustomerQueriesPage,
   },
 
+  // ── Service & Repair Routes ──────────────────────────────────
+  {
+    path: "/service-repair-dashboard",
+    allowedRoles: ["service_repair"],
+    component: ServiceRepairDashboard,
+  },
+  {
+    path: "/service-repair",
+    allowedRoles: ["service_repair", "admin"],
+    component: ServiceRepairPage,
+  },
+
   // ── Shared Routes (multiple roles) ───────────────────────────
   {
     path: "/edit-profile",
     allowedRoles: [
       "admin", "customer", "sales", "design", "production",
       "store", "dispatch", "accounts", "employee", "hr",
-      "ia_employee", "ia_hr",
+      "ia_employee", "ia_hr", "service_repair",
     ],
     component: EditProfile,
   },

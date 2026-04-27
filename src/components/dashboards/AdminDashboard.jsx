@@ -90,7 +90,12 @@ function AdminDashboard({ socket }) {
         <Section title="Procurement">
           <DashboardCard to="/purchase-invoices" icon={<FileText />} title="Purchase Invoices" desc="View supplier invoices" />
         </Section>
-      </div> 
+
+        {/* Service & Repair */}
+        <Section title="Service &amp; Repair">
+          <DashboardCard to="/service-repair" icon={<Wrench />} title="Repair Records" desc="Log and manage service & repair jobs" />
+        </Section>
+      </div>
 
 </div>
   );

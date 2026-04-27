@@ -13,6 +13,8 @@ export const ROLES = {
   // Intute
   IA_EMPLOYEE: "ia_employee",
   IA_HR: "ia_hr",
+  // Service & Repair
+  SERVICE_REPAIR: "service_repair",
 };
 
 export const DASHBOARD_ROUTES = {
@@ -30,6 +32,8 @@ export const DASHBOARD_ROUTES = {
   // Intute
   [ROLES.IA_EMPLOYEE]: "/ia-employee-dashboard",
   [ROLES.IA_HR]: "/ia-hr-dashboard",
+  // Service & Repair
+  [ROLES.SERVICE_REPAIR]: "/service-repair-dashboard",
 };
 
 export const allowedPathsByRole = {
@@ -61,6 +65,7 @@ export const allowedPathsByRole = {
     "/part-creation",
     "/delivery-challan",
     "/motor-recipes",
+    "/service-repair",
   ],
   [ROLES.CUSTOMER]: [
     "/customer-dashboard",
@@ -167,6 +172,13 @@ export const allowedPathsByRole = {
     "/activities",
     "/ia-orders",
     "/hr-payslips",
+    "/edit-profile",
+  ],
+
+  // ── Service & Repair ─────────────────────────────────────
+  [ROLES.SERVICE_REPAIR]: [
+    "/service-repair-dashboard",
+    "/service-repair",
     "/edit-profile",
   ],
 };
