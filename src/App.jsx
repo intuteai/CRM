@@ -161,11 +161,11 @@ function App() {
           />
         ))}
 
-        {/* Invalid role fallback — only reached if userRole exists but is unrecognized */}
-        {userRole && (
-          <Route
-            path="/"
-            element={
+        {/* Root path: empty while unauthenticated (LoginModal overlays), or invalid-role message */}
+        <Route
+          path="/"
+          element={
+            userRole ? (
               <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-gray-100 to-amber-100">
                 <div className="text-center">
                   <h1 className="text-3xl font-bold text-gray-800 mb-4">
@@ -183,9 +183,9 @@ function App() {
                   </button>
                 </div>
               </div>
-            }
-          />
-        )}
+            ) : null
+          }
+        />
       </Routes>
 
       {/* LoginModal now owns the landing page + login form */}
