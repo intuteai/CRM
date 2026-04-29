@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(node migrate-toastify.js)",
-      "Bash(node migrate-toastify.cjs)"
-    ]
-  }
-}
