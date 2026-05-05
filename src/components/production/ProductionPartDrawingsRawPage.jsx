@@ -121,6 +121,14 @@ function ProductionPartDrawingsRawPage({ socket: providedSocket, userRole }) {
   }, [fetchDrawings, page, searchTerm]);
 
   useEffect(() => {
+    const handleConnect = () => {
+      console.log('Socket connected');
+    };
+
+    const handleConnectError = (err) => {
+      console.error('Socket connection error:', err);
+    };
+
     const handleDrawingsUpdate = ({ type, item, itemId, timestamp }) => {
       setDrawings((prev) => {
         if (!Array.isArray(prev)) return prev || [];
@@ -135,7 +143,6 @@ function ProductionPartDrawingsRawPage({ socket: providedSocket, userRole }) {
             updatedAt: item.updatedAt || timestamp,
             productId: item.productId || null,
           };
-          // Only add if on the first page or matches search
           if (page === 0 && (!searchTerm || newDrawing.itemName.toLowerCase().includes(searchTerm.toLowerCase()))) {
             notifyInfo(`New drawing #${item.srNo} added`, { autoClose: 2000 });
             return [newDrawing, ...prev].slice(0, limit);
@@ -235,20 +242,14 @@ function ProductionPartDrawingsRawPage({ socket: providedSocket, userRole }) {
         bValue = String(bValue).toLowerCase();
       }
 
-      if (aValue < bValue) {
-        return sortConfig.direction === 'asc' ? -1 : 1;
-      }
-      if (aValue > bValue) {
-        return sortConfig.direction === 'asc' ? 1 : -1;
-      }
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
   }, [drawings, sortConfig]);
 
   const handlePrevPage = useCallback(() => {
-    if (page > 0) {
-      setPage((prev) => prev - 1);
-    }
+    if (page > 0) setPage((prev) => prev - 1);
   }, [page]);
 
   const handleNextPage = useCallback(() => {
@@ -354,7 +355,7 @@ function ProductionPartDrawingsRawPage({ socket: providedSocket, userRole }) {
                 ].map(({ key, label }) => (
                   <th
                     key={key}
-                    className={`py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200`}
+                    className="py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200"
                     onClick={() => handleSort(key)}
                     aria-sort={
                       sortConfig.key === key
@@ -451,8 +452,7 @@ function ProductionPartDrawingsRawPage({ socket: providedSocket, userRole }) {
           )}
         </div>
       </div>
-
-</div>
+    </div>
   );
 }
 

@@ -11,11 +11,11 @@ const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 // Fallback formatDate function
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
-  
+
   if (typeof importedFormatDate === 'function') {
     return importedFormatDate(dateString);
   }
-  
+
   try {
     const date = new Date(dateString);
     return date.toLocaleDateString();
@@ -63,19 +63,19 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
 
   const fetchPdiReports = useCallback(async () => {
     if (isFetching.current) return;
-    
+
     isFetching.current = true;
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const token = localStorage.getItem('token');
       const url = cursor
         ? `${BASE_URL}/api/pdi?limit=${limit}&cursor=${encodeURIComponent(cursor)}&force_refresh=true`
         : `${BASE_URL}/api/pdi?limit=${limit}&force_refresh=true`;
-      
+
       console.log('Fetching PDI reports from:', url);
-      
+
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
@@ -87,31 +87,29 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
 
       const responseData = await response.json();
       console.log('Fetched response:', responseData);
-      
+
       if (!responseData.data || !Array.isArray(responseData.data)) {
         throw new Error('Invalid data format');
       }
-      
+
       if (responseData.data.length > 0 || cursor === null) {
         setPdiReports(responseData.data);
         setTotalItems(responseData.total || 0);
-        
+
         if (responseData.cursor && responseData.cursor !== cursor) {
           if (cursor !== null) {
-            setCursorStack(prev => [...prev, cursor]);
+            setCursorStack((prev) => [...prev, cursor]);
           }
           setCursor(responseData.cursor);
         } else if (!responseData.cursor && responseData.data.length === 0) {
-          if (cursorStack.length > 0) {
-            // No-op: handled by prev/next navigation
-          } else {
+          if (cursorStack.length === 0) {
             setCursor(null);
           }
         }
       } else if (responseData.data.length === 0 && cursor !== null) {
         if (cursorStack.length > 0) {
           const previousCursor = cursorStack[cursorStack.length - 1];
-          setCursorStack(prev => prev.slice(0, -1));
+          setCursorStack((prev) => prev.slice(0, -1));
           setCursor(previousCursor);
         } else {
           setCursor(null);
@@ -133,6 +131,14 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
       fetchPdiReports();
       hasFetched.current = true;
     }
+
+    const handleConnect = () => {
+      console.log('Socket connected');
+    };
+
+    const handleConnectError = (err) => {
+      console.error('Socket connection error:', err);
+    };
 
     const handlePdiUpdate = ({ report_id, status, inspection_date, report_link }) => {
       setPdiReports((prev) => {
@@ -219,12 +225,8 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
       const valueA = a[sortConfig.key] ?? '';
       const valueB = b[sortConfig.key] ?? '';
 
-      if (valueA < valueB) {
-        return sortConfig.direction === 'asc' ? -1 : 1;
-      }
-      if (valueA > valueB) {
-        return sortConfig.direction === 'asc' ? 1 : -1;
-      }
+      if (valueA < valueB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valueA > valueB) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
   }, [filteredPdiReports, sortConfig]);
@@ -329,8 +331,8 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
 
   const handlePrevPage = useCallback(() => {
     if (cursorStack.length > 0) {
-      const previousCursor = cursorStack.pop();
-      setCursorStack([...cursorStack]);
+      const previousCursor = cursorStack[cursorStack.length - 1];
+      setCursorStack((prev) => prev.slice(0, -1));
       setCursor(previousCursor);
     } else {
       setCursor(null);
@@ -342,7 +344,7 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
       const lastReport = pdiReports[pdiReports.length - 1];
       if (lastReport && lastReport.inspection_date) {
         if (cursor !== null) {
-          setCursorStack(prev => [...prev, cursor]);
+          setCursorStack((prev) => [...prev, cursor]);
         }
         setCursor(lastReport.inspection_date);
       }
@@ -645,8 +647,7 @@ function ProductionPDIPage({ socket: providedSocket, userRole }) {
           </div>
         </div>
       )}
-
-</div>
+    </div>
   );
 }
 

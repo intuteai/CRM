@@ -103,7 +103,7 @@ const PRODUCT_CHARTS = [
     label: "CO",
     symbol: "C",
     digit: "",
-    pair: "CO", // ✅ NEW
+    pair: "CO",
     defaultSub: "",
     color: "gray",
   },
@@ -143,7 +143,6 @@ function buildCode({
   rowNum,
 }) {
   const p = (partNum || "0001").padStart(4, "0").slice(0, 4); // 4 chars
-  // const cp = (chartSymbol || "") + (chartDigit || ""); // 2 chars e.g. "L5"
   const cp =
     chartSymbol === "C" && !chartDigit
       ? "CO"
@@ -159,19 +158,18 @@ function buildCode({
 // Structure: NNNN(4) + ChartSymbol(1) + ChartDigit(1) + SubAbbr(2) + Store(1) + Col(1) + Row(1)
 function parseCode(code) {
   if (!code || code.length !== 11) return null;
-  const partNum = code.slice(0, 4); // e.g. "0042"
+  const partNum = code.slice(0, 4);
   let chartSymbol = code.slice(4, 5);
   let chartDigit = code.slice(5, 6);
 
-  // ✅ Handle CO special case
   if (code.slice(4, 6) === "CO") {
     chartSymbol = "C";
     chartDigit = "";
   }
-  const subAbbr = code.slice(6, 8); // e.g. "BR"
-  const storeNum = code.slice(8, 9); // e.g. "1"
-  const colNum = code.slice(9, 10); // e.g. "2"
-  const rowNum = code.slice(10, 11); // e.g. "3"
+  const subAbbr = code.slice(6, 8);
+  const storeNum = code.slice(8, 9);
+  const colNum = code.slice(9, 10);
+  const rowNum = code.slice(10, 11);
   const chart =
     PRODUCT_CHARTS.find(
       (c) => c.symbol === chartSymbol && c.digit === chartDigit,
@@ -189,7 +187,6 @@ function parseCode(code) {
 }
 
 function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
-  // Prefill from existing code if provided, otherwise use defaults
   const parsed = parseCode(value);
 
   const [partNum, setPartNum] = useState(parsed?.partNum ?? "0001");
@@ -201,7 +198,6 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
   const [storeNum, setStoreNum] = useState(parsed?.storeNum ?? "");
   const [colNum, setColNum] = useState(parsed?.colNum ?? "");
   const [rowNum, setRowNum] = useState(parsed?.rowNum ?? "");
-  // If the code can't be parsed into known segments, drop into manual mode so the user can still see and edit it
   const [manualMode, setManualMode] = useState(!parsed && value.length === 11);
   const [manualVal, setManualVal] = useState(value);
 
@@ -215,7 +211,6 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
     rowNum,
   });
 
-  // Count filled segments to show progress
   const isComplete =
     derivedCode.length === 11 &&
     !derivedCode.includes("_") &&
@@ -225,7 +220,6 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
     !!colNum &&
     !!rowNum;
 
-  // Fire onChange whenever any builder field changes
   useEffect(() => {
     if (manualMode) return;
     onChange?.(derivedCode.replace(/_/g, ""));
@@ -234,12 +228,10 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
   const handleChartClick = (c) => {
     if (disabled) return;
     setChart(c);
-
-    // ✅ Only auto-fill if defaultSub exists
     if (c.defaultSub) {
       setSubAbbr(c.defaultSub);
     } else {
-      setSubAbbr(""); // or keep previous if you want
+      setSubAbbr("");
     }
   };
 
@@ -254,7 +246,6 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
     setPartNum(padded);
   };
 
-  // Colour-coded segments for the preview bar
   const seg_part = derivedCode.slice(0, 4);
   const seg_chart = chart ? chart.pair || chart.symbol + chart.digit : "";
   const seg_sub = subAbbr || "";
@@ -415,7 +406,6 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
                     : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50"
                 } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
             >
-              {/* Big chart pair e.g. "L5" */}
               <div
                 className={`text-xl font-black ${SEG.chart} leading-none tracking-tight`}
               >
@@ -461,7 +451,6 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
             — 2-char abbreviation
           </span>
         </label>
-        {/* Preset quick-pick buttons */}
         <div className="grid grid-cols-5 gap-1.5 mb-2">
           {SUB_CODES.map((sc) => (
             <button
@@ -484,7 +473,6 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
             </button>
           ))}
         </div>
-        {/* Manual sub-code entry */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-400 whitespace-nowrap">
             Custom:
@@ -568,7 +556,7 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
           />
         </div>
 
-        {/* Row — free text input + quick-pick 1–9 (unrestricted) */}
+        {/* Row */}
         <div>
           <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
             <span className={`${SEG.row} font-black text-sm`}>⑥</span> Row{" "}
@@ -669,7 +657,6 @@ const useFetchStock = () => {
           productName: item.productName || "",
           productId: item.productId,
           createdAt: item.createdAt || item.created_at || null,
-          // location: item.location || ''
         }));
         setStockItems(normalizedData);
         setTotalItems(total || 0);
@@ -711,7 +698,6 @@ function ProductionStockPage() {
     stockQuantity: "",
     qtyRequired: "",
     price: "",
-    // location: ''
   });
   const [formErrors, setFormErrors] = useState({});
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
@@ -721,7 +707,6 @@ function ProductionStockPage() {
   const [selectedProductName, setSelectedProductName] = useState("");
   const [selectedProductDescription, setSelectedProductDescription] =
     useState("");
-  // const [selectedProductLocation, setSelectedProductLocation] = useState('');
   const [selectedProductPrice, setSelectedProductPrice] = useState(0);
 
   const tableRef = useRef(null);
@@ -754,9 +739,6 @@ function ProductionStockPage() {
       transports: ["websocket"],
     });
 
-    // ────────────────────────────────────────────────
-    // FIXED: safest approach — refetch full list on any update
-    // Avoids desync, duplicate items, missing items, stale data
     socket.on("stockUpdate", () => {
       refetchData();
       tableRef.current?.focus();
@@ -780,7 +762,6 @@ function ProductionStockPage() {
           productCode,
           productName,
           description: description || "No description",
-          // location: location || 'Not set',
           price: formatCurrency(price),
         });
         await QRCode.toCanvas(document.getElementById(elementId), data, {
@@ -901,7 +882,6 @@ function ProductionStockPage() {
       "Product ID": item.productId,
       "Product Code": item.productCode,
       "Product Name": item.productName,
-      // 'Location': item.location || 'N/A',
       Description: item.description || "N/A",
       "Stock Quantity": item.stockQuantity,
       "Qty Required": item.qtyRequired,
@@ -948,7 +928,6 @@ function ProductionStockPage() {
                 description:
                   String(row["Description"] || "").trim() || undefined,
                 qtyRequired: parseInt(row["Qty Required"] || 0),
-                // location: String(row['Location'] || '').trim() || undefined,
                 productId: row["Product ID"]
                   ? parseInt(row["Product ID"])
                   : undefined,
@@ -1020,7 +999,6 @@ function ProductionStockPage() {
     setSelectedBarcode(code);
     setSelectedProductName(name);
     setSelectedProductDescription(desc);
-    // setSelectedProductLocation(location || 'Not set');
     setSelectedProductPrice(price);
     setShowBarcodeModal(true);
   }, []);
@@ -1059,11 +1037,12 @@ function ProductionStockPage() {
     );
   };
 
+  // ✅ FIXED: changed length check from 10 to 11
   const validateForm = useCallback(() => {
     const errors = {};
     if (!formData.productName.trim()) errors.productName = "Required";
-    if (!formData.productCode || formData.productCode.length !== 10)
-      errors.productCode = "Must be 10 characters";
+    if (!formData.productCode || formData.productCode.length !== 11)
+      errors.productCode = "Must be 11 characters";
     const stock = parseInt(formData.stockQuantity);
     if (
       (modalMode === "create" || modalMode === "edit") &&
@@ -1102,7 +1081,6 @@ function ProductionStockPage() {
             : undefined,
           qtyRequired: parseInt(formData.qtyRequired) || 0,
           price: parseFloat(formData.price),
-          // location: formData.location || undefined
         };
 
         const res = await fetch(url, {
@@ -1153,7 +1131,6 @@ function ProductionStockPage() {
       stockQuantity: item.stockQuantity || "",
       qtyRequired: item.qtyRequired || "",
       price: item.price || "",
-      // location: item.location || ''
     });
     setFormErrors({});
     setShowModal(true);
@@ -1291,7 +1268,6 @@ function ProductionStockPage() {
                     { key: "productId", label: "ID" },
                     { key: "productCode", label: "Code" },
                     { key: "productName", label: "Name" },
-                    // { key: 'location', label: 'Location' },
                     { key: "description", label: "Desc" },
                     { key: "stockQuantity", label: "Stock" },
                     { key: "qtyRequired", label: "Req" },
@@ -1335,7 +1311,6 @@ function ProductionStockPage() {
                       <td className="py-4 px-3 text-gray-700 font-medium">
                         {item.productName}
                       </td>
-                      {/* <td className="py-4 px-3 text-gray-700">{item.location || <span className="italic text-gray-400">Not set</span>}</td> */}
                       <td className="py-4 px-3">
                         {item.description ? (
                           <button
@@ -1467,11 +1442,10 @@ function ProductionStockPage() {
                     setFormData({ ...formData, productCode: code })
                   }
                 />
+                {formErrors.productCode && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.productCode}</p>
+                )}
               </div>
-              {/* <div>
-                <label className="block font-medium mb-1">Location</label>
-                <input type="text" placeholder="e.g., Production Line A" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} className="w-full p-3 border rounded-lg" />
-              </div> */}
               <div>
                 <label className="block font-medium mb-1">Price (₹) *</label>
                 <input
@@ -1579,7 +1553,6 @@ function ProductionStockPage() {
               <p>
                 <strong>Code:</strong> {selectedBarcode}
               </p>
-              {/* <p><strong>Location:</strong> {selectedProductLocation}</p> */}
               <p>
                 <strong>Price:</strong> {formatCurrency(selectedProductPrice)}
               </p>
@@ -1604,8 +1577,7 @@ function ProductionStockPage() {
           </div>
         </div>
       )}
-
-</div>
+    </div>
   );
 }
 
