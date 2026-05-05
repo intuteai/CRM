@@ -20,6 +20,7 @@ import {
   DollarSign,
   XCircle,
   Trash2,
+  Download,
 } from "lucide-react";
 import { debounce } from "lodash";
 import { io } from "socket.io-client";
@@ -53,10 +54,9 @@ const validateOrderItems = (
   editingOrderId = null,
 ) => {
   const errors = [];
-  const productIds = new Set(); // prevents duplicate products in the order
+  const productIds = new Set();
 
   const isValid = items.every((item) => {
-    // checks for missing or duplicate ID
     if (!item.product_id || productIds.has(item.product_id)) {
       errors.push(`Duplicate or invalid product ID: ${item.product_id}`);
       return false;
@@ -64,7 +64,6 @@ const validateOrderItems = (
 
     productIds.add(item.product_id);
 
-    // checks if product exists in database
     const product = products.find(
       (p) => String(p.product_id) === String(item.product_id),
     );
@@ -165,11 +164,9 @@ const useFetchData = ({ limit, offset }) => {
       const customersData = customersRes.ok ? await customersRes.json() : [];
 
       const validOrders = normalizeOrders(ordersData.orders, productsData);
-
       const validProducts = productsData.filter(
         (p) => p && p.product_id !== undefined,
       );
-
       const validCustomers = customersData.filter(
         (c) => c && c.user_id !== undefined,
       );
@@ -336,7 +333,6 @@ function OrdersPage() {
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
-
   const [filterMonth, setFilterMonth] = useState("All");
   const [filterYear, setFilterYear] = useState("All");
 
@@ -349,6 +345,7 @@ function OrdersPage() {
     direction: "desc",
   });
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const tableRef = useRef(null);
 
   const {
@@ -369,6 +366,7 @@ function OrdersPage() {
 
   const productsRef = useRef(products);
   const { notifySuccess, notifyError, notifyInfo } = useNotify();
+
   useEffect(() => {
     productsRef.current = products;
   }, [products]);
@@ -376,7 +374,6 @@ function OrdersPage() {
   useEffect(() => {
     const backendUrl =
       import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-    console.log("Socket.IO connecting to:", backendUrl);
     const socket = io(backendUrl, {
       withCredentials: true,
       transports: ["websocket"],
@@ -417,7 +414,6 @@ function OrdersPage() {
       if (tableRef.current) tableRef.current.focus();
     });
     socket.on("stockUpdate", async ({ product_id, stock_quantity }) => {
-      console.log("Received stockUpdate:", { product_id, stock_quantity });
       await refetchData();
       dispatch(
         addNotification({
@@ -456,10 +452,7 @@ function OrdersPage() {
       const product = validProducts.find(
         (p) => String(p.product_id) === String(productId),
       );
-      if (!product) {
-        console.log("Product not found for ID:", productId);
-        return (cache[cacheKey] = 0);
-      }
+      if (!product) return (cache[cacheKey] = 0);
 
       let baseStock = product.stock_quantity || 0;
       if (!editingOrderId) {
@@ -473,16 +466,7 @@ function OrdersPage() {
             .filter(
               (item) => item && String(item.product_id) === String(productId),
             )
-            .reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0) ||
-          0;
-        console.log(
-          "Available stock for",
-          product.product_name,
-          ": base=",
-          baseStock,
-          "reserved=",
-          reserved,
-        );
+            .reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0) || 0;
         return (cache[cacheKey] = Math.max(0, baseStock - reserved));
       }
 
@@ -500,18 +484,6 @@ function OrdersPage() {
           )
           .reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0) || 0;
       const available = Math.max(0, baseStock + originalQty - currentQty);
-      console.log(
-        "Editing stock for",
-        product.product_name,
-        ": base=",
-        baseStock,
-        "original=",
-        originalQty,
-        "current=",
-        currentQty,
-        "available=",
-        available,
-      );
       return (cache[cacheKey] = available);
     };
   }, [orders, products, selectedOrder]);
@@ -521,7 +493,6 @@ function OrdersPage() {
       try {
         const backendUrl =
           import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-        console.log("Creating order with payload:", newOrder);
         const res = await fetch(`${backendUrl}/api/orders`, {
           method: "POST",
           headers: {
@@ -570,7 +541,6 @@ function OrdersPage() {
           targetDeliveryDate,
           status,
         };
-        console.log("Updating order", orderId, "with payload:", payload);
         const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
           method: "PUT",
           headers: {
@@ -613,7 +583,6 @@ function OrdersPage() {
       try {
         const backendUrl =
           import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-        console.log("Cancelling order:", orderId);
         const res = await fetch(`${backendUrl}/api/orders/${orderId}/cancel`, {
           method: "POST",
           headers: {
@@ -648,10 +617,8 @@ function OrdersPage() {
       )
         return;
       try {
-        const order = orders.find((o) => o.id === orderId);
         const backendUrl =
           import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-        console.log("Changing status for order", orderId, "to", newStatus);
         const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
           method: "PUT",
           headers: {
@@ -659,9 +626,7 @@ function OrdersPage() {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
           credentials: "include",
-          body: JSON.stringify({
-            status: newStatus,
-          }),
+          body: JSON.stringify({ status: newStatus }),
         });
         if (!res.ok) {
           const errorData = await res.json();
@@ -680,7 +645,6 @@ function OrdersPage() {
   );
 
   const initiateEdit = useCallback((order) => {
-    console.log("Initiating edit for order:", order);
     setSelectedOrder(order);
     setShowEditForm(true);
   }, []);
@@ -745,6 +709,83 @@ function OrdersPage() {
     });
   }, [sortedOrders, searchTerm, filterStatus, filterMonth, filterYear]);
 
+  // ─── Export filtered orders as CSV ────────────────────────────────────────
+  // Defined AFTER filteredOrders to avoid "Cannot access before initialization" error
+  const handleExportCSV = useCallback(() => {
+    if (filteredOrders.length === 0) return;
+
+    setIsExporting(true);
+    try {
+      const headers = [
+        "Order ID",
+        "Customer Name",
+        "Items",
+        "Total Amount (INR)",
+        "Status",
+        "Target Delivery",
+        "Payment Status",
+        "Created At",
+      ];
+
+      const csvRows = filteredOrders.map((order) => [
+        order.id,
+        order.customerName || "N/A",
+        order.items
+          .map((i) => `${i.productName} (Qty: ${i.quantity})`)
+          .join("; "),
+        calculateTotalAmount(order.items).toFixed(2),
+        order.status,
+        order.targetDeliveryDate
+          ? formatDate(order.targetDeliveryDate)
+          : "Not Set",
+        order.paymentStatus || "N/A",
+        new Date(order.createdAt).toLocaleString("en-IN"),
+      ]);
+
+      const csvContent = [headers, ...csvRows]
+        .map((row) =>
+          row
+            .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
+            .join(","),
+        )
+        .join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+
+      const activeFilters = [
+        filterStatus !== "All" ? filterStatus : null,
+        filterMonth !== "All"
+          ? new Date(0, Number(filterMonth) - 1).toLocaleString("en-IN", {
+              month: "short",
+            })
+          : null,
+        filterYear !== "All" ? filterYear : null,
+      ]
+        .filter(Boolean)
+        .join("_");
+
+      const suffix = activeFilters ? `_${activeFilters}` : "";
+      link.download = `orders${suffix}_${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      notifySuccess(
+        `Exported ${filteredOrders.length} order${filteredOrders.length !== 1 ? "s" : ""}`,
+        { autoClose: 3000 },
+      );
+    } catch (err) {
+      console.error("Export error:", err);
+      notifyError("Failed to export orders", { autoClose: 5000 });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [filteredOrders, filterStatus, filterMonth, filterYear, notifySuccess, notifyError]);
+
   const paginatedOrders = useMemo(() => {
     const start = page * ordersPerPage;
     return filteredOrders.slice(start, start + ordersPerPage);
@@ -758,12 +799,8 @@ function OrdersPage() {
   }, []);
 
   const handleCreateButtonClick = useCallback(() => {
-    console.log("Create Order button clicked", {
-      isLoading,
-      productsLength: products.length,
-    });
     setShowCreateForm(true);
-  }, [isLoading, products.length]);
+  }, []);
 
   if (isLoading && !orders.length)
     return (
@@ -801,7 +838,8 @@ function OrdersPage() {
       </div>
     );
 
-  if (error && !showCreateForm && !showEditForm && !showPaymentDetails) return <ConnectionError onRetry={refetchData} />;
+  if (error && !showCreateForm && !showEditForm && !showPaymentDetails)
+    return <ConnectionError onRetry={refetchData} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
@@ -810,6 +848,7 @@ function OrdersPage() {
       </h1>
       <div className="max-w-7xl mx-auto">
         <div className="flex mb-8 gap-6 flex-wrap">
+          {/* Search */}
           <div className="relative flex-grow">
             <label htmlFor="search-orders" className="sr-only">
               Search Orders
@@ -824,6 +863,8 @@ function OrdersPage() {
             />
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
+
+          {/* Filters */}
           <div>
             <label htmlFor="status-filter" className="sr-only">
               Filter by Status
@@ -876,6 +917,8 @@ function OrdersPage() {
                 ))}
             </select>
           </div>
+
+          {/* Action buttons */}
           <button
             onClick={() => refetchData()}
             className="p-3 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
@@ -884,6 +927,25 @@ function OrdersPage() {
           >
             {isLoading && orders.length > 0 ? "Refreshing..." : "Refresh"}
           </button>
+
+          {/* Export CSV button */}
+          <button
+            onClick={handleExportCSV}
+            disabled={isLoading || isExporting || filteredOrders.length === 0}
+            aria-label={`Export ${filteredOrders.length} orders as CSV`}
+            title={
+              filteredOrders.length === 0
+                ? "No orders to export"
+                : `Export ${filteredOrders.length} order${filteredOrders.length !== 1 ? "s" : ""} as CSV`
+            }
+            className="p-4 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-300 transition-all duration-300 shadow-md flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download size={18} className="mr-2" />
+            {isExporting
+              ? "Exporting..."
+              : `Export CSV${filteredOrders.length > 0 ? ` (${filteredOrders.length})` : ""}`}
+          </button>
+
           <button
             onClick={handleCreateButtonClick}
             className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md flex items-center"
@@ -1057,7 +1119,9 @@ function OrdersPage() {
                 </button>
                 <button
                   onClick={() => setPage((p) => p + 1)}
-                  disabled={(page + 1) * ordersPerPage >= filteredOrders.length}
+                  disabled={
+                    (page + 1) * ordersPerPage >= filteredOrders.length
+                  }
                   className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
                   aria-label="Next page"
                 >
@@ -1152,8 +1216,7 @@ function OrdersPage() {
           </div>
         </div>
       )}
-
-</div>
+    </div>
   );
 }
 
