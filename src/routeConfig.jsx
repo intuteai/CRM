@@ -48,6 +48,8 @@ import CreateNonMotorProcess from "./components/admin/CreateNonMotorProcess";
 import PartCreation from "./components/admin/PartCreation";
 import DeliveryChallanForm from "./components/admin/DeliveryChallanForm";
 import MotorRecipesPage from "./components/admin/MotorRecipesPage";
+import DocumentsHub from "./components/admin/DocumentsHub";
+import PurchaseOrderForm from "./components/admin/PurchaseOrderForm";
 
 // Sales
 import SalesQueriesPage from "./components/sales/SalesQueriesPage";
@@ -187,6 +189,16 @@ export const routeConfig = [
     path: "/admin-dashboard",
     allowedRoles: ["admin"],
     component: AdminDashboard,
+  },
+  {
+    path: "/documents",
+    allowedRoles: ["admin", "sales"],
+    component: DocumentsHub,
+  },
+  {
+    path: "/purchase-order",
+    allowedRoles: ["admin", "sales"],
+    component: PurchaseOrderForm,
   },
   {
     path: "/quotation",

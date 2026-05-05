@@ -46,6 +46,12 @@ function SalesDashboard({ socket }) {
             desc="Create and manage proforma invoices"
           />
           <DashboardCard
+            to="/purchase-order"
+            icon={<FileText />}
+            title="Purchase Orders"
+            desc="Create and manage purchase orders"
+          />
+          <DashboardCard
             to="/sales/enquiries"
             icon={<Mail />}
             title="Enquiries"

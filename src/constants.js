@@ -62,10 +62,12 @@ export const allowedPathsByRole = {
     "/processes/non-motor/:orderId",
     "/quotation",
     "/proforma",
+    "/purchase-order",
     "/part-creation",
     "/delivery-challan",
     "/motor-recipes",
     "/service-repair",
+    "/documents",
   ],
   [ROLES.CUSTOMER]: [
     "/customer-dashboard",
@@ -86,6 +88,8 @@ export const allowedPathsByRole = {
     "/edit-profile",
     "/sales/quotations",
     "/proforma",
+    "/purchase-order",
+    "/documents",
   ],
   [ROLES.DESIGN]: [
     "/design-dashboard",

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import Modal from 'react-modal';
 import axios from 'axios';
-import { Plus, Download, Trash2, Eye } from 'lucide-react';
+import { Plus, Download, Trash2, Eye, FileText } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { useNotify } from '../../hooks/useNotify';
 import ConnectionError from '../pages/ConnectionError.jsx';
@@ -81,7 +81,7 @@ export default function QuotationForm() {
   const [manageTermsOpen, setManageTermsOpen] = useState(false);
 
   const [form, setForm] = useState({
-    quotation_no: '2024-25/sales/AA/0001',
+    quotation_no: '2025-26/sales/AA/0001',
     date: todayIST(),
     to_address: '',
     to_gst_number: '',
@@ -272,47 +272,92 @@ export default function QuotationForm() {
   if (socketStatus === 'error' || fetchError) return <ConnectionError onRetry={() => setFetchError(null)} />;
 
   return (
-    <div className="p-6">
-<div className="max-w-5xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold" style={primaryStyle}>Create Quotation</h2>
-          <div className="flex gap-2">
-            <button onClick={() => setPreviewOpen(true)} className="px-3 py-2 border rounded flex items-center gap-2 hover:shadow-sm">
-              <Eye className="w-4 h-4" /> Preview
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
+      <div className="max-w-4xl mx-auto">
+
+        {/* ── Page header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5 mb-8">
+          <div>
+            <div className="inline-flex items-center gap-2 bg-amber-100 border border-amber-200 rounded-full px-3 py-1 mb-3">
+              <FileText size={12} className="text-amber-700" />
+              <span className="text-amber-700 text-xs font-semibold tracking-wide">FY 2025-26</span>
+            </div>
+            <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Quotations</h1>
+            <p className="text-gray-600 text-sm mt-1.5">Create professional sales proposals with instant PDF export</p>
+          </div>
+          <div className="flex gap-2.5 shrink-0">
+            <button
+              onClick={() => setPreviewOpen(true)}
+              className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl flex items-center gap-2 hover:shadow-sm transition-all text-sm font-medium"
+            >
+              <Eye size={15} /> Preview
             </button>
-            <button onClick={openModal} className="px-4 py-2 rounded flex items-center gap-2 text-white" style={primaryBg}>
-              <Plus className="w-4 h-4" /> New / Edit
+            <button
+              onClick={openModal}
+              className="px-5 py-2.5 text-white rounded-xl flex items-center gap-2 font-semibold transition-all shadow-md hover:shadow-lg text-sm"
+              style={primaryBg}
+            >
+              <Plus size={15} /> New Quotation
             </button>
           </div>
         </div>
 
-        {/* Inline quick summary */}
-        <div className="bg-white p-4 rounded shadow mb-6" style={cardBorder}>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs" style={{ color: THEME.muted }}>Quotation No</div>
-              <div className="font-medium">{form.quotation_no}</div>
-            </div>
-            <div>
-              <div className="text-xs" style={{ color: THEME.muted }}>Date</div>
-              <div className="font-medium">{form.date}</div>
-            </div>
-            <div>
-              <div className="text-xs" style={{ color: THEME.muted }}>To</div>
-              <div className="font-medium">{form.to_address || '—'}</div>
-            </div>
-            <div>
-              <div className="text-xs" style={{ color: THEME.muted }}>Grand Total</div>
-              <div className="font-medium" style={primaryStyle}>₹ {formatINR(grandTotal)}</div>
+        {/* ── Summary card ── */}
+        <div
+          className="bg-gradient-to-br from-amber-100 to-amber-50 rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer border border-amber-200"
+          onClick={openModal}
+        >
+          <div className="h-1.5 bg-gradient-to-r from-emerald-500 to-teal-600" />
+          <div className="p-7">
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.15em] mb-1">Current Draft</p>
+                <h2 className="text-xl font-bold text-gray-800">{form.quotation_no}</h2>
+              </div>
+              <span className="bg-amber-200 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-300">
+                Draft
+              </span>
             </div>
 
-            {/* show GST under summary if present */}
-            <div>
-              <div className="text-xs" style={{ color: THEME.muted }}>To - GST No</div>
-              <div className="font-medium">{form.to_gst_number || '—'}</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+              {[
+                { label: 'Quotation No.', value: form.quotation_no },
+                { label: 'Date',          value: form.date         },
+                { label: 'To',            value: form.to_address || '—' },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-white rounded-xl p-4 border border-amber-100">
+                  <p className="text-xs text-gray-500 mb-1">{label}</p>
+                  <p className="font-semibold text-gray-800 text-sm truncate">{value}</p>
+                </div>
+              ))}
+              <div className="bg-white rounded-xl p-4 border border-amber-100">
+                <p className="text-xs text-gray-500 mb-1">Grand Total</p>
+                <p className="font-bold text-lg" style={primaryStyle}>₹ {formatINR(grandTotal)}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-amber-200">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                <span>{form.items.length} item{form.items.length !== 1 ? 's' : ''}</span>
+                <span>·</span>
+                <span>GST {form.gst_percent}%</span>
+                {form.to_gst_number && (
+                  <><span>·</span><span>GST No: {form.to_gst_number}</span></>
+                )}
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); openManageTerms(); }}
+                className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                Manage Default Terms
+              </button>
             </div>
           </div>
         </div>
+
+        <p className="text-gray-500 text-xs text-center mt-6">
+          Click the card or "New Quotation" to fill in details and generate a PDF
+        </p>
 
         {/* Modal for the form */}
         <Modal
@@ -617,3 +662,4 @@ export default function QuotationForm() {
     </div>
   );
 }
+

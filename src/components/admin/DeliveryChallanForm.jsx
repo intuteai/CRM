@@ -494,21 +494,74 @@ export default function DeliveryChallanForm() {
   if (socketStatus === 'error' || fetchError) return <ConnectionError onRetry={() => setFetchError(null)} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-200 to-gray-300 p-6">
-<div className="max-w-5xl mx-auto text-center">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6 tracking-tight">Delivery Challan Generator</h1>
-        <div className="flex justify-center mb-12">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
+      <div className="max-w-4xl mx-auto">
+
+        {/* ── Page header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5 mb-8">
+          <div>
+            <div className="inline-flex items-center gap-2 bg-amber-100 border border-amber-200 rounded-full px-3 py-1 mb-3">
+              <FileText size={12} className="text-amber-700" />
+              <span className="text-amber-700 text-xs font-semibold tracking-wide">Goods Dispatch</span>
+            </div>
+            <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Delivery Challan</h1>
+            <p className="text-gray-600 text-sm mt-1.5">Create dispatch documents with smart inventory lookup</p>
+          </div>
           <button
-            onClick={() => {
-              setIsOpen(true);
-              if (!inventoryList.length || !rawList.length) fetchLists();
-            }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 rounded-xl shadow-md flex flex-col items-center gap-2 transition-all"
+            onClick={() => { setIsOpen(true); if (!inventoryList.length || !rawList.length) fetchLists(); }}
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center gap-2 font-semibold transition-all shadow-md hover:shadow-lg text-sm shrink-0"
           >
-            <FileText className="w-10 h-10" />
-            <span className="text-lg font-semibold">Create Delivery Challan</span>
+            <Plus size={15} /> New Challan
           </button>
         </div>
+
+        {/* ── Hero card ── */}
+        <div
+          className="bg-gradient-to-br from-amber-100 to-amber-50 rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer border border-amber-200"
+          onClick={() => { setIsOpen(true); if (!inventoryList.length || !rawList.length) fetchLists(); }}
+        >
+          <div className="h-1.5 bg-gradient-to-r from-violet-500 to-purple-600" />
+          <div className="p-7">
+            <div className="flex items-start justify-between mb-6">
+              <div className="bg-white p-3.5 rounded-xl border border-amber-100 shadow-sm">
+                <FileText size={26} className="text-gray-700" />
+              </div>
+              <span className="bg-amber-200 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-300">
+                Dispatch
+              </span>
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Create Delivery Challan</h2>
+            <p className="text-gray-600 text-sm leading-relaxed mb-6">
+              Create delivery challans for goods dispatch with smart inventory lookup, vehicle info, and returnable item tracking.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              {[
+                { label: 'Inventory',  value: 'Finished Goods' },
+                { label: 'Raw Stock',  value: 'Raw Materials'  },
+                { label: 'Tracking',   value: 'Vehicle No.'    },
+                { label: 'Returnable', value: 'Flag per item'  },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-white rounded-xl p-3 border border-amber-100">
+                  <p className="text-xs text-gray-500 mb-0.5">{label}</p>
+                  <p className="font-semibold text-gray-700 text-xs">{value}</p>
+                </div>
+              ))}
+            </div>
+            {loadingLists && (
+              <p className="text-xs text-gray-500 mb-4 text-center animate-pulse">Loading product inventory…</p>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); setIsOpen(true); if (!inventoryList.length || !rawList.length) fetchLists(); }}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-5 rounded-xl flex items-center justify-center gap-2.5 transition-all shadow-md"
+            >
+              <Plus size={17} /> Create Delivery Challan
+            </button>
+          </div>
+        </div>
+
+        <p className="text-gray-500 text-xs text-center mt-6">
+          Click the card or button above to start creating a delivery challan
+        </p>
       </div>
 
       <Modal

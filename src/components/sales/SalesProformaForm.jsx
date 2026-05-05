@@ -6,7 +6,7 @@ import { Plus, Download, Trash2, FileText } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { useNotify } from '../../hooks/useNotify';
 import ConnectionError from '../pages/ConnectionError.jsx';
-
+    
 Modal.setAppElement('#root');
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || '';
@@ -209,21 +209,70 @@ export default function ProformaForm() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
-<div className="max-w-5xl mx-auto text-center">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6 tracking-tight">Proforma Generator</h1>
+      <div className="max-w-4xl mx-auto">
 
-        {/* NOTE: removed the small "Proforma No / Date" text from the main screen as requested */}
-
-        {/* --- CENTERED GREEN CREATE CARD --- */}
-        <div className="flex justify-center mb-12">
+        {/* ── Page header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5 mb-8">
+          <div>
+            <div className="inline-flex items-center gap-2 bg-amber-100 border border-amber-200 rounded-full px-3 py-1 mb-3">
+              <FileText size={12} className="text-amber-700" />
+              <span className="text-amber-700 text-xs font-semibold tracking-wide">Pre-Payment Billing</span>
+            </div>
+            <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Proforma Invoice</h1>
+            <p className="text-gray-600 text-sm mt-1.5">Generate invoices with RTGS payment details for advance billing</p>
+          </div>
           <button
             onClick={() => setIsOpen(true)}
-            className="bg-green-600 hover:bg-green-700 text-white px-8 py-6 rounded-xl shadow-md flex flex-col items-center gap-2 transition-all"
+            className="px-5 py-2.5 bg-green-700 hover:bg-green-800 text-white rounded-xl flex items-center gap-2 font-semibold transition-all shadow-md hover:shadow-lg text-sm shrink-0"
           >
-            <FileText className="w-10 h-10" />
-            <span className="text-lg font-semibold">Create New Proforma</span>
+            <Plus size={15} /> New Proforma
           </button>
         </div>
+
+        {/* ── Hero card ── */}
+        <div
+          className="bg-gradient-to-br from-amber-100 to-amber-50 rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer border border-amber-200"
+          onClick={() => setIsOpen(true)}
+        >
+          <div className="h-1.5 bg-gradient-to-r from-blue-500 to-indigo-600" />
+          <div className="p-7">
+            <div className="flex items-start justify-between mb-6">
+              <div className="bg-white p-3.5 rounded-xl border border-amber-100 shadow-sm">
+                <FileText size={26} className="text-gray-700" />
+              </div>
+              <span className="bg-amber-200 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-300">
+                AXIS BANK
+              </span>
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Create Proforma Invoice</h2>
+            <p className="text-gray-600 text-sm leading-relaxed mb-6">
+              Generate pre-payment bills with RTGS banking details for advance billing and order confirmation.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              {[
+                { label: 'Account No.', value: '••••' + FIXED_RTGS.account.slice(-4) },
+                { label: 'Bank',        value: FIXED_RTGS.bank                        },
+                { label: 'Branch',      value: FIXED_RTGS.branch                      },
+                { label: 'IFSC',        value: FIXED_RTGS.ifsc                        },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-white rounded-xl p-3 border border-amber-100">
+                  <p className="text-xs text-gray-500 mb-0.5">{label}</p>
+                  <p className="font-semibold text-gray-700 text-xs truncate">{value}</p>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
+              className="w-full bg-green-700 hover:bg-green-800 text-white font-semibold py-3 px-5 rounded-xl flex items-center justify-center gap-2.5 transition-all shadow-md"
+            >
+              <Plus size={17} /> Create New Proforma
+            </button>
+          </div>
+        </div>
+
+        <p className="text-gray-500 text-xs text-center mt-6">
+          Click the card or button above to start creating a proforma invoice
+        </p>
       </div>
 
       {/* =================== MODAL FORM =================== */}

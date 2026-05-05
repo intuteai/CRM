@@ -88,6 +88,7 @@ function AdminDashboard({ socket }) {
 
         {/* Procurement */}
         <Section title="Procurement">
+          <DashboardCard to="/purchase-order"   icon={<FileText />} title="Purchase Orders"   desc="Create and manage purchase orders" />
           <DashboardCard to="/purchase-invoices" icon={<FileText />} title="Purchase Invoices" desc="View supplier invoices" />
         </Section>
 
