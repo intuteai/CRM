@@ -320,6 +320,7 @@ function MaterialEditor({ material, onCancel, onSave }) {
 }
 
 function AddMaterialModal({ wocId, onClose, onAdded }) {
+  const { notifyError, notifySuccess } = useNotify();
   const [stockItems, setStockItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -614,6 +615,7 @@ function ComponentDetailModal({
   onClose,
   onAfterChange,
 }) {
+  const { notifyError, notifySuccess } = useNotify();
   const [workOrderComponent, setWorkOrderComponent] = useState(
     existingWorkOrderComponent || null
   );
@@ -1326,8 +1328,28 @@ export default function CreateMotorProcess({ socket }) {
       try {
         const token = tokenGuard();
 
+        let workOrderId = editStage.workOrderId;
+
+        if (!workOrderId) {
+          const createRes = await fetch(
+            `${getBackendUrl()}/api/process/${orderId}/work-orders`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              credentials: "include",
+              body: JSON.stringify({ instance_group_id: editStage.motorInstanceGroupId }),
+            }
+          );
+          if (!createRes.ok) throw new Error("Failed to create work order for motor");
+          const wo = await createRes.json();
+          workOrderId = wo.workOrderId;
+        }
+
         const res = await fetch(
-          `${getBackendUrl()}/api/process/work-orders/${editStage.workOrderId}/stages`,
+          `${getBackendUrl()}/api/process/work-orders/${workOrderId}/stages`,
           {
             method: "PUT",
             headers: {
@@ -1354,7 +1376,7 @@ export default function CreateMotorProcess({ socket }) {
         notifyError(e.message || "Failed to save stage");
       }
     },
-    [editStage, refetchAll]
+    [editStage, refetchAll, orderId]
   );
 
   useEffect(() => {
@@ -1550,6 +1572,9 @@ export default function CreateMotorProcess({ socket }) {
                     if (col.isStage) {
                       const stageMap = stagesByWorkOrder.get(motor.instance_group_id);
                       const stage = stageMap?.get(normalizeNameKey(col.label));
+                      const motorWorkOrder = workOrders.find(
+                        (wo) => Number(wo.instanceGroupId) === Number(motor.instance_group_id)
+                      );
 
                       return (
                         <td key={`stage-${col.label}`} className="py-5 px-4">
@@ -1571,9 +1596,21 @@ export default function CreateMotorProcess({ socket }) {
                               </button>
                             </div>
                           ) : (
-                            <span className="text-xs text-gray-400 italic">
-                              Not started
-                            </span>
+                            <button
+                              onClick={() =>
+                                setEditStage({
+                                  name: col.label,
+                                  targetDate: "",
+                                  workOrderId: motorWorkOrder?.workOrderId ?? null,
+                                  motorInstanceGroupId: motorWorkOrder
+                                    ? null
+                                    : motor.instance_group_id,
+                                })
+                              }
+                              className="text-xs text-amber-600 hover:underline italic"
+                            >
+                              Add date
+                            </button>
                           )}
                         </td>
                       );

@@ -83,6 +83,7 @@ const Modal = ({ title, onClose, children, widthClass = "max-w-2xl" }) => (
 
 /* ---------- Component Editor Modal ---------- */
 function ComponentEditorModal({ nonMotor, workOrder, onClose, onAfterChange }) {
+  const { notifyError, notifySuccess } = useNotify();
   const [components, setComponents] = useState([]);
   const [adding, setAdding] = useState(false);
 

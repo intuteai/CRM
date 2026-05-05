@@ -101,6 +101,7 @@ const Modal = ({ title, onClose, children, widthClass = "max-w-2xl" }) => (
    ======================================== */
 
 function CreateWorkOrderForm({ orderId, instanceGroups, onClose, onCreated }) {
+  const { notifyError, notifySuccess } = useNotify();
   const [instanceGroupId, setInstanceGroupId] = useState("");
   const [targetDate, setTargetDate] = useState(
     new Date().toISOString().split("T")[0]
@@ -208,6 +209,7 @@ function CreateWorkOrderForm({ orderId, instanceGroups, onClose, onCreated }) {
    ======================================== */
 
 function AddComponentForm({ workOrder, components, onClose, onAdded }) {
+  const { notifyError, notifySuccess } = useNotify();
   const [componentId, setComponentId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -321,6 +323,7 @@ function AddComponentForm({ workOrder, components, onClose, onAdded }) {
    ======================================== */
 
 function ProcessDetailModal({ workOrderComponent, onClose, onUpdate }) {
+  const { notifyError, notifySuccess } = useNotify();
   const [processes, setProcesses] = useState(workOrderComponent.processes || []);
   const [materials, setMaterials] = useState(workOrderComponent.materials || []);
   const [availableStock, setAvailableStock] = useState([]);
@@ -1007,6 +1010,7 @@ function ProcessDetailModal({ workOrderComponent, onClose, onUpdate }) {
    ======================================== */
 
 function KanbanBoard({ workOrders, onRefresh }) {
+  const { notifyError, notifySuccess } = useNotify();
   const allComponents = useMemo(() => {
     const components = [];
 

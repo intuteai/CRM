@@ -34,6 +34,7 @@ class ErrorBoundary extends React.Component {
 }
 
 function CustomerList() {
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
   const [customers, setCustomers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState(null);
@@ -100,7 +101,6 @@ function CustomerList() {
   }, [fetchCustomers]);
 
   const debounceSearch = useCallback(debounce((value) => setSearchTerm(value), 300), []);
-  const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
   const handleSearch = (e) => debounceSearch(e.target.value);
 

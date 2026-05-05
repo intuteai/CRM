@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 export const useFetchData = ({ limit, offset }) => {
   const [orders, setOrders] = useState([]);
   const [totalOrders, setTotalOrders] = useState(0); // total count for pagination
@@ -7,10 +7,15 @@ export const useFetchData = ({ limit, offset }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isEmpty, setIsEmpty] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   // useCallback to prevent unnecessary re-creation of function unless limit or offset changes
   const fetchData = useCallback(async () => {
-    let isMounted = true;
     try {
       setIsLoading(true);
       const token = localStorage.getItem("token");
@@ -47,7 +52,7 @@ export const useFetchData = ({ limit, offset }) => {
         customersRes.ok ? customersRes.json() : [],
       ]);
 
-      if (isMounted) {
+      if (mountedRef.current) {
         const validOrders = (ordersData.orders || [])
           .filter((o) => o && typeof o.id !== "undefined")
           .map((order) => ({
@@ -99,17 +104,14 @@ export const useFetchData = ({ limit, offset }) => {
         console.log("Fetched products:", productsData);
       }
     } catch (err) {
-      if (isMounted) {
+      if (mountedRef.current) {
         setError(err.message || "Failed to fetch data");
         setIsEmpty(false);
         console.error("Fetch error:", err);
       }
     } finally {
-      if (isMounted) setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
-    return () => {
-      isMounted = false;
-    };
   }, [limit, offset]);
 
   useEffect(() => {
