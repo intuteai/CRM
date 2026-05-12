@@ -64,21 +64,23 @@ function StatusBadge({ status, type = 'status' }) {
 
 // ── Photo thumbnail + lightbox ────────────────────────────────────────────────
 function PhotoThumb({ url, label, size = 'md', onDelete }) {
-  const [lightbox, setLightbox] = useState(false);
-  const [err,      setErr]      = useState(false);
+  const [lightbox,    setLightbox]    = useState(false);
+  const [err,         setErr]         = useState(false);
+  const [confirmDel,  setConfirmDel]  = useState(false);
+
   if (!url) return (
     <div className={`${size === 'lg' ? 'w-32 h-32' : 'w-24 h-24'} rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center`}>
       <span className="text-xs text-gray-400">No photo</span>
     </div>
   );
-  const isPdf   = url.toLowerCase().includes('pdf');
+  const isPdf    = url.toLowerCase().includes('pdf');
   const thumbUrl = getWeservUrl(url);
-  const sz = size === 'lg' ? 'w-32 h-32' : 'w-24 h-24';
+  const sz       = size === 'lg' ? 'w-32 h-32' : 'w-24 h-24';
 
   return (
     <>
       <div
-        onClick={() => setLightbox(true)}
+        onClick={() => { if (!confirmDel) setLightbox(true); }}
         className={`${sz} relative group cursor-pointer rounded-xl overflow-hidden border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-200`}
       >
         {isPdf ? (
@@ -93,17 +95,45 @@ function PhotoThumb({ url, label, size = 'md', onDelete }) {
         ) : (
           <img src={thumbUrl} alt={label} className="w-full h-full object-cover" onError={() => setErr(true)} />
         )}
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-xl">
-          <ZoomIn className="w-6 h-6 text-white drop-shadow" />
-        </div>
-        {onDelete && (
+
+        {/* Normal hover overlay — hidden when confirmation is active */}
+        {!confirmDel && (
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-xl">
+            <ZoomIn className="w-6 h-6 text-white drop-shadow" />
+          </div>
+        )}
+
+        {/* First-click delete trigger */}
+        {onDelete && !confirmDel && (
           <button
-            onClick={e => { e.stopPropagation(); onDelete(); }}
+            onClick={e => { e.stopPropagation(); setConfirmDel(true); }}
             className="absolute top-1 right-1 p-0.5 rounded-full bg-red-500 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow"
             title="Remove photo"
           >
             <X className="w-3 h-3" />
           </button>
+        )}
+
+        {/* Confirmation overlay */}
+        {confirmDel && (
+          <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 rounded-xl z-10"
+            onClick={e => e.stopPropagation()}>
+            <p className="text-white text-xs font-semibold">Remove?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={e => { e.stopPropagation(); onDelete(); setConfirmDel(false); }}
+                className="px-2 py-1 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
+              >
+                Yes
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); setConfirmDel(false); }}
+                className="px-2 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-semibold transition-colors"
+              >
+                No
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
