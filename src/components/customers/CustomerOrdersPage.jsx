@@ -6,8 +6,18 @@ import { io } from 'socket.io-client';
 import { useNotify } from '../../hooks/useNotify';
 import ConnectionError from '../pages/ConnectionError.jsx';
 
-// Use the environment variable for the backend URL
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
+const ORDER_STATUS_COLORS = {
+  Pending:               'bg-amber-500',
+  Processing:            'bg-yellow-600',
+  Testing:               'bg-purple-600',
+  'Ready for Shipment':  'bg-teal-600',
+  Shipped:               'bg-blue-600',
+  'Partially Delivered': 'bg-indigo-500',
+  Delivered:             'bg-green-600',
+  Cancelled:             'bg-red-600',
+};
 
 // Utility functions
 const formatDate = (dateString) => (dateString ? new Date(dateString).toISOString().split('T')[0] : '');
@@ -333,14 +343,7 @@ function CustomerOrdersPage() {
                   </td>
                   <td className="py-4 px-6 text-gray-600 text-base">{formatCurrency(calculateTotalAmount(order.items))}</td>
                   <td className="py-4 px-6 text-gray-600 text-base">
-                    <span className={`px-3 py-1 rounded-full text-white text-sm font-medium ${
-                      order.status === 'Pending'              ? 'bg-amber-500'  :
-                      order.status === 'Processing'           ? 'bg-yellow-600' :
-                      order.status === 'Ready for Shipment'   ? 'bg-teal-600'   :
-                      order.status === 'Shipped'              ? 'bg-blue-600'   :
-                      order.status === 'Partially Delivered'  ? 'bg-indigo-500' :
-                      order.status === 'Delivered'            ? 'bg-green-600'  : 'bg-gray-500'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-full text-white text-sm font-medium ${ORDER_STATUS_COLORS[order.status] || 'bg-gray-500'}`}>
                       {order.status || 'Unknown'}
                     </span>
                     {order.statusReason && (

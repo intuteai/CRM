@@ -8,6 +8,17 @@ import ConnectionError from './ConnectionError.jsx';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
+const ORDER_STATUS_COLORS = {
+  Pending:               'bg-amber-500',
+  Processing:            'bg-yellow-600',
+  Testing:               'bg-purple-600',
+  'Ready for Shipment':  'bg-teal-600',
+  Shipped:               'bg-blue-600',
+  'Partially Delivered': 'bg-indigo-500',
+  Delivered:             'bg-green-600',
+  Cancelled:             'bg-red-600',
+};
+
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
   if (typeof importedFormatDate === 'function') {
@@ -437,16 +448,7 @@ function DispatchTrackingPage({ socket: providedSocket }) {
                     {record.delivery_date ? formatDate(record.delivery_date) : 'N/A'}
                   </td>
                   <td className="py-4 px-3 text-base">
-                    <span className={`px-2 py-1 rounded-full text-white text-xs font-medium ${
-                      record.status === 'Delivered'          ? 'bg-green-600'  :
-                      record.status === 'Partially Delivered'? 'bg-indigo-500' :
-                      record.status === 'Shipped'            ? 'bg-blue-600'   :
-                      record.status === 'Ready for Shipment' ? 'bg-teal-600'   :
-                      record.status === 'Processing'         ? 'bg-yellow-600' :
-                      record.status === 'Testing'            ? 'bg-purple-600' :
-                      record.status === 'Cancelled'          ? 'bg-red-600'    :
-                      'bg-amber-500'
-                    }`}>
+                    <span className={`px-2 py-1 rounded-full text-white text-xs font-medium ${ORDER_STATUS_COLORS[record.status] || 'bg-gray-500'}`}>
                       {record.status}
                     </span>
                   </td>

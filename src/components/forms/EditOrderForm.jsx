@@ -35,8 +35,7 @@ function EditOrderForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableProducts, setAvailableProducts] = useState(initialProducts);
 
-  // Once an order is Shipped or Delivered the items are a historical record.
-  // Lock every item control so the user never hits the model's immutability guard.
+  // Items are locked once dispatched — Shipped, Partially Delivered, and Delivered are all post-dispatch.
   const isDispatched = order.status === "Shipped" || order.status === "Partially Delivered" || order.status === "Delivered";
 
   // Fetch fresh stock (with price and availability)
@@ -261,9 +260,7 @@ function EditOrderForm({
               value={editedOrder.status}
               onChange={handleInputChange}
               className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300"
-              disabled={
-                order.status === "Delivered" || order.status === "Cancelled"
-              }
+              disabled={order.status === "Cancelled" || isDispatched}
             >
               <option value="Pending">Pending</option>
               <option value="Processing">Processing</option>

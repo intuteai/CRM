@@ -208,6 +208,17 @@ const useFetchData = ({ limit, offset }) => {
   };
 };
 
+const ORDER_STATUS_COLORS = {
+  Pending:              "bg-amber-500",
+  Processing:           "bg-yellow-600",
+  Testing:              "bg-purple-600",
+  "Ready for Shipment": "bg-teal-600",
+  Shipped:              "bg-blue-600",
+  "Partially Delivered":"bg-indigo-500",
+  Delivered:            "bg-green-600",
+  Cancelled:            "bg-red-600",
+};
+
 const ActionsDropdown = ({
   order,
   onEdit,
@@ -232,6 +243,17 @@ const ActionsDropdown = ({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const close = () => setIsOpen(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [isOpen]);
 
   const handleToggle = () => {
     if (!isOpen && buttonRef.current) {
@@ -1086,19 +1108,7 @@ function OrdersPage() {
                     {formatCurrency(calculateTotalAmount(order.items))}
                   </td>
                   <td className="py-4 px-3 text-gray-600 text-base">
-                    <span
-                      className={`px-3 py-1 rounded-full text-white text-sm font-medium ${
-                        order.status === "Pending"             ? "bg-amber-500"
-                        : order.status === "Processing"        ? "bg-yellow-600"
-                        : order.status === "Testing"           ? "bg-purple-600"
-                        : order.status === "Ready for Shipment"? "bg-teal-600"
-                        : order.status === "Shipped"           ? "bg-blue-600"
-                        : order.status === "Partially Delivered"? "bg-indigo-500"
-                        : order.status === "Delivered"         ? "bg-green-600"
-                        : order.status === "Cancelled"         ? "bg-red-600"
-                        : "bg-gray-500"
-                      }`}
-                    >
+                    <span className={`px-3 py-1 rounded-full text-white text-sm font-medium ${ORDER_STATUS_COLORS[order.status] || "bg-gray-500"}`}>
                       {order.status}
                     </span>
                     {order.statusReason && (

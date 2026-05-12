@@ -76,7 +76,16 @@ const calculateTotalAmount = (items) =>
     0,
   );
 
-// FIXED: Fetch ALL orders like admin page does
+const getAvailableStatuses = (currentStatus) => {
+  const currentRank = STATUS_RANK[currentStatus] ?? -1;
+  const isDispatched = currentRank >= STATUS_RANK[STATUS.SHIPPED];
+  return Object.values(STATUS).filter(s => {
+    if (s === currentStatus || s === STATUS.CANCELLED) return false;
+    if (isDispatched) return (STATUS_RANK[s] ?? -1) > currentRank;
+    return true;
+  });
+};
+
 const useFetchData = ({ userRole }) => {
   const [orders, setOrders] = useState([]);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -147,6 +156,7 @@ function ProductionOrdersPage({ socket, userRole }) {
     key: "createdAt",
     direction: "desc",
   });
+  const [reasonModal, setReasonModal] = useState(null); // { orderId, newStatus, reason: '' }
   const tableRef = useRef(null);
   const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
@@ -160,14 +170,6 @@ function ProductionOrdersPage({ socket, userRole }) {
     isEmpty,
     refetchData,
   } = useFetchData({ userRole });
-
-  // ─── Get all available statuses except current and Cancelled ────────
-  const getAvailableStatuses = (currentStatus) => {
-    const currentRank = STATUS_RANK[currentStatus] ?? -1;
-    return Object.values(STATUS).filter(
-      s => s !== STATUS.CANCELLED && (STATUS_RANK[s] ?? -1) > currentRank
-    );
-  };
 
   // ─── Real-time updates via socket ───────────────────────────────────
   useEffect(() => {
@@ -253,7 +255,7 @@ function ProductionOrdersPage({ socket, userRole }) {
   }, []);
 
   // ─── Status change handler ──────────────────────────────────────────
-  const handleStatusChange = async (orderId, newStatus) => {
+  const handleStatusChange = async (orderId, newStatus, statusReason = null) => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) return;
 
@@ -277,7 +279,8 @@ function ProductionOrdersPage({ socket, userRole }) {
         },
         body: JSON.stringify({
           status: newStatus,
-          items: order.items, // Required by backend
+          items: order.items,
+          status_reason: statusReason,
         }),
       });
 
@@ -288,11 +291,8 @@ function ProductionOrdersPage({ socket, userRole }) {
 
       const updatedOrder = await res.json();
 
-      notifySuccess(`Order #${orderId} → ${updatedOrder.status}`, {
-        autoClose: 2000,
-      });
+      notifySuccess(`Order #${orderId} → ${updatedOrder.status}`, { autoClose: 2000 });
 
-      // Sync with server response
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, ...updatedOrder } : o)),
       );
@@ -304,6 +304,23 @@ function ProductionOrdersPage({ socket, userRole }) {
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: oldStatus } : o)),
       );
+    }
+  };
+
+  // ─── Intercept dropdown → show reason modal ─────────────────────────
+  const onStatusSelectChange = (orderId, newStatus) => {
+    setReasonModal({ orderId, newStatus, reason: '' });
+  };
+
+  const confirmStatusChange = async () => {
+    if (reasonModal.newStatus === STATUS.PARTIALLY_DELIVERED && !reasonModal.reason.trim()) {
+      notifyError('A reason is required for Partially Delivered');
+      return;
+    }
+    try {
+      await handleStatusChange(reasonModal.orderId, reasonModal.newStatus, reasonModal.reason.trim() || null);
+    } finally {
+      setReasonModal(null);
     }
   };
 
@@ -536,17 +553,13 @@ function ProductionOrdersPage({ socket, userRole }) {
                       <div className="relative inline-block group">
                         <select
                           value={order.status}
-                          onChange={(e) =>
-                            handleStatusChange(order.id, e.target.value)
-                          }
+                          onChange={(e) => onStatusSelectChange(order.id, e.target.value)}
                           className={`
                             appearance-none px-4 py-1 pr-9 rounded-full text-white text-sm font-medium
                             cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-400
                             ${STATUS_COLORS[order.status] || "bg-gray-500"}
                           `}
-                          style={{
-                            colorScheme: 'dark'
-                          }}
+                          style={{ colorScheme: 'dark' }}
                           disabled={isLoading}
                         >
                           <option value={order.status} disabled className="bg-gray-800">
@@ -563,6 +576,9 @@ function ProductionOrdersPage({ socket, userRole }) {
                           className="absolute right-2 top-1/2 -translate-y-1/2 text-white/80 pointer-events-none"
                         />
                       </div>
+                      {order.statusReason && (
+                        <p className="text-xs text-gray-500 italic mt-1 max-w-[180px]">{order.statusReason}</p>
+                      )}
                     </td>
                     <td className="py-4 px-3 text-gray-600 text-base">
                       {order.targetDeliveryDate
@@ -628,6 +644,52 @@ function ProductionOrdersPage({ socket, userRole }) {
           )}
         </div>
       </div>
+
+      {/* ── Status reason modal ── */}
+      {reasonModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 className="text-base font-bold text-gray-900 mb-1">
+              Change Status → <span className={`px-2 py-0.5 rounded-full text-white text-sm ${STATUS_COLORS[reasonModal.newStatus] || 'bg-gray-500'}`}>{reasonModal.newStatus}</span>
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">Order #{reasonModal.orderId}</p>
+
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+              Reason / Note
+              {reasonModal.newStatus === STATUS.PARTIALLY_DELIVERED && (
+                <span className="text-red-500 ml-1">* required</span>
+              )}
+            </label>
+            <textarea
+              value={reasonModal.reason}
+              onChange={(e) => setReasonModal(prev => ({ ...prev, reason: e.target.value }))}
+              rows={3}
+              autoFocus
+              placeholder={
+                reasonModal.newStatus === STATUS.PARTIALLY_DELIVERED
+                  ? "Explain what was delivered and what remains…"
+                  : "Optional — add a note about this status change"
+              }
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none mb-4"
+            />
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setReasonModal(null)}
+                className="flex-1 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmStatusChange}
+                className="flex-1 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-colors"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
 </div>
   );
