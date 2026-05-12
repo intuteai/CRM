@@ -63,7 +63,7 @@ function StatusBadge({ status, type = 'status' }) {
 }
 
 // ── Photo thumbnail + lightbox ────────────────────────────────────────────────
-function PhotoThumb({ url, label, size = 'md' }) {
+function PhotoThumb({ url, label, size = 'md', onDelete }) {
   const [lightbox, setLightbox] = useState(false);
   const [err,      setErr]      = useState(false);
   if (!url) return (
@@ -96,6 +96,15 @@ function PhotoThumb({ url, label, size = 'md' }) {
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-xl">
           <ZoomIn className="w-6 h-6 text-white drop-shadow" />
         </div>
+        {onDelete && (
+          <button
+            onClick={e => { e.stopPropagation(); onDelete(); }}
+            className="absolute top-1 right-1 p-0.5 rounded-full bg-red-500 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow"
+            title="Remove photo"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        )}
       </div>
 
       {lightbox && (
@@ -116,9 +125,10 @@ function PhotoThumb({ url, label, size = 'md' }) {
 }
 
 // ── View modal ────────────────────────────────────────────────────────────────
-function ViewModal({ record, onClose, onEdit }) {
+function ViewModal({ record, onClose, onEdit, onDeletePhoto }) {
   if (!record) return null;
   const isRepair = record.service_type === 'repair';
+  const del = onDeletePhoto ? (field, url) => onDeletePhoto(field, url) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto py-6 px-4" onClick={onClose}>
@@ -174,7 +184,7 @@ function ViewModal({ record, onClose, onEdit }) {
                     {record.fault_photos_urls?.length > 0 && (
                       <div className="flex flex-wrap gap-2 pt-1">
                         {record.fault_photos_urls.map((u, i) => (
-                          <PhotoThumb key={i} url={u} label={`Fault Photo ${i + 1}`} />
+                          <PhotoThumb key={u} url={u} label={`Fault Photo ${i + 1}`} onDelete={del ? () => del('fault_photos_urls', u) : undefined} />
                         ))}
                       </div>
                     )}
@@ -187,7 +197,7 @@ function ViewModal({ record, onClose, onEdit }) {
                     {record.actual_issue_photos_urls?.length > 0 && (
                       <div className="flex flex-wrap gap-2 pt-1">
                         {record.actual_issue_photos_urls.map((u, i) => (
-                          <PhotoThumb key={i} url={u} label={`Issue Photo ${i + 1}`} />
+                          <PhotoThumb key={u} url={u} label={`Issue Photo ${i + 1}`} onDelete={del ? () => del('actual_issue_photos_urls', u) : undefined} />
                         ))}
                       </div>
                     )}
@@ -212,7 +222,7 @@ function ViewModal({ record, onClose, onEdit }) {
                   <div className="flex flex-wrap gap-2">
                     {!(record.chalan_photos_urls?.length)
                       ? <PhotoThumb url={null} label="" size="lg" />
-                      : record.chalan_photos_urls.map((u, i) => <PhotoThumb key={i} url={u} label={`Chalan ${i + 1}`} />)
+                      : record.chalan_photos_urls.map((u, i) => <PhotoThumb key={u} url={u} label={`Chalan ${i + 1}`} onDelete={del ? () => del('chalan_photos_urls', u) : undefined} />)
                     }
                   </div>
                 </PhotoGroup>
@@ -220,7 +230,7 @@ function ViewModal({ record, onClose, onEdit }) {
                   <div className="flex flex-wrap gap-2">
                     {!(record.delivery_challan_photos_urls?.length)
                       ? <PhotoThumb url={null} label="" size="lg" />
-                      : record.delivery_challan_photos_urls.map((u, i) => <PhotoThumb key={i} url={u} label={`DC ${i + 1}`} />)
+                      : record.delivery_challan_photos_urls.map((u, i) => <PhotoThumb key={u} url={u} label={`DC ${i + 1}`} onDelete={del ? () => del('delivery_challan_photos_urls', u) : undefined} />)
                     }
                   </div>
                 </PhotoGroup>
@@ -230,7 +240,7 @@ function ViewModal({ record, onClose, onEdit }) {
                   <div className="flex flex-wrap gap-2">
                     {!(record.repaired_photos_urls?.length)
                       ? <PhotoThumb url={null} label="" size="lg" />
-                      : record.repaired_photos_urls.map((u, i) => <PhotoThumb key={i} url={u} label={`Repaired ${i + 1}`} />)
+                      : record.repaired_photos_urls.map((u, i) => <PhotoThumb key={u} url={u} label={`Repaired ${i + 1}`} onDelete={del ? () => del('repaired_photos_urls', u) : undefined} />)
                     }
                   </div>
                 </PhotoGroup>
@@ -406,6 +416,24 @@ function ServiceRepairPage({ socket, userRole }) {
       }
       return next;
     });
+  };
+
+  const deletePhoto = async (recordId, field, url) => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/service-repair/${recordId}/photo`, {
+        method: 'DELETE',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field, url }),
+      });
+      if (!res.ok) throw new Error('Failed to remove photo');
+      const updated = await res.json();
+      setRecords(prev => prev.map(r => r.record_id === recordId ? { ...r, ...updated } : r));
+      if (viewRecord?.record_id === recordId)     setViewRecord(prev => ({ ...prev, ...updated }));
+      if (selectedRecord?.record_id === recordId) setSelectedRecord(prev => ({ ...prev, ...updated }));
+      notifySuccess('Photo removed');
+    } catch (err) {
+      notifyError(err.message || 'Failed to remove photo');
+    }
   };
 
   const makeUploader = (endpoint, errorMsg) => async (recordId, file) => {
@@ -685,7 +713,7 @@ function ServiceRepairPage({ socket, userRole }) {
       </div>
 
       {/* ── View modal ── */}
-      {viewRecord && <ViewModal record={viewRecord} onClose={() => setViewRecord(null)} onEdit={() => openEdit(viewRecord)} />}
+      {viewRecord && <ViewModal record={viewRecord} onClose={() => setViewRecord(null)} onEdit={() => openEdit(viewRecord)} onDeletePhoto={(field, url) => deletePhoto(viewRecord.record_id, field, url)} />}
 
       {/* ── Delete confirm ── */}
       {confirmDelete && (
@@ -778,13 +806,15 @@ function ServiceRepairPage({ socket, userRole }) {
                       <textarea name="fault_query" value={formData.fault_query} onChange={handleChange} rows={2} className={inputCls} placeholder="What the customer reported" />
                     </Field>
                     <Field label="Fault Photos">
-                      <MultiFileInput onChange={setFaultFiles} existing={selectedRecord?.fault_photos_urls} label="Upload fault photos" />
+                      <MultiFileInput onChange={setFaultFiles} existing={selectedRecord?.fault_photos_urls} label="Upload fault photos"
+                        onDeleteExisting={(url) => deletePhoto(selectedRecord.record_id, 'fault_photos_urls', url)} />
                     </Field>
                     <Field label="Actual Issue Found">
                       <textarea name="actual_issue" value={formData.actual_issue} onChange={handleChange} rows={2} className={inputCls} placeholder="Root cause identified" />
                     </Field>
                     <Field label="Actual Issue Photos">
-                      <MultiFileInput onChange={setActualIssueFiles} existing={selectedRecord?.actual_issue_photos_urls} label="Upload actual issue photos" />
+                      <MultiFileInput onChange={setActualIssueFiles} existing={selectedRecord?.actual_issue_photos_urls} label="Upload actual issue photos"
+                        onDeleteExisting={(url) => deletePhoto(selectedRecord.record_id, 'actual_issue_photos_urls', url)} />
                     </Field>
                   </div>
                 </FormSection>
@@ -794,15 +824,18 @@ function ServiceRepairPage({ socket, userRole }) {
               <FormSection title="Photos">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Field label={isRepair ? 'Chalan Photos (Received)' : 'Purchase Challan Photos'}>
-                    <MultiFileInput onChange={setChalanFiles} existing={selectedRecord?.chalan_photos_urls} label="Upload chalan photos or PDFs" accept="image/*,application/pdf" />
+                    <MultiFileInput onChange={setChalanFiles} existing={selectedRecord?.chalan_photos_urls} label="Upload chalan photos or PDFs" accept="image/*,application/pdf"
+                      onDeleteExisting={(url) => deletePhoto(selectedRecord.record_id, 'chalan_photos_urls', url)} />
                   </Field>
                   <Field label="Delivery Challan Photos">
-                    <MultiFileInput onChange={setDcFiles} existing={selectedRecord?.delivery_challan_photos_urls} label="Upload delivery challan photos or PDFs" accept="image/*,application/pdf" />
+                    <MultiFileInput onChange={setDcFiles} existing={selectedRecord?.delivery_challan_photos_urls} label="Upload delivery challan photos or PDFs" accept="image/*,application/pdf"
+                      onDeleteExisting={(url) => deletePhoto(selectedRecord.record_id, 'delivery_challan_photos_urls', url)} />
                   </Field>
                   {isRepair && (
                     <div className="sm:col-span-2">
                       <Field label="Repaired Photos">
-                        <MultiFileInput onChange={setRepairedFiles} existing={selectedRecord?.repaired_photos_urls} label="Upload repaired photos" />
+                        <MultiFileInput onChange={setRepairedFiles} existing={selectedRecord?.repaired_photos_urls} label="Upload repaired photos"
+                          onDeleteExisting={(url) => deletePhoto(selectedRecord.record_id, 'repaired_photos_urls', url)} />
                       </Field>
                     </div>
                   )}
@@ -905,7 +938,7 @@ function FileInput({ onChange, current, label }) {
   );
 }
 
-function MultiFileInput({ onChange, existing = [], label = 'Upload photos (multiple)', accept = 'image/*' }) {
+function MultiFileInput({ onChange, existing = [], label = 'Upload photos (multiple)', accept = 'image/*', onDeleteExisting }) {
   const [count, setCount] = useState(0);
   return (
     <div className="space-y-2">
@@ -917,7 +950,12 @@ function MultiFileInput({ onChange, existing = [], label = 'Upload photos (multi
       {existing?.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {existing.map((url, i) => (
-            <a key={i} href={url} target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline">Photo {i + 1}</a>
+            <PhotoThumb
+              key={url}
+              url={url}
+              label={`Photo ${i + 1}`}
+              onDelete={onDeleteExisting ? () => onDeleteExisting(url) : undefined}
+            />
           ))}
         </div>
       )}
