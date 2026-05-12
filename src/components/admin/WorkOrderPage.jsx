@@ -7,39 +7,29 @@ import ConnectionError from '../pages/ConnectionError.jsx';
 /* 🔹 Status → Card Style Mapper */
 const getStatusStyles = (status) => {
   switch (status) {
-    case "Delivered":
-      return "border-4 border-green-700";
-    case "Shipped":
-      return "border-4 border-blue-500";
-    case "Testing":
-      return "border-4 border-purple-600";
-    case "Processing":
-      return "border-4 border-yellow-600";
-    case "Pending":
-      return "border-4 border-orange-500";
-    case "Cancelled":
-      return "border-4 border-red-600";
-    default:
-      return "border-4 border-gray-300";
+    case "Delivered":          return "border-4 border-green-700";
+    case "Partially Delivered":return "border-4 border-indigo-500";
+    case "Shipped":            return "border-4 border-blue-500";
+    case "Ready for Shipment": return "border-4 border-teal-600";
+    case "Testing":            return "border-4 border-purple-600";
+    case "Processing":         return "border-4 border-yellow-600";
+    case "Pending":            return "border-4 border-orange-500";
+    case "Cancelled":          return "border-4 border-red-600";
+    default:                   return "border-4 border-gray-300";
   }
 };
 
 const getStatusTextColor = (status) => {
   switch (status) {
-    case "Delivered":
-      return "text-green-700";
-    case "Shipped":
-      return "text-blue-600";
-    case "Testing":
-      return "text-purple-700";
-    case "Processing":
-      return "text-yellow-700";
-    case "Pending":
-      return "text-orange-600";
-    case "Cancelled":
-      return "text-red-700";
-    default:
-      return "text-gray-700";
+    case "Delivered":          return "text-green-700";
+    case "Partially Delivered":return "text-indigo-600";
+    case "Shipped":            return "text-blue-600";
+    case "Ready for Shipment": return "text-teal-700";
+    case "Testing":            return "text-purple-700";
+    case "Processing":         return "text-yellow-700";
+    case "Pending":            return "text-orange-600";
+    case "Cancelled":          return "text-red-700";
+    default:                   return "text-gray-700";
   }
 };
 
@@ -103,9 +93,23 @@ function WorkOrderPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <span className="w-7 h-7 border-4 border-indigo-500 rounded-sm"></span>
+              <span className="text-gray-700 text-md font-medium">
+                Partially Delivered
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
               <span className="w-7 h-7 border-4 border-blue-500 rounded-sm"></span>
               <span className="text-gray-700 text-md font-medium">
                 Shipped
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="w-7 h-7 border-4 border-teal-600 rounded-sm"></span>
+              <span className="text-gray-700 text-md font-medium">
+                Ready for Shipment
               </span>
             </div>
 
@@ -170,6 +174,11 @@ function WorkOrderPage() {
                     >
                       Status: {order.status}
                     </p>
+                    {order.statusReason && (
+                      <p className="text-sm text-gray-500 italic">
+                        {order.statusReason}
+                      </p>
+                    )}
 
                     <p className="text-md text-gray-800">
                       Delivery:{" "}

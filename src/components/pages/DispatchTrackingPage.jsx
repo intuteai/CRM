@@ -436,16 +436,19 @@ function DispatchTrackingPage({ socket: providedSocket }) {
                   <td className="py-4 px-3 text-gray-600 text-base">
                     {record.delivery_date ? formatDate(record.delivery_date) : 'N/A'}
                   </td>
-                  <td
-                    className={`py-4 px-3 text-base ${
-                      record.status === 'Delivered'
-                        ? 'text-green-600'
-                        : record.status === 'Shipped'
-                        ? 'text-yellow-600'
-                        : 'text-gray-600'
-                    }`}
-                  >
-                    {record.status}
+                  <td className="py-4 px-3 text-base">
+                    <span className={`px-2 py-1 rounded-full text-white text-xs font-medium ${
+                      record.status === 'Delivered'          ? 'bg-green-600'  :
+                      record.status === 'Partially Delivered'? 'bg-indigo-500' :
+                      record.status === 'Shipped'            ? 'bg-blue-600'   :
+                      record.status === 'Ready for Shipment' ? 'bg-teal-600'   :
+                      record.status === 'Processing'         ? 'bg-yellow-600' :
+                      record.status === 'Testing'            ? 'bg-purple-600' :
+                      record.status === 'Cancelled'          ? 'bg-red-600'    :
+                      'bg-amber-500'
+                    }`}>
+                      {record.status}
+                    </span>
                   </td>
                   <td className="py-4 px-3 text-gray-600 text-base">
                     <ActionsDropdown record={record} onEdit={handleEdit} />
@@ -577,7 +580,7 @@ function DispatchTrackingPage({ socket: providedSocket }) {
                   }
                   className="w-full p-3 border rounded-lg shadow-sm"
                 >
-                  {['Pending', 'Shipped', 'Delivered'].map((status) => (
+                  {['Pending', 'Processing', 'Testing', 'Ready for Shipment', 'Shipped', 'Partially Delivered', 'Delivered', 'Cancelled'].map((status) => (
                     <option key={status} value={status}>
                       {status}
                     </option>

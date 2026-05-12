@@ -218,16 +218,28 @@ const ActionsDropdown = ({
   setShowPaymentDetails,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target))
-        setIsOpen(false);
+      if (
+        buttonRef.current && !buttonRef.current.contains(event.target) &&
+        menuRef.current  && !menuRef.current.contains(event.target)
+      ) setIsOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleToggle = () => {
+    if (!isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, left: rect.right - 192 });
+    }
+    setIsOpen(o => !o);
+  };
 
   const actionItems = [
     {
@@ -237,7 +249,7 @@ const ActionsDropdown = ({
         onEdit(order);
         setIsOpen(false);
       },
-      visible: order.status !== "Cancelled" && order.status !== "Delivered",
+      visible: order.status !== "Cancelled",
     },
     {
       icon: <ShoppingCart size={16} className="mr-2" />,
@@ -259,12 +271,30 @@ const ActionsDropdown = ({
     },
     {
       icon: <Truck size={16} className="mr-2" />,
+      label: "Move to Ready for Shipment",
+      action: () => {
+        onStatusChange(order.id, "Ready for Shipment");
+        setIsOpen(false);
+      },
+      visible: order.status === "Testing",
+    },
+    {
+      icon: <Truck size={16} className="mr-2" />,
       label: "Move to Shipped",
       action: () => {
         onStatusChange(order.id, "Shipped");
         setIsOpen(false);
       },
-      visible: order.status === "Testing",
+      visible: order.status === "Ready for Shipment",
+    },
+    {
+      icon: <CheckCircle size={16} className="mr-2" />,
+      label: "Mark as Partially Delivered",
+      action: () => {
+        onEdit(order);
+        setIsOpen(false);
+      },
+      visible: order.status === "Shipped",
     },
     {
       icon: <CheckCircle size={16} className="mr-2" />,
@@ -273,7 +303,7 @@ const ActionsDropdown = ({
         onStatusChange(order.id, "Delivered");
         setIsOpen(false);
       },
-      visible: order.status === "Shipped",
+      visible: order.status === "Shipped" || order.status === "Partially Delivered",
     },
     {
       icon: <DollarSign size={16} className="mr-2" />,
@@ -297,16 +327,21 @@ const ActionsDropdown = ({
   ];
 
   return (
-    <div ref={dropdownRef} className="relative">
+    <div className="relative">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={buttonRef}
+        onClick={handleToggle}
         className="p-2 hover:bg-gray-100 rounded-full"
         aria-label={`Actions for order ${order.id}`}
       >
         <MoreVertical size={20} />
       </button>
       {isOpen && (
-        <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
+        <div
+          ref={menuRef}
+          className="fixed z-50 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5"
+          style={{ top: menuPos.top, left: menuPos.left }}
+        >
           {actionItems
             .filter((item) => item.visible)
             .map((item, index) => (
@@ -531,7 +566,7 @@ function OrdersPage() {
   );
 
   const handleUpdateOrder = useCallback(
-    async (orderId, items, paymentStatus, targetDeliveryDate, status) => {
+    async (orderId, items, paymentStatus, targetDeliveryDate, status, statusReason) => {
       try {
         const backendUrl =
           import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
@@ -540,6 +575,7 @@ function OrdersPage() {
           payment_status: paymentStatus,
           targetDeliveryDate,
           status,
+          status_reason: statusReason,
         };
         const res = await fetch(`${backendUrl}/api/orders/${orderId}/update`, {
           method: "PUT",
@@ -879,7 +915,9 @@ function OrdersPage() {
               <option value="Pending">Pending</option>
               <option value="Processing">Processing</option>
               <option value="Testing">Testing</option>
+              <option value="Ready for Shipment">Ready for Shipment</option>
               <option value="Shipped">Shipped</option>
+              <option value="Partially Delivered">Partially Delivered</option>
               <option value="Delivered">Delivered</option>
               <option value="Cancelled">Cancelled</option>
             </select>
@@ -1050,23 +1088,22 @@ function OrdersPage() {
                   <td className="py-4 px-3 text-gray-600 text-base">
                     <span
                       className={`px-3 py-1 rounded-full text-white text-sm font-medium ${
-                        order.status === "Pending"
-                          ? "bg-amber-500"
-                          : order.status === "Processing"
-                            ? "bg-yellow-600"
-                            : order.status === "Testing"
-                              ? "bg-purple-600"
-                              : order.status === "Shipped"
-                                ? "bg-blue-600"
-                                : order.status === "Delivered"
-                                  ? "bg-green-600"
-                                  : order.status === "Cancelled"
-                                    ? "bg-red-600"
-                                    : "bg-gray-500"
+                        order.status === "Pending"             ? "bg-amber-500"
+                        : order.status === "Processing"        ? "bg-yellow-600"
+                        : order.status === "Testing"           ? "bg-purple-600"
+                        : order.status === "Ready for Shipment"? "bg-teal-600"
+                        : order.status === "Shipped"           ? "bg-blue-600"
+                        : order.status === "Partially Delivered"? "bg-indigo-500"
+                        : order.status === "Delivered"         ? "bg-green-600"
+                        : order.status === "Cancelled"         ? "bg-red-600"
+                        : "bg-gray-500"
                       }`}
                     >
                       {order.status}
                     </span>
+                    {order.statusReason && (
+                      <p className="text-xs text-gray-500 mt-1 italic">{order.statusReason}</p>
+                    )}
                   </td>
                   <td className="py-4 px-3 text-gray-600 text-base">
                     {order.targetDeliveryDate

@@ -19,7 +19,7 @@ A multi-role ERP/CRM web application built for manufacturing and commerce operat
 | Drag & Drop | @hello-pangea/dnd |
 | Date Utilities | date-fns |
 | Excel Export | xlsx |
-| Deployment | Railway |
+| Deployment | AWS |
 
 ---
 
@@ -105,7 +105,7 @@ src/
 ### Admin
 Full system access including:
 - Enquiry & lead management (Hot Lead, Follow-up, Closed, etc.)
-- Order creation and tracking
+- Order creation, tracking, and status management
 - Quotation, Proforma, and Delivery Challan generation
 - Purchase orders and invoices
 - Bill of Materials (BOM)
@@ -114,7 +114,7 @@ Full system access including:
 - Motor / non-motor manufacturing processes and recipes
 - Pre-Delivery Inspection (PDI)
 - Price list management
-- Work orders
+- Work orders with status-colour coding
 - Documents hub
 - Customer and problem/query management
 - AI chatbot widget
@@ -126,7 +126,7 @@ Full system access including:
 - Issue/query tracking
 
 ### Production
-- Order management
+- Order management with full status lifecycle
 - Stock and BOM view
 - Part drawings
 - PDI
@@ -140,10 +140,10 @@ Full system access including:
 - BOM view
 
 ### Dispatch
-- Real-time shipment tracking
+- Real-time shipment tracking with full status support
 
 ### Customer
-- Order history
+- Order history with status and reason visibility
 - Query/issue submission
 
 ### HR & Employees (Compage)
@@ -157,7 +157,39 @@ Full system access including:
 
 ### Service & Repair
 - Service dashboard
-- Repair tracking page
+- Repair record tracking with multi-photo support per stage:
+  - Fault / Query photos
+  - Actual Issue photos
+  - Chalan photos (multiple, PDF supported)
+  - Delivery Challan photos (multiple, PDF supported)
+  - Repaired photos (multiple)
+- Inline photo deletion with confirmation overlay
+
+---
+
+## Order Status Lifecycle
+
+Orders progress through the following statuses. All transitions are forward-only (no downgrade). Inventory is consumed the first time an order crosses the dispatch threshold.
+
+```
+Pending → Processing → Testing → Ready for Shipment → Shipped → Partially Delivered → Delivered
+                                                               ↘ (Delivered directly, skipping Partially Delivered)
+```
+
+| Status | Colour | Meaning |
+|---|---|---|
+| Pending | Amber | Order created, not started |
+| Processing | Yellow | Being prepared |
+| Testing | Purple | Under QC / testing |
+| Ready for Shipment | Teal | Cleared, waiting to ship |
+| Shipped | Blue | Dispatched — inventory deducted |
+| Partially Delivered | Indigo | Some items delivered; `status_reason` required |
+| Delivered | Green | Fully delivered |
+| Cancelled | Red | Terminal — via dedicated cancel endpoint |
+
+**`status_reason`** is a free-text field visible on all order views. It is required when setting an order to *Partially Delivered* and is always editable.
+
+**Payment status** (`Pending` / `Paid`) remains editable even after delivery.
 
 ---
 
@@ -192,6 +224,6 @@ Two Redux slices power the global state:
 
 ## Deployment
 
-The app is deployed on [Railway](https://railway.app). Production config lives in `railway.json`. The build output in `dist/` is served with the `serve` package on the port provided by `$PORT`.
+The app is deployed on **AWS**. The build output in `dist/` is served as a static site. For production, set `VITE_BACKEND_URL` to the live API endpoint.
 
 Backend API: `https://api.intute.biz`

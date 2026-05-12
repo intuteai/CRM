@@ -20,21 +20,35 @@ import { useNotify } from '../../hooks/useNotify';
 import ConnectionError from '../pages/ConnectionError.jsx';
 
 const STATUS = {
-  PENDING: "Pending",
-  PROCESSING: "Processing",
-  TESTING: "Testing",
-  SHIPPED: "Shipped",
-  DELIVERED: "Delivered",
-  CANCELLED: "Cancelled",
+  PENDING:            "Pending",
+  PROCESSING:         "Processing",
+  TESTING:            "Testing",
+  READY_FOR_SHIPMENT: "Ready for Shipment",
+  SHIPPED:            "Shipped",
+  PARTIALLY_DELIVERED:"Partially Delivered",
+  DELIVERED:          "Delivered",
+  CANCELLED:          "Cancelled",
+};
+
+const STATUS_RANK = {
+  [STATUS.PENDING]:             0,
+  [STATUS.PROCESSING]:          1,
+  [STATUS.TESTING]:             2,
+  [STATUS.READY_FOR_SHIPMENT]:  3,
+  [STATUS.SHIPPED]:             4,
+  [STATUS.PARTIALLY_DELIVERED]: 5,
+  [STATUS.DELIVERED]:           6,
 };
 
 const STATUS_COLORS = {
-  [STATUS.PENDING]: "bg-amber-500",
-  [STATUS.PROCESSING]: "bg-yellow-600",
-  [STATUS.TESTING]: "bg-purple-600",
-  [STATUS.SHIPPED]: "bg-blue-600",
-  [STATUS.DELIVERED]: "bg-green-600",
-  [STATUS.CANCELLED]: "bg-red-600",
+  [STATUS.PENDING]:             "bg-amber-500",
+  [STATUS.PROCESSING]:          "bg-yellow-600",
+  [STATUS.TESTING]:             "bg-purple-600",
+  [STATUS.READY_FOR_SHIPMENT]:  "bg-teal-600",
+  [STATUS.SHIPPED]:             "bg-blue-600",
+  [STATUS.PARTIALLY_DELIVERED]: "bg-indigo-500",
+  [STATUS.DELIVERED]:           "bg-green-600",
+  [STATUS.CANCELLED]:           "bg-red-600",
 };
 
 const formatDate = (dateString) =>
@@ -149,9 +163,9 @@ function ProductionOrdersPage({ socket, userRole }) {
 
   // ─── Get all available statuses except current and Cancelled ────────
   const getAvailableStatuses = (currentStatus) => {
-    // Return all statuses except the current one and Cancelled
+    const currentRank = STATUS_RANK[currentStatus] ?? -1;
     return Object.values(STATUS).filter(
-      status => status !== currentStatus && status !== STATUS.CANCELLED
+      s => s !== STATUS.CANCELLED && (STATUS_RANK[s] ?? -1) > currentRank
     );
   };
 

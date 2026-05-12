@@ -252,7 +252,9 @@ function CustomerOrdersPage() {
               <option value="All">All Status</option>
               <option value="Pending">Pending</option>
               <option value="Processing">Processing</option>
+              <option value="Ready for Shipment">Ready for Shipment</option>
               <option value="Shipped">Shipped</option>
+              <option value="Partially Delivered">Partially Delivered</option>
               <option value="Delivered">Delivered</option>
             </select>
           </div>
@@ -332,13 +334,18 @@ function CustomerOrdersPage() {
                   <td className="py-4 px-6 text-gray-600 text-base">{formatCurrency(calculateTotalAmount(order.items))}</td>
                   <td className="py-4 px-6 text-gray-600 text-base">
                     <span className={`px-3 py-1 rounded-full text-white text-sm font-medium ${
-                      order.status === 'Pending' ? 'bg-amber-500' :
-                      order.status === 'Processing' ? 'bg-yellow-600' :
-                      order.status === 'Shipped' ? 'bg-blue-600' :
-                      order.status === 'Delivered' ? 'bg-green-600' : 'bg-gray-500'
+                      order.status === 'Pending'              ? 'bg-amber-500'  :
+                      order.status === 'Processing'           ? 'bg-yellow-600' :
+                      order.status === 'Ready for Shipment'   ? 'bg-teal-600'   :
+                      order.status === 'Shipped'              ? 'bg-blue-600'   :
+                      order.status === 'Partially Delivered'  ? 'bg-indigo-500' :
+                      order.status === 'Delivered'            ? 'bg-green-600'  : 'bg-gray-500'
                     }`}>
                       {order.status || 'Unknown'}
                     </span>
+                    {order.statusReason && (
+                      <p className="text-xs text-gray-500 mt-1 italic">{order.statusReason}</p>
+                    )}
                   </td>
                   <td className="py-4 px-6 text-gray-600 text-base">{order.targetDeliveryDate ? formatDate(order.targetDeliveryDate) : 'Not Set'}</td>
                   <td className="py-4 px-6 text-gray-600 text-base">{order.paymentStatus || 'N/A'}</td>

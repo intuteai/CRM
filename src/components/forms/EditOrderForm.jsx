@@ -28,6 +28,7 @@ function EditOrderForm({
       ? formatDate(order.targetDeliveryDate)
       : "",
     status: order.status || "Pending",
+    statusReason: order.statusReason || "",
   });
 
   const [formErrors, setFormErrors] = useState([]);
@@ -36,7 +37,7 @@ function EditOrderForm({
 
   // Once an order is Shipped or Delivered the items are a historical record.
   // Lock every item control so the user never hits the model's immutability guard.
-  const isDispatched = order.status === "Shipped" || order.status === "Delivered";
+  const isDispatched = order.status === "Shipped" || order.status === "Partially Delivered" || order.status === "Delivered";
 
   // Fetch fresh stock (with price and availability)
   useEffect(() => {
@@ -95,6 +96,7 @@ function EditOrderForm({
         ? formatDate(order.targetDeliveryDate)
         : "",
       status: order.status || "Pending",
+      statusReason: order.statusReason || "",
     });
   }, [order, availableProducts, formatDate]);
 
@@ -150,16 +152,18 @@ function EditOrderForm({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const { isValid, errors } = validateOrderItems(
-      editedOrder.items,
-      availableProducts,
-      getAvailableStock,
-      order.id,
-    );
 
-    if (!isValid || errors.length > 0) {
-      setFormErrors(errors);
-      return;
+    if (!isDispatched) {
+      const { isValid, errors } = validateOrderItems(
+        editedOrder.items,
+        availableProducts,
+        getAvailableStock,
+        order.id,
+      );
+      if (!isValid || errors.length > 0) {
+        setFormErrors(errors);
+        return;
+      }
     }
 
     try {
@@ -173,6 +177,7 @@ function EditOrderForm({
         payment_status: editedOrder.paymentStatus,
         targetDeliveryDate: editedOrder.targetDeliveryDate || null,
         status: editedOrder.status,
+        status_reason: editedOrder.statusReason || null,
       };
       await onSubmit(
         order.id,
@@ -180,6 +185,7 @@ function EditOrderForm({
         payload.payment_status,
         payload.targetDeliveryDate,
         payload.status,
+        payload.status_reason,
       );
       setFormErrors([]);
     } catch (error) {
@@ -262,9 +268,33 @@ function EditOrderForm({
               <option value="Pending">Pending</option>
               <option value="Processing">Processing</option>
               <option value="Testing">Testing</option>
+              <option value="Ready for Shipment">Ready for Shipment</option>
               <option value="Shipped">Shipped</option>
+              <option value="Partially Delivered">Partially Delivered</option>
               <option value="Delivered">Delivered</option>
             </select>
+          </div>
+
+          <div>
+            <label htmlFor="statusReason" className="text-gray-700 font-medium">
+              Status Reason
+              {editedOrder.status === "Partially Delivered" && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
+            </label>
+            <textarea
+              id="statusReason"
+              name="statusReason"
+              value={editedOrder.statusReason}
+              onChange={handleInputChange}
+              rows={2}
+              placeholder={
+                editedOrder.status === "Partially Delivered"
+                  ? "Required — explain what was partially delivered and why"
+                  : "Optional — add a note about the current status"
+              }
+              className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"
+            />
           </div>
 
           {/* ITEMS */}
