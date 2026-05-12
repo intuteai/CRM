@@ -164,19 +164,33 @@ function ViewModal({ record, onClose, onEdit }) {
           </Section>
 
           {/* Section 2 — Repair details (repair only) */}
-          {isRepair && (record.fault_query || record.actual_issue) && (
+          {isRepair && (record.fault_query || record.actual_issue || record.fault_photos_urls?.length > 0 || record.actual_issue_photos_urls?.length > 0) && (
             <Section title="Repair Details">
-              <div className="space-y-3">
-                {record.fault_query && (
-                  <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-3">
-                    <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide mb-1">Fault / Query from Customer</p>
-                    <p className="text-sm text-gray-800">{record.fault_query}</p>
+              <div className="space-y-4">
+                {(record.fault_query || record.fault_photos_urls?.length > 0) && (
+                  <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-3 space-y-2">
+                    <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Fault / Query from Customer</p>
+                    {record.fault_query && <p className="text-sm text-gray-800">{record.fault_query}</p>}
+                    {record.fault_photos_urls?.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {record.fault_photos_urls.map((u, i) => (
+                          <PhotoThumb key={i} url={u} label={`Fault Photo ${i + 1}`} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
-                {record.actual_issue && (
-                  <div className="bg-red-50 border border-red-100 rounded-xl p-3">
-                    <p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">Actual Issue Found</p>
-                    <p className="text-sm text-gray-800">{record.actual_issue}</p>
+                {(record.actual_issue || record.actual_issue_photos_urls?.length > 0) && (
+                  <div className="bg-red-50 border border-red-100 rounded-xl p-3 space-y-2">
+                    <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Actual Issue Found</p>
+                    {record.actual_issue && <p className="text-sm text-gray-800">{record.actual_issue}</p>}
+                    {record.actual_issue_photos_urls?.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {record.actual_issue_photos_urls.map((u, i) => (
+                          <PhotoThumb key={i} url={u} label={`Issue Photo ${i + 1}`} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -192,13 +206,25 @@ function ViewModal({ record, onClose, onEdit }) {
 
           {/* Section 4 — Photos */}
           <Section title="Photos">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <PhotoGroup label={isRepair ? 'Chalan (Received)' : 'Purchase Challan'}>
-                <PhotoThumb url={record.chalan_photo_url} label="Chalan" size="lg" />
-              </PhotoGroup>
-              <PhotoGroup label="Delivery Challan">
-                <PhotoThumb url={record.delivery_challan_photo_url} label="Delivery Challan" size="lg" />
-              </PhotoGroup>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <PhotoGroup label={`${isRepair ? 'Chalan (Received)' : 'Purchase Challan'} (${(record.chalan_photos_urls || []).length})`}>
+                  <div className="flex flex-wrap gap-2">
+                    {!(record.chalan_photos_urls?.length)
+                      ? <PhotoThumb url={null} label="" size="lg" />
+                      : record.chalan_photos_urls.map((u, i) => <PhotoThumb key={i} url={u} label={`Chalan ${i + 1}`} />)
+                    }
+                  </div>
+                </PhotoGroup>
+                <PhotoGroup label={`Delivery Challan (${(record.delivery_challan_photos_urls || []).length})`}>
+                  <div className="flex flex-wrap gap-2">
+                    {!(record.delivery_challan_photos_urls?.length)
+                      ? <PhotoThumb url={null} label="" size="lg" />
+                      : record.delivery_challan_photos_urls.map((u, i) => <PhotoThumb key={i} url={u} label={`DC ${i + 1}`} />)
+                    }
+                  </div>
+                </PhotoGroup>
+              </div>
               {isRepair && (
                 <PhotoGroup label={`Repaired Photos (${(record.repaired_photos_urls || []).length})`}>
                   <div className="flex flex-wrap gap-2">
@@ -315,10 +341,12 @@ function ServiceRepairPage({ socket, userRole }) {
   const isFetching = useRef(false);
   const { notifySuccess, notifyError } = useNotify();
 
-  const [chalanFile, setChalanFile]       = useState(null);
-  const [dcFile, setDcFile]               = useState(null);
-  const [repairedFiles, setRepairedFiles] = useState([]);
-  const [uploading, setUploading]         = useState(false);
+  const [chalanFiles, setChalanFiles]               = useState([]);
+  const [dcFiles, setDcFiles]                       = useState([]);
+  const [faultFiles, setFaultFiles]                 = useState([]);
+  const [actualIssueFiles, setActualIssueFiles]     = useState([]);
+  const [repairedFiles, setRepairedFiles]           = useState([]);
+  const [uploading, setUploading]                   = useState(false);
 
   const token      = localStorage.getItem('token');
   const authHeader = { Authorization: `Bearer ${token}` };
@@ -344,7 +372,7 @@ function ServiceRepairPage({ socket, userRole }) {
 
   const openCreate = () => {
     setModalMode('create'); setSelectedRecord(null); setFormData(EMPTY_FORM);
-    setChalanFile(null); setDcFile(null); setRepairedFiles([]);
+    setChalanFiles([]); setDcFiles([]); setFaultFiles([]); setActualIssueFiles([]); setRepairedFiles([]);
     setShowModal(true);
   };
 
@@ -365,7 +393,7 @@ function ServiceRepairPage({ socket, userRole }) {
       remarks: record.remarks || '',
       sent_date: record.sent_date ? record.sent_date.substring(0, 10) : '',
     });
-    setChalanFile(null); setDcFile(null); setRepairedFiles([]);
+    setChalanFiles([]); setDcFiles([]); setFaultFiles([]); setActualIssueFiles([]); setRepairedFiles([]);
     setShowModal(true);
   };
 
@@ -380,17 +408,17 @@ function ServiceRepairPage({ socket, userRole }) {
     });
   };
 
-  const uploadPhoto = async (recordId, file, field) => {
+  const makeUploader = (endpoint, errorMsg) => async (recordId, file) => {
     const fd = new FormData(); fd.append('photo', file);
-    const res = await fetch(`${BASE_URL}/api/service-repair/${recordId}/photo?field=${field}`, { method: 'POST', headers: authHeader, body: fd });
-    if (!res.ok) throw new Error(`Photo upload failed (${field})`);
+    const res = await fetch(`${BASE_URL}/api/service-repair/${recordId}/${endpoint}`, { method: 'POST', headers: authHeader, body: fd });
+    if (!res.ok) throw new Error(errorMsg);
   };
 
-  const uploadRepairedPhoto = async (recordId, file) => {
-    const fd = new FormData(); fd.append('photo', file);
-    const res = await fetch(`${BASE_URL}/api/service-repair/${recordId}/repaired-photo`, { method: 'POST', headers: authHeader, body: fd });
-    if (!res.ok) throw new Error('Repaired photo upload failed');
-  };
+  const uploadChalanPhoto         = makeUploader('chalan-photo',           'Chalan photo upload failed');
+  const uploadDeliveryChallanPhoto = makeUploader('delivery-challan-photo', 'Delivery challan photo upload failed');
+  const uploadFaultPhoto           = makeUploader('fault-photo',            'Fault photo upload failed');
+  const uploadActualIssuePhoto     = makeUploader('actual-issue-photo',     'Actual issue photo upload failed');
+  const uploadRepairedPhoto        = makeUploader('repaired-photo',         'Repaired photo upload failed');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -413,9 +441,13 @@ function ServiceRepairPage({ socket, userRole }) {
         if (!res.ok) throw new Error(`Failed to update (${res.status})`);
         record = await res.json();
       }
-      if (chalanFile) await uploadPhoto(record.record_id, chalanFile, 'chalan_photo_url');
-      if (dcFile) await uploadPhoto(record.record_id, dcFile, 'delivery_challan_photo_url');
-      if (formData.service_type === 'repair') for (const f of repairedFiles) await uploadRepairedPhoto(record.record_id, f);
+      for (const f of chalanFiles) await uploadChalanPhoto(record.record_id, f);
+      for (const f of dcFiles) await uploadDeliveryChallanPhoto(record.record_id, f);
+      if (formData.service_type === 'repair') {
+        for (const f of faultFiles) await uploadFaultPhoto(record.record_id, f);
+        for (const f of actualIssueFiles) await uploadActualIssuePhoto(record.record_id, f);
+        for (const f of repairedFiles) await uploadRepairedPhoto(record.record_id, f);
+      }
       notifySuccess(modalMode === 'create' ? 'Record created' : 'Record updated');
       setShowModal(false); fetchRecords();
     } catch (err) {
@@ -598,9 +630,9 @@ function ServiceRepairPage({ socket, userRole }) {
                       <td className="px-4 py-3.5"><StatusBadge status={r.service_type} type="service" /></td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2.5">
-                          {r.chalan_photo_url && (
+                          {r.chalan_photos_urls?.[0] && (
                             <img
-                              src={getWeservUrl(r.chalan_photo_url)}
+                              src={getWeservUrl(r.chalan_photos_urls[0])}
                               alt=""
                               className="w-8 h-8 rounded-lg object-cover border border-gray-200 shrink-0"
                               onError={e => { e.target.style.display = 'none'; }}
@@ -745,8 +777,14 @@ function ServiceRepairPage({ socket, userRole }) {
                     <Field label="Fault / Query from Customer">
                       <textarea name="fault_query" value={formData.fault_query} onChange={handleChange} rows={2} className={inputCls} placeholder="What the customer reported" />
                     </Field>
+                    <Field label="Fault Photos">
+                      <MultiFileInput onChange={setFaultFiles} existing={selectedRecord?.fault_photos_urls} label="Upload fault photos" />
+                    </Field>
                     <Field label="Actual Issue Found">
                       <textarea name="actual_issue" value={formData.actual_issue} onChange={handleChange} rows={2} className={inputCls} placeholder="Root cause identified" />
+                    </Field>
+                    <Field label="Actual Issue Photos">
+                      <MultiFileInput onChange={setActualIssueFiles} existing={selectedRecord?.actual_issue_photos_urls} label="Upload actual issue photos" />
                     </Field>
                   </div>
                 </FormSection>
@@ -755,16 +793,16 @@ function ServiceRepairPage({ socket, userRole }) {
               {/* Photos */}
               <FormSection title="Photos">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label={isRepair ? 'Chalan Photo (Received)' : 'Purchase Challan Photo'}>
-                    <FileInput onChange={setChalanFile} current={selectedRecord?.chalan_photo_url} label="Upload photo or PDF" />
+                  <Field label={isRepair ? 'Chalan Photos (Received)' : 'Purchase Challan Photos'}>
+                    <MultiFileInput onChange={setChalanFiles} existing={selectedRecord?.chalan_photos_urls} label="Upload chalan photos or PDFs" accept="image/*,application/pdf" />
                   </Field>
-                  <Field label="Delivery Challan Photo">
-                    <FileInput onChange={setDcFile} current={selectedRecord?.delivery_challan_photo_url} label="Upload photo or PDF" />
+                  <Field label="Delivery Challan Photos">
+                    <MultiFileInput onChange={setDcFiles} existing={selectedRecord?.delivery_challan_photos_urls} label="Upload delivery challan photos or PDFs" accept="image/*,application/pdf" />
                   </Field>
                   {isRepair && (
                     <div className="sm:col-span-2">
                       <Field label="Repaired Photos">
-                        <MultiFileInput onChange={setRepairedFiles} existing={selectedRecord?.repaired_photos_urls} />
+                        <MultiFileInput onChange={setRepairedFiles} existing={selectedRecord?.repaired_photos_urls} label="Upload repaired photos" />
                       </Field>
                     </div>
                   )}
@@ -867,14 +905,14 @@ function FileInput({ onChange, current, label }) {
   );
 }
 
-function MultiFileInput({ onChange, existing = [] }) {
+function MultiFileInput({ onChange, existing = [], label = 'Upload photos (multiple)', accept = 'image/*' }) {
   const [count, setCount] = useState(0);
   return (
     <div className="space-y-2">
       <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 border-dashed border-amber-300 cursor-pointer hover:border-amber-400 hover:bg-amber-50/50 text-sm text-amber-600 transition-all">
         <Upload className="w-4 h-4 shrink-0" />
-        {count > 0 ? `${count} file(s) selected` : 'Upload repaired photos (multiple)'}
-        <input type="file" accept="image/*" multiple onChange={e => { const f = Array.from(e.target.files); setCount(f.length); onChange(f); }} className="hidden" />
+        {count > 0 ? `${count} file(s) selected` : label}
+        <input type="file" accept={accept} multiple onChange={e => { const f = Array.from(e.target.files); setCount(f.length); onChange(f); }} className="hidden" />
       </label>
       {existing?.length > 0 && (
         <div className="flex flex-wrap gap-2">
