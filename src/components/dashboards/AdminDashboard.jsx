@@ -81,7 +81,8 @@ function AdminDashboard({ socket }) {
 
         {/* Quality & Logistics */}
         <Section title="Quality & Logistics">
-          <DashboardCard to="/pdi" icon={<CheckSquare />} title="PDI" desc="Pre-dispatch inspections" />
+          <DashboardCard to="/pdi" icon={<CheckSquare />} title="PDI Records" desc="View pre-dispatch inspection records" />
+          <DashboardCard to="/pdi-generator" icon={<CheckSquare />} title="PDI Generator" desc="Generate PDI inspection report PDFs" />
           <DashboardCard to="/dispatch-tracking" icon={<MapPin />} title="Dispatch Tracking" desc="Track dispatch status" />
           <DashboardCard to="/problems" icon={<AlertTriangle />} title="Problems" desc="Manage reported problems" />
         </Section>

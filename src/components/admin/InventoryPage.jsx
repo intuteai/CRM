@@ -689,6 +689,7 @@ function InventoryPage({ userRole }) {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedRow, setSelectedRow] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'product_id', direction: 'desc' });
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [selectedDescription, setSelectedDescription] = useState('');
@@ -984,7 +985,7 @@ function InventoryPage({ userRole }) {
     setShowBarcodeModal(true);
   }, []);
 
-  const ActionsDropdown = ({ item, onEdit }) => {
+  const ActionsDropdown = ({ item }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
     const [showAcceptModal, setShowAcceptModal] = useState(false);
@@ -1010,9 +1011,6 @@ function InventoryPage({ userRole }) {
         </button>
         {isOpen && (
           <div className="absolute right-0 z-10 mt-2 w-56 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
-            <button onClick={() => { onEdit(item); setIsOpen(false); }} className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-              <Edit2 size={16} className="mr-2" /> Edit
-            </button>
             <button onClick={() => { setReserveProduct(item); setShowReserveModal(true); setIsOpen(false); }} className="flex items-center w-full px-4 py-2 text-sm text-blue-700 hover:bg-blue-50">
               <Lock size={16} className="mr-2" /> Reserve Stock
             </button>
@@ -1068,6 +1066,19 @@ function InventoryPage({ userRole }) {
           <button onClick={() => setShowCreateForm(true)} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md" disabled={isLoading}>
             <PlusCircle className="mr-2" /> Add Item
           </button>
+          <button
+            onClick={() => {
+              if (selectedRow) {
+                const fresh = allInventory.find(i => i.product_id === selectedRow.product_id);
+                initiateEdit(fresh || selectedRow);
+              }
+            }}
+            disabled={!selectedRow || isLoading}
+            className="p-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 flex items-center shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+            title={selectedRow ? `Edit: ${selectedRow.product_name}` : 'Select a row to edit'}
+          >
+            <Edit2 className="mr-2" size={18} /> Edit{selectedRow ? ` #${selectedRow.product_id}` : ''}
+          </button>
           <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md" disabled={isLoading}>
             <Upload className="mr-2" /> Import from Excel
           </button>
@@ -1115,18 +1126,23 @@ function InventoryPage({ userRole }) {
             </thead>
             <tbody>
               {paginatedInventory.map(item => (
-                <tr key={item.product_id} className="border-t hover:bg-amber-50" role="row">
+                <tr
+                  key={item.product_id}
+                  className={`border-t cursor-pointer ${selectedRow?.product_id === item.product_id ? 'bg-blue-50 ring-1 ring-inset ring-blue-300' : 'hover:bg-amber-50'}`}
+                  onClick={() => setSelectedRow(prev => prev?.product_id === item.product_id ? null : item)}
+                  role="row"
+                >
                   <td className="py-4 px-3">{item.product_id}</td>
                   <td className="py-4 px-3 font-mono text-sm">{item.product_code}</td>
                   <td className="py-4 px-3">{item.product_name.replace(/<[^>]*>/g, '')}</td>
-                  <td className="py-4 px-3">
+                  <td className="py-4 px-3" onClick={(e) => e.stopPropagation()}>
                     {item.description ? (
                       <button onClick={() => showDescription(item.description)} className="text-amber-600 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center">
                         <Eye size={16} className="mr-1" /> View
                       </button>
                     ) : '-'}
                   </td>
-                  <td className="py-4 px-3">
+                  <td className="py-4 px-3" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => openQuantityModal(item)}
                       className={`px-3 py-1 rounded-full text-white text-sm hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-amber-300 ${item.stock_quantity > 0 ? 'bg-green-600 hover:bg-green-700' : item.stock_quantity === 0 ? 'bg-gray-500' : 'bg-red-600'}`}>
                       {item.stock_quantity}
@@ -1143,13 +1159,13 @@ function InventoryPage({ userRole }) {
                       <span className="text-sm text-gray-500">{new Date(item.created_at).toLocaleTimeString('en-IN')}</span>
                     </div>
                   </td>
-                  <td className="py-4 px-3">
+                  <td className="py-4 px-3" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => showBarcode(item.product_code, item.product_name, item.description)} className="text-amber-600 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center">
                       <Eye size={16} className="mr-1" /> QR Code
                     </button>
                   </td>
-                  <td className="py-4 px-3">
-                    <ActionsDropdown item={item} onEdit={initiateEdit} />
+                  <td className="py-4 px-3" onClick={(e) => e.stopPropagation()}>
+                    <ActionsDropdown item={item} />
                   </td>
                 </tr>
               ))}

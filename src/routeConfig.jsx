@@ -47,6 +47,7 @@ import CreateMotorProcess from "./components/admin/CreateMotorProcess";
 import CreateNonMotorProcess from "./components/admin/CreateNonMotorProcess";
 import PartCreation from "./components/admin/PartCreation";
 import DeliveryChallanForm from "./components/admin/DeliveryChallanForm";
+import PDIGeneratorForm from "./components/admin/PDIGeneratorForm";
 import MotorRecipesPage from "./components/admin/MotorRecipesPage";
 import DocumentsHub from "./components/admin/DocumentsHub";
 import PurchaseOrderForm from "./components/admin/PurchaseOrderForm";
@@ -209,6 +210,11 @@ export const routeConfig = [
     path: "/delivery-challan",
     allowedRoles: ["admin"],
     component: DeliveryChallanForm,
+  },
+  {
+    path: "/pdi-generator",
+    allowedRoles: ["admin", "production"],
+    component: PDIGeneratorForm,
   },
   {
     path: "/part-creation",

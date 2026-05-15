@@ -25,7 +25,8 @@ function ProductionDashboard() {
           <DashboardCard to="/production-inventory" icon={<Package />} title="Finished Goods" desc="Monitor finished goods stock" />
           <DashboardCard to="/production-part-drawings-raw" icon={<PenTool />} title="Raw Material Drawings" desc="Access raw material drawings" />
           <DashboardCard to="/production-part-drawings" icon={<PenTool />} title="Finished Goods Drawings" desc="Access finished goods drawings" />
-          <DashboardCard to="/production-pdi" icon={<CheckSquare />} title="PDI Reports" desc="Pre-dispatch inspections" />
+          <DashboardCard to="/production-pdi" icon={<CheckSquare />} title="PDI Records" desc="View pre-dispatch inspection records" />
+          <DashboardCard to="/pdi-generator" icon={<CheckSquare />} title="PDI Generator" desc="Generate PDI inspection report PDFs" />
           <DashboardCard to="/production-bom-unpriced" icon={<BarChart />} title="Bill of Materials (Unpriced)" desc="View unpriced BOMs" />
           <DashboardCard to="/work-orders" icon={<Wrench />} title="Work Orders" desc="Manage work orders for production" />
           <DashboardCard to="/motor-recipes" icon={<Wrench />} title="Motor Recipes" desc="View and manage motor winding recipes" />
