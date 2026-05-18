@@ -38,6 +38,7 @@ const PRODUCT_CHARTS = [
   { label: '2Wheeler', symbol: 'W', digit: '2', defaultSub: 'FF', color: 'indigo' },
   { label: 'Autonxt',  symbol: 'A', digit: '0', defaultSub: 'RF', color: 'violet' },
   { label: 'Special',  symbol: 'S', digit: '3', defaultSub: 'AL', color: 'fuchsia'},
+  { label: 'General',  symbol: 'G', digit: 'N', pair: 'GN', defaultSub: '', color: 'green'  },
 ];
 
 const SUB_CODES = [

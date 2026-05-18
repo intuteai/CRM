@@ -104,6 +104,14 @@ const PRODUCT_CHARTS = [
     defaultSub: "",
     color: "gray",
   },
+  {
+    label: "General",
+    symbol: "G",
+    digit: "N",
+    pair: "GN",
+    defaultSub: "",
+    color: "green",
+  },
 ];
 
 const SUB_CODES = [
