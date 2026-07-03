@@ -800,6 +800,13 @@ function IAOrdersPage({ socket }) {
                   </div>
                 </div>
               ))}
+              <button
+                type="button"
+                onClick={addItem}
+                className="w-full flex items-center justify-center gap-1.5 text-xs text-amber-600 hover:text-amber-800 font-semibold bg-amber-50 hover:bg-amber-100 border border-dashed border-amber-300 px-3 py-2.5 rounded-xl transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add unit
+              </button>
             </div>
           </div>
 
