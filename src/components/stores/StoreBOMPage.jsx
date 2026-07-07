@@ -168,6 +168,14 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       hasFetched.current = true;
     }
 
+    const handleConnect = () => {
+      console.log('Socket connected');
+    };
+
+    const handleConnectError = (err) => {
+      console.error('Socket connection error:', err);
+    };
+
     const handleBomCreated = (bom) => {
       setBoms((prev) => {
         if (!Array.isArray(prev)) return [bom];

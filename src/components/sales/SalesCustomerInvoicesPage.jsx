@@ -135,6 +135,14 @@ function SalesCustomerInvoicesPage({ socket: providedSocket }) {
       hasFetched.current = true;
     }
 
+    const handleConnect = () => {
+      console.log('Socket connected');
+    };
+
+    const handleConnectError = (err) => {
+      console.error('Socket connection error:', err);
+    };
+
     const handleInvoiceUpdate = ({ invoice_id, invoice_number, total_value, issue_date, status }) => {
       setInvoices((prev) => {
         if (!Array.isArray(prev)) return prev || [];
