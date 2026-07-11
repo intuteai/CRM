@@ -625,7 +625,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
 
   if (error && !showModal) return <ConnectionError onRetry={fetchBoms} />;
 
-  if (boms.length === 0 && !isLoading) {
+  if (boms.length === 0 && !isLoading && !showModal) {
     return (
       <div
         className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
