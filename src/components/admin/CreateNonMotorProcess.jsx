@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import AddNonMotorModal from "./Addnonmotormodal";
+import TestingEditor from "./TestingEditor";
 import { useNotify } from '../../hooks/useNotify';
 
 /* ---------- shared utils ---------- */
@@ -407,6 +408,7 @@ export default function CreateNonMotorProcess({ socket }) {
   const [showAddNonMotor, setShowAddNonMotor] = useState(false);
   const [openComponentEditor, setOpenComponentEditor] = useState(null);
   const [editStage, setEditStage] = useState(null);
+  const [editTesting, setEditTesting] = useState(null);
   const { notifySuccess, notifyError, notifyWarning } = useNotify();
 
   useEffect(() => {
@@ -525,6 +527,23 @@ export default function CreateNonMotorProcess({ socket }) {
       workOrder: wo,
       stageName,
       currentDate: stage?.stageDate || "",
+    });
+  };
+
+  const handleEditTesting = (nonMotor, testingType) => {
+    const wo = getWorkOrderForNonMotor(nonMotor.instance_group_id);
+    if (!wo) {
+      notifyWarning("Work order not created yet. Add at least one component first.");
+      return;
+    }
+
+    const entry = (wo.testing || []).find((t) => t.testingType === testingType);
+    setEditTesting({
+      workOrderId: wo.workOrderId,
+      testingType,
+      qty: entry?.qty ?? null,
+      testDate: entry?.testDate ?? null,
+      controllerType: entry?.controllerType ?? null,
     });
   };
 
@@ -673,6 +692,36 @@ export default function CreateNonMotorProcess({ socket }) {
                     </td>
 
                     {STAGE_LIST.map((stageName) => {
+                      if (stageName === "Testing") {
+                        const testingEntries = wo?.testing || [];
+
+                        return (
+                          <td key="Testing" className="py-5 px-4">
+                            {wo ? (
+                              ["Primary", "Final"].map((type) => {
+                                const entry = testingEntries.find((t) => t.testingType === type);
+                                return (
+                                  <div key={type} className="flex items-center gap-2 text-xs mb-1 last:mb-0">
+                                    <span className="font-medium text-gray-700 w-14 shrink-0">{type}</span>
+                                    <span className="text-gray-600">{entry?.testDate || "—"}</span>
+                                    <button
+                                      onClick={() => handleEditTesting(nonMotor, type)}
+                                      className="text-blue-600 hover:underline"
+                                    >
+                                      {entry?.testDate ? "edit" : "add"}
+                                    </button>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <span className="text-xs text-gray-400 italic">
+                                Add components first
+                              </span>
+                            )}
+                          </td>
+                        );
+                      }
+
                       const stageData = getStageData(wo, stageName);
                       const status = getStageStatus(stageData?.stageDate);
                       const displayText = statusToLabel(status, stageData?.stageDate);
@@ -741,6 +790,21 @@ export default function CreateNonMotorProcess({ socket }) {
           currentDate={editStage.currentDate}
           onClose={() => setEditStage(null)}
           onSave={saveStageDate}
+        />
+      )}
+
+      {editTesting && (
+        <TestingEditor
+          workOrderId={editTesting.workOrderId}
+          testingType={editTesting.testingType}
+          initialQty={editTesting.qty}
+          initialDate={editTesting.testDate}
+          initialControllerType={editTesting.controllerType}
+          onClose={() => setEditTesting(null)}
+          onSaved={async () => {
+            setEditTesting(null);
+            await refetchAll();
+          }}
         />
       )}
 

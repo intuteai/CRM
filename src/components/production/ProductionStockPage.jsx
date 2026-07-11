@@ -56,13 +56,13 @@ const formatDate = (value) => {
    Rikshaw       R       1               Shaft SH
    2Wheeler      W       2               Front Flange FF
    Autonxt       A       0               Rear Flange RF
-   Special       S       (none)          Aluminium AL
+   Special       S       (none)          (none)
 
    Sub Codes (alphabetic abbreviations):
    0 → RF  Rear Flange
    1 → SH  Shaft
    2 → FF  Front Flange
-   3 → AL  Aluminium
+   3 → AU  Auxiliary
    4 → (reserved / custom)
    5 → BR  Bearing BR
 
@@ -96,7 +96,7 @@ const PRODUCT_CHARTS = [
     label: "Special",
     symbol: "S",
     digit: "3",
-    defaultSub: "AL",
+    defaultSub: "",
     color: "fuchsia",
   },
   {
@@ -115,6 +115,14 @@ const PRODUCT_CHARTS = [
     defaultSub: "",
     color: "green",
   },
+  {
+    label: "Motor",
+    symbol: "M",
+    digit: "O",
+    pair: "MO",
+    defaultSub: "",
+    color: "rose",
+  },
 ];
 
 const SUB_CODES = [
@@ -122,7 +130,7 @@ const SUB_CODES = [
   { abbr: "SH", label: "Shaft" },
   { abbr: "FF", label: "Front Flange" },
   { abbr: "RF", label: "Rear Flange" },
-  { abbr: "AL", label: "Aluminium" },
+  { abbr: "AU", label: "Auxiliary" },
 ];
 
 const SEG = {
@@ -194,13 +202,29 @@ function parseCode(code) {
   };
 }
 
-function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
+function ProductCodeBuilder({
+  value = "",
+  onChange,
+  disabled = false,
+  suggestedPartNumber = null,
+  excludeId = null,
+  onAutoFlagChange,
+  onAvailabilityChange,
+}) {
   const parsed = parseCode(value);
 
-  const [partNum, setPartNum] = useState(parsed?.partNum ?? "0001");
-  const [partInput, setPartInput] = useState(
-    parsed ? String(parseInt(parsed.partNum, 10)) : "1",
+  const [partNum, setPartNum] = useState(
+    parsed?.partNum ?? (suggestedPartNumber ? pad4(suggestedPartNumber) : "0001"),
   );
+  const [partInput, setPartInput] = useState(
+    parsed
+      ? String(parseInt(parsed.partNum, 10))
+      : suggestedPartNumber
+        ? String(parseInt(suggestedPartNumber, 10))
+        : "1",
+  );
+  const [partTouched, setPartTouched] = useState(false);
+  const [checkStatus, setCheckStatus] = useState(null);
   const [chart, setChart] = useState(parsed?.chart ?? null);
   const [subAbbr, setSubAbbr] = useState(parsed?.subAbbr ?? "");
   const [storeNum, setStoreNum] = useState(parsed?.storeNum ?? "");
@@ -244,6 +268,7 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
   };
 
   const handlePartInput = (e) => {
+    setPartTouched(true);
     const raw = e.target.value;
     setPartInput(raw);
     if (raw !== "") setPartNum(pad4(raw));
@@ -253,6 +278,52 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
     setPartInput(String(parseInt(padded, 10)));
     setPartNum(padded);
   };
+
+  useEffect(() => {
+    onAutoFlagChange?.(!partTouched);
+  }, [partTouched]);
+
+  useEffect(() => {
+    if (manualMode || !partNum || partNum.length !== 4) {
+      setCheckStatus(null);
+      onAvailabilityChange?.(true);
+      return;
+    }
+    onAvailabilityChange?.(false);
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setCheckStatus({ checking: true });
+      try {
+        const token = localStorage.getItem("token");
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+        const url = new URL(`${backendUrl}/api/stock/check-part-number`);
+        url.searchParams.set("part_number", partNum);
+        if (excludeId) url.searchParams.set("exclude_id", excludeId);
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          setCheckStatus(null);
+          onAvailabilityChange?.(true);
+          return;
+        }
+        const data = await res.json();
+        setCheckStatus({ checking: false, ...data });
+        onAvailabilityChange?.(data.available !== false);
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          setCheckStatus(null);
+          onAvailabilityChange?.(true);
+        }
+      }
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [partNum, excludeId, manualMode]);
 
   const seg_part = derivedCode.slice(0, 4);
   const seg_chart = chart ? chart.pair || chart.symbol + chart.digit : "";
@@ -389,6 +460,17 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
             <code className={`${SEG.part} font-bold text-base`}>{partNum}</code>
           </span>
         </div>
+        {checkStatus?.checking && (
+          <p className="text-xs text-gray-400 mt-1">Checking availability…</p>
+        )}
+        {checkStatus && !checkStatus.checking && checkStatus.available === true && (
+          <p className="text-xs text-green-600 mt-1">✓ Available</p>
+        )}
+        {checkStatus && !checkStatus.checking && checkStatus.available === false && (
+          <p className="text-xs text-red-600 mt-1">
+            ✗ Already used by {checkStatus.conflictProductName} (#{checkStatus.conflictProductId})
+          </p>
+        )}
       </div>
 
       {/* ── ② Product Chart ── */}
@@ -708,6 +790,8 @@ function ProductionStockPage() {
     price: "",
   });
   const [formErrors, setFormErrors] = useState({});
+  const [partNumberAuto, setPartNumberAuto] = useState(true);
+  const [partNumberAvailable, setPartNumberAvailable] = useState(true);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [selectedDescription, setSelectedDescription] = useState("");
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
@@ -1072,6 +1156,10 @@ function ProductionStockPage() {
         Object.values(errors).forEach((e) => notifyError(e));
         return;
       }
+      if (!partNumberAvailable) {
+        notifyError("Part Number is already in use — choose a different one.");
+        return;
+      }
 
       try {
         const token = localStorage.getItem("token");
@@ -1089,6 +1177,7 @@ function ProductionStockPage() {
             : undefined,
           qtyRequired: parseInt(formData.qtyRequired) || 0,
           price: parseFloat(formData.price),
+          ...(isCreate ? { part_number_auto: partNumberAuto } : {}),
         };
 
         const res = await fetch(url, {
@@ -1110,7 +1199,7 @@ function ProductionStockPage() {
         notifyError(err.message);
       }
     },
-    [formData, modalMode, selectedItem, refetchData],
+    [formData, modalMode, selectedItem, refetchData, partNumberAuto, partNumberAvailable],
   );
 
   const handleCreate = useCallback(() => {
@@ -1126,6 +1215,8 @@ function ProductionStockPage() {
       location: "",
     });
     setFormErrors({});
+    setPartNumberAuto(true);
+    setPartNumberAvailable(true);
     setShowModal(true);
   }, []);
 
@@ -1141,6 +1232,7 @@ function ProductionStockPage() {
       price: item.price || "",
     });
     setFormErrors({});
+    setPartNumberAvailable(true);
     setShowModal(true);
   }, []);
 
@@ -1449,6 +1541,16 @@ function ProductionStockPage() {
                   onChange={(code) =>
                     setFormData({ ...formData, productCode: code })
                   }
+                  suggestedPartNumber={
+                    modalMode === "create"
+                      ? String(
+                          (stockItems.length ? Math.max(...stockItems.map((i) => i.productId)) : 0) + 1,
+                        ).padStart(4, "0")
+                      : null
+                  }
+                  excludeId={modalMode === "edit" ? selectedItem?.productId : null}
+                  onAutoFlagChange={setPartNumberAuto}
+                  onAvailabilityChange={setPartNumberAvailable}
                 />
                 {formErrors.productCode && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.productCode}</p>

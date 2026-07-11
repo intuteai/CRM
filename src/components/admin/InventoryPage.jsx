@@ -23,13 +23,13 @@ const formatCurrency = (amount) =>
    Rikshaw       R       1               Shaft SH
    2Wheeler      W       2               Front Flange FF
    Autonxt       A       0               Rear Flange RF
-   Special       S       (none)          Aluminium AL
+   Special       S       (none)          (none)
 
    Sub Codes (alphabetic abbreviations):
    0 → RF  Rear Flange
    1 → SH  Shaft
    2 → FF  Front Flange
-   3 → AL  Aluminium
+   3 → AU  Auxiliary
    4 → (reserved / custom)
    5 → BR  Bearing BR
 
@@ -63,7 +63,7 @@ const PRODUCT_CHARTS = [
     label: "Special",
     symbol: "S",
     digit: "3",
-    defaultSub: "AL",
+    defaultSub: "",
     color: "fuchsia",
   },
   {
@@ -82,6 +82,14 @@ const PRODUCT_CHARTS = [
     defaultSub: "",
     color: "green",
   },
+  {
+    label: "Motor",
+    symbol: "M",
+    digit: "O",
+    pair: "MO",
+    defaultSub: "",
+    color: "rose",
+  },
 ];
 
 const SUB_CODES = [
@@ -89,7 +97,7 @@ const SUB_CODES = [
   { abbr: "SH", label: "Shaft" },
   { abbr: "FF", label: "Front Flange" },
   { abbr: "RF", label: "Rear Flange" },
-  { abbr: "AL", label: "Aluminium" },
+  { abbr: "AU", label: "Auxiliary" },
 ];
 
 const SEG = {
@@ -163,14 +171,30 @@ function parseCode(code) {
   };
 }
 
-function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
+function ProductCodeBuilder({
+  value = "",
+  onChange,
+  disabled = false,
+  suggestedPartNumber = null,
+  excludeId = null,
+  onAutoFlagChange,
+  onAvailabilityChange,
+}) {
   // Prefill from existing code if provided, otherwise use defaults
   const parsed = parseCode(value);
 
-  const [partNum, setPartNum] = useState(parsed?.partNum ?? "0001");
-  const [partInput, setPartInput] = useState(
-    parsed ? String(parseInt(parsed.partNum, 10)) : "1",
+  const [partNum, setPartNum] = useState(
+    parsed?.partNum ?? (suggestedPartNumber ? pad4(suggestedPartNumber) : "0001"),
   );
+  const [partInput, setPartInput] = useState(
+    parsed
+      ? String(parseInt(parsed.partNum, 10))
+      : suggestedPartNumber
+        ? String(parseInt(suggestedPartNumber, 10))
+        : "1",
+  );
+  const [partTouched, setPartTouched] = useState(false);
+  const [checkStatus, setCheckStatus] = useState(null);
   const [chart, setChart] = useState(parsed?.chart ?? null);
   const [subAbbr, setSubAbbr] = useState(parsed?.subAbbr ?? "");
   const [storeNum, setStoreNum] = useState(parsed?.storeNum ?? "");
@@ -219,6 +243,7 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
   };
 
   const handlePartInput = (e) => {
+    setPartTouched(true);
     const raw = e.target.value;
     setPartInput(raw);
     if (raw !== "") setPartNum(pad4(raw));
@@ -228,6 +253,52 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
     setPartInput(String(parseInt(padded, 10)));
     setPartNum(padded);
   };
+
+  useEffect(() => {
+    onAutoFlagChange?.(!partTouched);
+  }, [partTouched]);
+
+  useEffect(() => {
+    if (manualMode || !partNum || partNum.length !== 4) {
+      setCheckStatus(null);
+      onAvailabilityChange?.(true);
+      return;
+    }
+    onAvailabilityChange?.(false);
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setCheckStatus({ checking: true });
+      try {
+        const token = localStorage.getItem("token");
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+        const url = new URL(`${backendUrl}/api/inventory/check-part-number`);
+        url.searchParams.set("part_number", partNum);
+        if (excludeId) url.searchParams.set("exclude_id", excludeId);
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          setCheckStatus(null);
+          onAvailabilityChange?.(true);
+          return;
+        }
+        const data = await res.json();
+        setCheckStatus({ checking: false, ...data });
+        onAvailabilityChange?.(data.available !== false);
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          setCheckStatus(null);
+          onAvailabilityChange?.(true);
+        }
+      }
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [partNum, excludeId, manualMode]);
 
   // Colour-coded segments for the preview bar
   const seg_part = derivedCode.slice(0, 4);
@@ -365,6 +436,17 @@ function ProductCodeBuilder({ value = "", onChange, disabled = false }) {
             <code className={`${SEG.part} font-bold text-base`}>{partNum}</code>
           </span>
         </div>
+        {checkStatus?.checking && (
+          <p className="text-xs text-gray-400 mt-1">Checking availability…</p>
+        )}
+        {checkStatus && !checkStatus.checking && checkStatus.available === true && (
+          <p className="text-xs text-green-600 mt-1">✓ Available</p>
+        )}
+        {checkStatus && !checkStatus.checking && checkStatus.available === false && (
+          <p className="text-xs text-red-600 mt-1">
+            ✗ Already used by {checkStatus.conflictProductName} (#{checkStatus.conflictProductId})
+          </p>
+        )}
       </div>
 
       {/* ── ② Product Chart ── */}
@@ -925,7 +1007,7 @@ function InventoryPage({ userRole }) {
     }
   }, [validateImportRow, refetchData]);
 
-  const handleCreateItem = useCallback(async ({ product_name, stock_quantity, price, description, product_code, returnable_qty = 0 }) => {
+  const handleCreateItem = useCallback(async ({ product_name, stock_quantity, price, description, product_code, returnable_qty = 0, part_number_auto }) => {
     const token = localStorage.getItem('token');
     try {
       if (!token) throw new Error('Authentication token missing.');
@@ -933,7 +1015,7 @@ function InventoryPage({ userRole }) {
       const response = await fetch(`${backendUrl}/api/inventory`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ product_name, stock_quantity, price, description, product_code, returnable_qty }),
+        body: JSON.stringify({ product_name, stock_quantity, price, description, product_code, returnable_qty, part_number_auto }),
         credentials: 'include',
       });
       if (!response.ok) { const ed = await response.json().catch(() => ({})); throw new Error(ed.error || 'Failed to create item'); }
@@ -1222,7 +1304,13 @@ function InventoryPage({ userRole }) {
               <XCircle size={24} />
             </button>
             <h2 id="create-form-title" className="text-2xl font-bold mb-6">Add New Item</h2>
-            <CreateItemForm onSubmit={handleCreateItem} onClose={() => setShowCreateForm(false)} />
+            <CreateItemForm
+              onSubmit={handleCreateItem}
+              onClose={() => setShowCreateForm(false)}
+              suggestedPartNumber={String(
+                (allInventory.length ? Math.max(...allInventory.map((i) => i.product_id)) : 0) + 1,
+              ).padStart(4, "0")}
+            />
           </div>
         </div>
       )}
@@ -1460,14 +1548,17 @@ const ReserveStockModal = ({ product, onClose, onReserved }) => {
 /* =====================================================================
    CreateItemForm
    ===================================================================== */
-const CreateItemForm = ({ onSubmit, onClose }) => {
+const CreateItemForm = ({ onSubmit, onClose, suggestedPartNumber }) => {
   const [formData, setFormData] = useState({
     product_name: '', stock_quantity: '0', returnable_qty: '0', price: 0, description: '', product_code: '',
   });
   const [errors, setErrors] = useState({
     product_name: '', stock_quantity: '', returnable_qty: '', price: '', description: '', product_code: '',
   });
+  const [partNumberAuto, setPartNumberAuto] = useState(true);
+  const [partNumberAvailable, setPartNumberAvailable] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { notifyError } = useNotify();
   const [partSearch, setPartSearch] = useState('');
   const [allParts, setAllParts] = useState([]);
   const [filteredParts, setFilteredParts] = useState([]);
@@ -1541,9 +1632,14 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
     else if (!Number.isInteger(Number(sq))) fieldErrors.stock_quantity = 'Stock quantity must be an integer';
     setErrors(fieldErrors);
     if (Object.values(fieldErrors).some(e => e)) return;
+    if (!partNumberAvailable) {
+      notifyError('Part Number is already in use — choose a different one.', { autoClose: 3000 });
+      return;
+    }
+
     try {
       setIsSubmitting(true);
-      await onSubmit({ ...formData, stock_quantity: parseInt(sq, 10), returnable_qty: parseInt(formData.returnable_qty || '0', 10) });
+      await onSubmit({ ...formData, stock_quantity: parseInt(sq, 10), returnable_qty: parseInt(formData.returnable_qty || '0', 10), part_number_auto: partNumberAuto });
     } finally { setIsSubmitting(false); }
   };
 
@@ -1590,6 +1686,9 @@ const CreateItemForm = ({ onSubmit, onClose }) => {
             setErrors(prev => ({ ...prev, product_code: String(v).trim().length === 11 ? '' : 'Product code must be exactly 11 characters' }));
           }}
           disabled={isSubmitting}
+          suggestedPartNumber={suggestedPartNumber}
+          onAutoFlagChange={setPartNumberAuto}
+          onAvailabilityChange={setPartNumberAvailable}
         />
         {errors.product_code && <p className="text-red-600 text-sm mt-1">{errors.product_code}</p>}
       </div>
@@ -1646,7 +1745,9 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
   const [errors, setErrors] = useState({
     product_name: '', price: '', description: '', product_code: '', stock_quantity: '', returnable_qty: '',
   });
+  const [partNumberAvailable, setPartNumberAvailable] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { notifyError } = useNotify();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -1668,6 +1769,11 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     else if (!Number.isInteger(Number(sq))) fieldErrors.stock_quantity = 'Stock quantity must be an integer';
     setErrors(fieldErrors);
     if (Object.values(fieldErrors).some(e => e)) return;
+    if (!partNumberAvailable) {
+      notifyError('Part Number is already in use — choose a different one.', { autoClose: 3000 });
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       await onSubmit(item.product_id, { ...formData, stock_quantity: parseInt(sq, 10), returnable_qty: parseInt(formData.returnable_qty || '0', 10) });
@@ -1692,6 +1798,8 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
             setErrors(prev => ({ ...prev, product_code: String(v).trim().length === 11 ? '' : 'Product code must be exactly 11 characters' }));
           }}
           disabled={isSubmitting}
+          excludeId={item.product_id}
+          onAvailabilityChange={setPartNumberAvailable}
         />
         {errors.product_code && <p className="text-red-600 text-sm mt-1">{errors.product_code}</p>}
       </div>

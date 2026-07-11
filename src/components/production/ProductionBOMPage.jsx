@@ -142,10 +142,13 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
   const fetchProductsAndMaterials = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-      const productResponse = await fetch(`${BASE_URL}/api/inventory?limit=1000`, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
+      const [productResponse, materialResponse] = await Promise.all([
+        fetch(`${BASE_URL}/api/inventory?limit=1000`, { headers }),
+        fetch(`${BASE_URL}/api/stock?limit=1000`, { headers }),
+      ]);
+
       if (!productResponse.ok) {
         const errorText = await productResponse.text();
         throw new Error(`Failed to fetch products: ${errorText || productResponse.status}`);
@@ -159,9 +162,6 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         : [];
       setProducts(normalizedProducts);
 
-      const materialResponse = await fetch(`${BASE_URL}/api/stock?limit=1000`, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      });
       if (!materialResponse.ok) {
         const errorText = await materialResponse.text();
         throw new Error(`Failed to fetch materials: ${errorText || materialResponse.status}`);
@@ -298,8 +298,9 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
 
   const handleCreate = useCallback(() => {
     if (!isDataLoaded) {
-      notifyWarning('Please wait, loading products and materials...', { autoClose: 2000 });
-      return;
+      notifyWarning('Still loading products and materials — you can start filling the form.', {
+        autoClose: 2000,
+      });
     }
     setModalMode('create');
     setSelectedBom(null);
@@ -645,7 +646,7 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
           <RefreshCw className="mx-auto mb-4 text-gray-400" size={48} />
           <h2 className="text-2xl font-bold text-gray-800 mb-2">No BOMs Yet</h2>
           <p className="text-gray-600 mb-6">Your database is empty. Create a new BOM to get started!</p>
-          <button onClick={handleCreate} className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300" disabled={!isDataLoaded}>
+          <button onClick={handleCreate} className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300">
             Create BOM
           </button>
         </div>
@@ -679,7 +680,6 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
             onClick={handleCreate}
             className="p-4 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-300 transition-all duration-300 shadow-md text-lg flex items-center"
             aria-label="Create new BOM"
-            disabled={!isDataLoaded}
           >
             <Plus size={20} className="mr-2" /> Create
           </button>
@@ -825,8 +825,9 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                   onChange={handleProductInputChange}
                   onKeyDown={handleProductKeyDown}
                   onFocus={() => setIsProductDropdownOpen(true)}
-                  placeholder="Type to search products..."
-                  className="w-full p-3 border border-gray-200 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all duration-300 placeholder-gray-400 font-medium"
+                  disabled={!isDataLoaded}
+                  placeholder={isDataLoaded ? 'Type to search products...' : 'Loading products...'}
+                  className="w-full p-3 border border-gray-200 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all duration-300 placeholder-gray-400 font-medium disabled:bg-gray-100 disabled:cursor-wait"
                 />
                 {isProductDropdownOpen && filteredProducts.length > 0 && (
                   <ul className="absolute z-10 w-full mt-1 bg-gradient-to-b from-white to-amber-50 rounded-lg shadow-xl border border-amber-100 overflow-y-auto max-h-48 transform transition-all duration-300 ease-in-out">
@@ -863,8 +864,9 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                         onChange={(e) => handleMaterialInputChange(index, e)}
                         onKeyDown={(e) => handleMaterialKeyDown(index, e)}
                         onFocus={() => setIsMaterialDropdownOpen((prev) => ({ ...prev, [index]: true }))}
-                        placeholder="Type to search materials..."
-                        className="w-full p-3 border border-gray-200 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all duration-300 placeholder-gray-400 font-medium"
+                        disabled={!isDataLoaded}
+                        placeholder={isDataLoaded ? 'Type to search materials...' : 'Loading materials...'}
+                        className="w-full p-3 border border-gray-200 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all duration-300 placeholder-gray-400 font-medium disabled:bg-gray-100 disabled:cursor-wait"
                       />
                       {isMaterialDropdownOpen[index] && filteredMaterials[index]?.length > 0 && (
                         <ul className="absolute z-10 w-full mt-1 bg-gradient-to-b from-white to-amber-50 rounded-lg shadow-xl border border-amber-100 overflow-y-auto max-h-48 transform transition-all duration-300 ease-in-out">

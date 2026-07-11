@@ -24,6 +24,13 @@ import { useNotify } from '../../hooks/useNotify';
 
 const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
 
+const formatDate = (dateString) => {
+  if (!dateString) return "—";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString();
+};
+
 async function safeJson(res) {
   const txt = await res.text();
   try {
@@ -799,7 +806,7 @@ function ProcessDetailModal({ workOrderComponent, onClose, onUpdate }) {
                           )}
                         </td>
                         <td className="py-2 pr-4">{process.responsiblePerson || "—"}</td>
-                        <td className="py-2 pr-4">{process.completionDate || "—"}</td>
+                        <td className="py-2 pr-4">{formatDate(process.completionDate)}</td>
                         <td className="py-2">
                           <button
                             onClick={() => startEditProcess(process)}
@@ -1511,7 +1518,7 @@ export default function ProcessManagement({ socket }) {
                         </div>
                       </td>
                       <td className="p-4">
-                        <span className="text-sm">{wo.targetDate || "—"}</span>
+                        <span className="text-sm">{formatDate(wo.targetDate)}</span>
                       </td>
                       <td className="p-4">
                         <button

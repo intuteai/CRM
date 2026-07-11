@@ -14,6 +14,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import AddMotorModal from "./AddMotorModal";
+import TestingEditor from "./TestingEditor";
 import { useNotify } from '../../hooks/useNotify';
 
 /* ---------- shared utils ---------- */
@@ -1105,6 +1106,7 @@ export default function CreateMotorProcess({ socket }) {
   const [showAddMotor, setShowAddMotor] = useState(false);
   const [openDetail, setOpenDetail] = useState(null);
   const [editStage, setEditStage] = useState(null);
+  const [editTesting, setEditTesting] = useState(null);
 
   const [editingCell, setEditingCell] = useState(null);
   const [editingValue, setEditingValue] = useState("Pending");
@@ -1207,6 +1209,20 @@ export default function CreateMotorProcess({ socket }) {
         });
       });
       map.set(Number(wo.instanceGroupId), stageMap);
+    });
+
+    return map;
+  }, [workOrders]);
+
+  const testingByWorkOrder = useMemo(() => {
+    const map = new Map();
+
+    workOrders.forEach((wo) => {
+      const testingMap = new Map();
+      (wo.testing || []).forEach((t) => {
+        testingMap.set(t.testingType, t);
+      });
+      map.set(Number(wo.instanceGroupId), testingMap);
     });
 
     return map;
@@ -1570,11 +1586,45 @@ export default function CreateMotorProcess({ socket }) {
 
                   {displayColumns.map((col) => {
                     if (col.isStage) {
-                      const stageMap = stagesByWorkOrder.get(motor.instance_group_id);
-                      const stage = stageMap?.get(normalizeNameKey(col.label));
                       const motorWorkOrder = workOrders.find(
                         (wo) => Number(wo.instanceGroupId) === Number(motor.instance_group_id)
                       );
+
+                      if (col.label === "Testing") {
+                        const testingMap = testingByWorkOrder.get(motor.instance_group_id);
+
+                        return (
+                          <td key="stage-Testing" className="py-5 px-4">
+                            {["Primary", "Final"].map((type) => {
+                              const entry = testingMap?.get(type);
+                              return (
+                                <div key={type} className="flex items-center gap-2 text-xs mb-1 last:mb-0">
+                                  <span className="font-medium text-gray-700 w-14 shrink-0">{type}</span>
+                                  <span className="text-gray-600">{entry?.testDate || "—"}</span>
+                                  <button
+                                    onClick={() =>
+                                      setEditTesting({
+                                        workOrderId: motorWorkOrder?.workOrderId ?? null,
+                                        instanceGroupId: motor.instance_group_id,
+                                        testingType: type,
+                                        qty: entry?.qty ?? null,
+                                        testDate: entry?.testDate ?? null,
+                                        controllerType: entry?.controllerType ?? null,
+                                      })
+                                    }
+                                    className="text-amber-700 hover:underline"
+                                  >
+                                    {entry?.testDate ? "edit" : "add"}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </td>
+                        );
+                      }
+
+                      const stageMap = stagesByWorkOrder.get(motor.instance_group_id);
+                      const stage = stageMap?.get(normalizeNameKey(col.label));
 
                       return (
                         <td key={`stage-${col.label}`} className="py-5 px-4">
@@ -1720,6 +1770,23 @@ export default function CreateMotorProcess({ socket }) {
           stage={editStage}
           onCancel={() => setEditStage(null)}
           onSave={saveStageEdits}
+        />
+      )}
+
+      {editTesting && (
+        <TestingEditor
+          orderId={orderId}
+          workOrderId={editTesting.workOrderId}
+          instanceGroupId={editTesting.instanceGroupId}
+          testingType={editTesting.testingType}
+          initialQty={editTesting.qty}
+          initialDate={editTesting.testDate}
+          initialControllerType={editTesting.controllerType}
+          onClose={() => setEditTesting(null)}
+          onSaved={async () => {
+            setEditTesting(null);
+            await refetchAll();
+          }}
         />
       )}
 
