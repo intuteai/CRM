@@ -46,11 +46,40 @@ const Highlight = ({ text, query }) => {
   );
 };
 
-const emptyItem = () => ({
-  vcu_serial: '', vcu_make: '', vcu_model: '',
+// VCU units are always built in-house — make is fixed, not user-entered
+const VCU_MAKE = 'Intute AI Only';
+const VCU_MODEL_OPTIONS = ['24 Pin', '64 Pin'];
+const DEFAULT_CODE_PREFIX = 'VCL';
+
+// Serial format: {prefix}{code#}--{running#}  e.g. VCL001--058
+const SERIAL_PATTERN = /^([A-Za-z]+)(\d+)--(\d+)$/;
+const parseSerial = (serial) => {
+  const m = SERIAL_PATTERN.exec(String(serial || '').trim());
+  if (!m) return null;
+  return { prefix: m[1], codeNum: m[2], runNum: m[3] };
+};
+
+const emptyItem = (model = VCU_MODEL_OPTIONS[0]) => ({
+  vcu_serial: '', vcu_make: VCU_MAKE, vcu_model: model, vcu_code_num: '',
   hmi_imei: '', hmi_make: '', hmi_model: '',
 });
-const emptyForm = () => ({ customer_name: '', invoice_number: '', dispatch_date: '', notes: '', items: [emptyItem()] });
+const emptyForm = () => ({
+  customer_name: '', invoice_number: '', dispatch_date: '', notes: '',
+  modelMode: 'same', orderModel: VCU_MODEL_OPTIONS[0],
+  codeMode: 'same', orderCode: '1',
+  items: [emptyItem()],
+});
+
+// Zero-pad to at least 3 digits: 7 -> "007", 1000 -> "1000"
+const padSerialNum = (n) => String(n).padStart(3, '0');
+
+// Rewrite just the code segment of a generated serial, keeping its own running number.
+// Serials that don't match the generator pattern (hand-typed/custom) are left untouched.
+const rebuildSerialCode = (serial, prefix, codeNum) => {
+  const parsed = parseSerial(serial);
+  if (!parsed || !Number.isFinite(codeNum) || codeNum < 0) return serial;
+  return `${prefix}${padSerialNum(codeNum)}--${parsed.runNum}`;
+};
 
 // Whether an item has any HMI data at all
 const itemHasHmi = (item) =>
@@ -104,6 +133,11 @@ function IAOrdersPage({ socket }) {
   const [editingOrder, setEditingOrder] = useState(null);
   const [form, setForm]                 = useState(emptyForm());
   const [notesModal, setNotesModal]     = useState(null);
+
+  // Serial auto-generator
+  const [serialGen, setSerialGen]       = useState({ prefix: DEFAULT_CODE_PREFIX, start: '', end: '' });
+  const [serialConflicts, setSerialConflicts] = useState([]);
+  const [checkingSerials, setCheckingSerials] = useState(false);
 
   // Sort
   const [sortConfig, setSortConfig]     = useState({ key: null, direction: 'asc' });
@@ -251,36 +285,227 @@ function IAOrdersPage({ socket }) {
   });
 
   // ── Form ──────────────────────────────────────────────────────
-  const openCreate = () => { setEditingOrder(null); setForm(emptyForm()); setIsModalOpen(true); };
+  const resetSerialGen = () => { setSerialGen({ prefix: DEFAULT_CODE_PREFIX, start: '', end: '' }); setSerialConflicts([]); };
+
+  const openCreate = () => { setEditingOrder(null); setForm(emptyForm()); resetSerialGen(); setIsModalOpen(true); };
   const openEdit   = (order) => {
     setEditingOrder(order);
+    const items = order.items?.length > 0
+      ? order.items.map(i => {
+          const parsed = parseSerial(i.vcu_serial);
+          return {
+            vcu_serial:   i.vcu_serial,
+            vcu_make:     i.vcu_make || VCU_MAKE,
+            vcu_model:    i.vcu_model,
+            vcu_code_num: parsed?.codeNum || '',
+            hmi_imei:     i.hmi_imei  || '',
+            hmi_make:     i.hmi_make  || '',
+            hmi_model:    i.hmi_model || '',
+          };
+        })
+      : [emptyItem()];
+
+    // Infer whether the existing order used one model / VCU code throughout, or a mix
+    const uniqueModels = new Set(items.map(i => i.vcu_model).filter(Boolean));
+    const modelMode  = uniqueModels.size <= 1 ? 'same' : 'mixed';
+    const orderModel = uniqueModels.size === 1 ? [...uniqueModels][0] : VCU_MODEL_OPTIONS[0];
+
+    const parsedFirst = parseSerial(items[0]?.vcu_serial);
+    const uniqueCodes = new Set(items.map(i => i.vcu_code_num).filter(Boolean));
+    const codeMode  = uniqueCodes.size <= 1 ? 'same' : 'mixed';
+    const orderCode = uniqueCodes.size === 1 ? [...uniqueCodes][0] : '1';
+
     setForm({
       customer_name:  order.customer_name,
       invoice_number: order.invoice_number,
       dispatch_date:  toYMD(order.dispatch_date),
       notes:          order.notes || '',
-      items: order.items?.length > 0
-        ? order.items.map(i => ({
-            vcu_serial: i.vcu_serial,
-            vcu_make:   i.vcu_make,
-            vcu_model:  i.vcu_model,
-            hmi_imei:   i.hmi_imei  || '',
-            hmi_make:   i.hmi_make  || '',
-            hmi_model:  i.hmi_model || '',
-          }))
-        : [emptyItem()],
+      modelMode, orderModel,
+      codeMode, orderCode,
+      items,
     });
+    setSerialGen({ prefix: parsedFirst?.prefix || DEFAULT_CODE_PREFIX, start: '', end: '' });
+    setSerialConflicts([]);
     setIsModalOpen(true);
   };
-  const closeModal    = () => { setIsModalOpen(false); setEditingOrder(null); };
-  const setItemField  = (i, f, v) => setForm(prev => { const items = [...prev.items]; items[i] = { ...items[i], [f]: v }; return { ...prev, items }; });
-  const addItem       = () => setForm(prev => ({ ...prev, items: [...prev.items, emptyItem()] }));
-  const removeItem    = (i) => setForm(prev => { if (prev.items.length === 1) return prev; return { ...prev, items: prev.items.filter((_, idx) => idx !== i) }; });
+  const closeModal    = () => { setIsModalOpen(false); setEditingOrder(null); resetSerialGen(); };
+
+  const setItemField  = (i, f, v) => {
+    setForm(prev => { const items = [...prev.items]; items[i] = { ...items[i], [f]: v }; return { ...prev, items }; });
+    // A hand-edit invalidates the last generated-range availability check
+    if (f === 'vcu_serial' && serialConflicts.length > 0) setSerialConflicts([]);
+  };
+
+  const addItem = () => setForm(prev => ({
+    ...prev,
+    items: [...prev.items, emptyItem(prev.modelMode === 'same' ? prev.orderModel : VCU_MODEL_OPTIONS[0])],
+  }));
+  const removeItem = (i) => {
+    if (form.items.length === 1) return;
+    const removedSerial = form.items[i]?.vcu_serial;
+    setForm(prev => ({ ...prev, items: prev.items.filter((_, idx) => idx !== i) }));
+    // Don't let a stale conflict for a now-deleted row keep blocking submit
+    if (removedSerial && serialConflicts.length > 0) {
+      setSerialConflicts(prev => prev.filter(s => s !== removedSerial));
+    }
+  };
+
+  // ── Model uniformity ─────────────────────────────────────────
+  const setModelMode = (mode) => setForm(prev => {
+    if (mode === 'same') {
+      const model = prev.orderModel || VCU_MODEL_OPTIONS[0];
+      return { ...prev, modelMode: mode, orderModel: model, items: prev.items.map(it => ({ ...it, vcu_model: model })) };
+    }
+    return { ...prev, modelMode: mode };
+  });
+  const setOrderModel = (model) => setForm(prev => ({
+    ...prev,
+    orderModel: model,
+    items: prev.modelMode === 'same' ? prev.items.map(it => ({ ...it, vcu_model: model })) : prev.items,
+  }));
+
+  // ── VCU Code uniformity (the "VCL001" part) ────────────────────
+  // These keep the visible Code #/Prefix controls and the actual vcu_serial
+  // value in sync immediately — mirroring how the Model toggle already behaves —
+  // instead of only taking effect the next time "Generate" is clicked.
+  const setCodeMode = (mode) => {
+    setForm(prev => {
+      if (mode === 'same') {
+        const codeNum = parseInt(prev.orderCode, 10);
+        const prefix = serialGen.prefix || DEFAULT_CODE_PREFIX;
+        return {
+          ...prev,
+          codeMode: mode,
+          items: prev.items.map(it => ({ ...it, vcu_serial: rebuildSerialCode(it.vcu_serial, prefix, codeNum) })),
+        };
+      }
+      return { ...prev, codeMode: mode };
+    });
+    if (mode === 'same' && serialConflicts.length > 0) setSerialConflicts([]);
+  };
+
+  const setOrderCode = (code) => {
+    const codeNum = parseInt(code, 10);
+    const prefix = serialGen.prefix || DEFAULT_CODE_PREFIX;
+    setForm(prev => ({
+      ...prev,
+      orderCode: code,
+      items: prev.codeMode === 'same'
+        ? prev.items.map(it => ({ ...it, vcu_serial: rebuildSerialCode(it.vcu_serial, prefix, codeNum) }))
+        : prev.items,
+    }));
+    if (serialConflicts.length > 0) setSerialConflicts([]);
+  };
+
+  const setCodePrefix = (prefix) => {
+    setSerialGen(prev => ({ ...prev, prefix }));
+    setForm(prev => ({
+      ...prev,
+      items: prev.items.map(it => {
+        const codeNum = prev.codeMode === 'same' ? parseInt(prev.orderCode, 10) : parseInt(it.vcu_code_num, 10);
+        return { ...it, vcu_serial: rebuildSerialCode(it.vcu_serial, prefix || DEFAULT_CODE_PREFIX, codeNum) };
+      }),
+    }));
+    if (serialConflicts.length > 0) setSerialConflicts([]);
+  };
+
+  const setItemCode = (index, value) => {
+    const codeNum = parseInt(value, 10);
+    const prefix = serialGen.prefix || DEFAULT_CODE_PREFIX;
+    setForm(prev => {
+      const items = [...prev.items];
+      items[index] = {
+        ...items[index],
+        vcu_code_num: value,
+        vcu_serial: rebuildSerialCode(items[index].vcu_serial, prefix, codeNum),
+      };
+      return { ...prev, items };
+    });
+    if (serialConflicts.length > 0) setSerialConflicts([]);
+  };
+
+  // ── Serial auto-generator (Code + "--" + running number) ──────
+  const generateSerials = async () => {
+    const prefix = serialGen.prefix.trim();
+    const start = parseInt(serialGen.start, 10);
+    const end = parseInt(serialGen.end, 10);
+
+    if (!prefix) { notifyError('Enter a code prefix (e.g. VCL)'); return; }
+    if (!Number.isFinite(start) || !Number.isFinite(end)) { notifyError('Enter both a start and end running number'); return; }
+    if (start < 0 || end < 0) { notifyError('Running numbers must be zero or greater'); return; }
+    if (start > end) { notifyError('Start number must be less than or equal to end number'); return; }
+    const count = end - start + 1;
+    if (count > 500) { notifyError('Range too large — generate at most 500 units at a time'); return; }
+
+    if (form.codeMode === 'same') {
+      const codeNum = parseInt(form.orderCode, 10);
+      if (!Number.isFinite(codeNum) || codeNum < 0) {
+        notifyError('Enter a valid VCU code number (0 or greater, e.g. 1 for VCL001)');
+        return;
+      }
+    }
+
+    const codeFor = (idx) => {
+      if (form.codeMode === 'same') return parseInt(form.orderCode, 10);
+      const raw = parseInt(form.items[idx]?.vcu_code_num, 10);
+      return Number.isFinite(raw) && raw >= 0 ? raw : idx + 1;
+    };
+
+    const serials = Array.from({ length: count }, (_, idx) =>
+      `${prefix}${padSerialNum(codeFor(idx))}--${padSerialNum(start + idx)}`
+    );
+    const sameModel = form.modelMode === 'same' ? form.orderModel : null;
+
+    setForm(prev => ({
+      ...prev,
+      items: serials.map((serial, idx) => {
+        const existing = prev.items[idx];
+        return {
+          vcu_serial:   serial,
+          vcu_make:     existing?.vcu_make || VCU_MAKE,
+          vcu_model:    sameModel || existing?.vcu_model || VCU_MODEL_OPTIONS[0],
+          vcu_code_num: existing?.vcu_code_num || String(codeFor(idx)),
+          hmi_imei:     existing?.hmi_imei  || '',
+          hmi_make:     existing?.hmi_make  || '',
+          hmi_model:    existing?.hmi_model || '',
+        };
+      }),
+    }));
+
+    const token = localStorage.getItem('token');
+    if (!token) { notifyError('Please log in again'); return; }
+
+    setCheckingSerials(true);
+    try {
+      const res = await axios.get(`${API_URL}/api/ia-orders/check-serials`, {
+        params: { serials: serials.join(',') },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      // A serial already belonging to *this* order (when editing) isn't a real conflict
+      const ownSerials = new Set((editingOrder?.items || []).map(i => i.vcu_serial));
+      const conflicts = (res.data?.taken || []).filter(s => !ownSerials.has(s));
+      setSerialConflicts(conflicts);
+      if (conflicts.length > 0) {
+        notifyError(`${conflicts.length} serial${conflicts.length > 1 ? 's are' : ' is'} already in use`);
+      } else {
+        notifySuccess(`Generated ${count} serial${count > 1 ? 's' : ''}: ${serials[0]} – ${serials[serials.length - 1]}`);
+      }
+    } catch {
+      notifyError('Could not verify serial availability — check manually before submitting');
+    } finally {
+      setCheckingSerials(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
     if (!token) { notifyError('Please log in again'); return; }
+
+    if (serialConflicts.length > 0) {
+      notifyError('Resolve serial number conflicts before submitting');
+      return;
+    }
 
     // VCU fields are required; HMI fields are optional (but all-or-nothing)
     const validItems = form.items.filter(i =>
@@ -299,7 +524,8 @@ function IAOrdersPage({ socket }) {
       }
     }
 
-    const payload = { ...form, dispatch_date: toYMD(form.dispatch_date), items: validItems };
+    const { customer_name, invoice_number, dispatch_date, notes } = form;
+    const payload = { customer_name, invoice_number, notes, dispatch_date: toYMD(dispatch_date), items: validItems };
     const isEdit  = !!editingOrder;
     const url     = isEdit ? `${API_URL}/api/ia-orders/${editingOrder.order_id}` : `${API_URL}/api/ia-orders`;
 
@@ -719,6 +945,118 @@ function IAOrdersPage({ socket }) {
                 <Plus className="w-3.5 h-3.5" /> Add unit
               </button>
             </div>
+
+            {/* Order-level VCU configuration */}
+            <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 mb-3 space-y-4">
+              {/* VCU Code uniformity — the "VCL001" part */}
+              <div>
+                <span className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">VCU Code for this order</span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="inline-flex rounded-lg border border-amber-200 overflow-hidden text-xs font-medium">
+                    <button type="button" onClick={() => setCodeMode('same')}
+                      className={`px-3 py-2 transition-colors ${form.codeMode === 'same' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-amber-50'}`}>
+                      Same for all units
+                    </button>
+                    <button type="button" onClick={() => setCodeMode('mixed')}
+                      className={`px-3 py-2 transition-colors border-l border-amber-200 ${form.codeMode === 'mixed' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-amber-50'}`}>
+                      Mixed per unit
+                    </button>
+                  </div>
+                  <div>
+                    <input type="text" value={serialGen.prefix}
+                      onChange={e => setCodePrefix(e.target.value)}
+                      className="w-16 px-3 py-2 rounded-lg border border-amber-200 text-sm font-mono focus:ring-2 focus:ring-amber-300 focus:outline-none" placeholder="VCL" />
+                  </div>
+                  {form.codeMode === 'same' ? (
+                    <div className="flex items-center gap-1.5">
+                      <input type="number" min="0" value={form.orderCode}
+                        onChange={e => setOrderCode(e.target.value)}
+                        className="w-20 px-3 py-2 rounded-lg border border-amber-200 text-sm font-mono focus:ring-2 focus:ring-amber-300 focus:outline-none" placeholder="1" />
+                      <span className="text-xs text-gray-400">
+                        → {(serialGen.prefix || DEFAULT_CODE_PREFIX)}{padSerialNum(parseInt(form.orderCode, 10) || 0)}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-500">Set each unit&apos;s code number individually below</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="border-t border-blue-100" />
+
+              {/* Running serial number generator */}
+              <div>
+                <span className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Running Serial Number</span>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Start #</label>
+                    <input type="number" min="0" value={serialGen.start}
+                      onChange={e => setSerialGen(prev => ({ ...prev, start: e.target.value }))}
+                      className="w-20 px-3 py-2 rounded-lg border border-amber-200 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none" placeholder="10" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">End #</label>
+                    <input type="number" min="0" value={serialGen.end}
+                      onChange={e => setSerialGen(prev => ({ ...prev, end: e.target.value }))}
+                      className="w-20 px-3 py-2 rounded-lg border border-amber-200 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none" placeholder="20" />
+                  </div>
+                  <button type="button" onClick={generateSerials} disabled={checkingSerials}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-all flex items-center gap-1.5">
+                    {checkingSerials ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    Generate
+                  </button>
+                  {(() => {
+                    const s = parseInt(serialGen.start, 10);
+                    const en = parseInt(serialGen.end, 10);
+                    if (!Number.isFinite(s) || !Number.isFinite(en) || en < s) return null;
+                    const sampleCode = form.codeMode === 'same'
+                      ? `${serialGen.prefix || DEFAULT_CODE_PREFIX}${padSerialNum(parseInt(form.orderCode, 10) || 0)}`
+                      : `${serialGen.prefix || DEFAULT_CODE_PREFIX}###`;
+                    return (
+                      <span className="text-xs text-gray-500 pb-2.5">
+                        → {en - s + 1} unit(s), e.g. {sampleCode}--{padSerialNum(s)}
+                      </span>
+                    );
+                  })()}
+                </div>
+                {serialConflicts.length > 0 && (
+                  <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    ⚠ Already in use: {serialConflicts.join(', ')} — edit those units manually before submitting
+                  </p>
+                )}
+              </div>
+
+              <div className="border-t border-blue-100" />
+
+              {/* Model uniformity */}
+              <div>
+                <span className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">VCU Model for this order</span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="inline-flex rounded-lg border border-amber-200 overflow-hidden text-xs font-medium">
+                    <button type="button" onClick={() => setModelMode('same')}
+                      className={`px-3 py-2 transition-colors ${form.modelMode === 'same' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-amber-50'}`}>
+                      Same for all units
+                    </button>
+                    <button type="button" onClick={() => setModelMode('mixed')}
+                      className={`px-3 py-2 transition-colors border-l border-amber-200 ${form.modelMode === 'mixed' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-amber-50'}`}>
+                      Mixed per unit
+                    </button>
+                  </div>
+                  {form.modelMode === 'same' ? (
+                    <select
+                      className="px-3 py-2 rounded-lg border border-amber-200 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                      value={form.orderModel}
+                      onChange={e => setOrderModel(e.target.value)}
+                    >
+                      {VCU_MODEL_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  ) : (
+                    <span className="text-xs text-gray-500">Set each unit&apos;s model individually below</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-3">
               {form.items.map((item, index) => (
                 <div key={index} className="border border-amber-200 rounded-xl overflow-hidden">
@@ -736,24 +1074,59 @@ function IAOrdersPage({ socket }) {
                       <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-bold px-2.5 py-2 rounded-lg shrink-0 mt-5 border border-blue-100">
                         <Cpu className="w-3.5 h-3.5" /> VCU
                       </div>
-                      <div className="grid grid-cols-3 gap-2 flex-1">
-                        {[
-                          ['vcu_serial', 'Serial No.', 'SN-001',     true,  true],
-                          ['vcu_make',   'Make',       'e.g. Siemens', false, true],
-                          ['vcu_model',  'Model',      'e.g. S7-1200', false, true],
-                        ].map(([field, label, placeholder, mono, required]) => (
-                          <div key={field}>
-                            <label className="block text-xs text-gray-500 mb-1">{label}</label>
-                            <input
-                              type="text"
-                              required={required}
-                              placeholder={placeholder}
-                              className={`w-full px-3 py-2 rounded-lg border border-amber-200 focus:ring-2 focus:ring-amber-300 focus:outline-none text-sm ${mono ? 'font-mono' : ''}`}
-                              value={item[field]}
-                              onChange={e => setItemField(index, field, e.target.value)}
-                            />
+                      <div className="grid grid-cols-4 gap-2 flex-1">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Code #</label>
+                          {form.codeMode === 'mixed' ? (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs font-mono text-gray-400 shrink-0">{serialGen.prefix || DEFAULT_CODE_PREFIX}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder="1"
+                                className="w-full px-2 py-2 rounded-lg border border-amber-200 focus:ring-2 focus:ring-amber-300 focus:outline-none text-sm font-mono"
+                                value={item.vcu_code_num}
+                                onChange={e => setItemCode(index, e.target.value)}
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-full px-3 py-2 rounded-lg border border-gray-100 bg-gray-50 text-sm font-mono text-gray-500 truncate">
+                              {(serialGen.prefix || DEFAULT_CODE_PREFIX)}{padSerialNum(parseInt(form.orderCode, 10) || 0)}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Serial No.</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="VCL001--058"
+                            className="w-full px-3 py-2 rounded-lg border border-amber-200 focus:ring-2 focus:ring-amber-300 focus:outline-none text-sm font-mono"
+                            value={item.vcu_serial}
+                            onChange={e => setItemField(index, 'vcu_serial', e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Model</label>
+                          <select
+                            required
+                            disabled={form.modelMode === 'same'}
+                            className={`w-full px-3 py-2 rounded-lg border border-amber-200 focus:ring-2 focus:ring-amber-300 focus:outline-none text-sm ${form.modelMode === 'same' ? 'bg-gray-50 text-gray-500' : ''}`}
+                            value={item.vcu_model}
+                            onChange={e => setItemField(index, 'vcu_model', e.target.value)}
+                          >
+                            {VCU_MODEL_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Make</label>
+                          <div
+                            className="w-full px-3 py-2 rounded-lg border border-gray-100 bg-gray-50 text-sm text-gray-500 truncate"
+                            title={VCU_MAKE}
+                          >
+                            {VCU_MAKE}
                           </div>
-                        ))}
+                        </div>
                       </div>
                     </div>
 
