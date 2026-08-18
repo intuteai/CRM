@@ -99,6 +99,7 @@ import CompageEmployeeActivitiesPage from "./components/employees/CompageEmploye
 // ── Intute (IA) ──────────────────────────────────────────────
 import IAActivitiesPage from "./components/IA/IAActivitiesPage";
 import IAHRPayslipForm from "./components/IA/IAHRPayslipForm";
+import IAInvoiceForm from "./components/IA/IAInvoiceForm";
 import IAAttendanceSummary from "./components/IA/IAAttendanceSummary";
 import IAAttendanceHistory from "./components/IA/IAAttendanceHistory";
 
@@ -183,6 +184,11 @@ export const routeConfig = [
     path: "/ia-orders",
     allowedRoles: ["ia_employee", "ia_hr"],
     component: IAOrdersPage,
+  },
+  {
+    path: "/ia-invoices",
+    allowedRoles: ["ia_employee", "ia_hr"],
+    component: IAInvoiceForm,
   },
 
   // ── Admin Routes ─────────────────────────────────────────────

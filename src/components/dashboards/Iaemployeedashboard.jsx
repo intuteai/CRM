@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, CalendarDays, Package, Sparkles } from "lucide-react";
+import { Clock, CalendarDays, FileText, Package, Sparkles } from "lucide-react";
 import { useNotify } from '../../hooks/useNotify';
 
 function IAEmployeeDashboard({ socket, userRole }) {
@@ -65,9 +65,10 @@ function IAEmployeeDashboard({ socket, userRole }) {
         )}
 
         <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
             {isLoading ? (
               <>
+                <SkeletonCard />
                 <SkeletonCard />
                 <SkeletonCard />
                 <SkeletonCard />
@@ -100,6 +101,15 @@ function IAEmployeeDashboard({ socket, userRole }) {
                   gradient="from-purple-100 to-violet-50"
                   hoverGradient="hover:from-purple-200 hover:to-violet-100"
                   iconBg="bg-purple-500"
+                />
+                <DashboardCard
+                  to="/ia-invoices"
+                  icon={<FileText />}
+                  title="Invoice Generator"
+                  desc="Generate customer invoices with auto GST and PDF download"
+                  gradient="from-blue-100 to-sky-50"
+                  hoverGradient="hover:from-blue-200 hover:to-sky-100"
+                  iconBg="bg-blue-500"
                 />
               </>
             )}

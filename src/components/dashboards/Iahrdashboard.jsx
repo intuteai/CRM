@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarCheck, CalendarDays, Download, Package, Sparkles } from 'lucide-react';
+import { CalendarCheck, CalendarDays, Download, FileText, Package, Sparkles } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 
 function IAHRDashboard({ socket, userRole }) {
@@ -88,6 +88,15 @@ function IAHRDashboard({ socket, userRole }) {
               gradient="from-green-100 to-emerald-50"
               hoverGradient="hover:from-green-200 hover:to-emerald-100"
               iconBg="bg-green-500"
+            />
+            <DashboardCard
+              to="/ia-invoices"
+              icon={<FileText />}
+              title="Invoice Generator"
+              desc="Generate customer invoices with auto GST and PDF download"
+              gradient="from-blue-100 to-sky-50"
+              hoverGradient="hover:from-blue-200 hover:to-sky-100"
+              iconBg="bg-blue-500"
             />
           </div>
         </div>

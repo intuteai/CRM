@@ -170,6 +170,7 @@ export const allowedPathsByRole = {
     "/ia-attendance-history",
     "/activities",
     "/ia-orders",
+    "/ia-invoices",
     "/edit-profile",
   ],
   [ROLES.IA_HR]: [
@@ -178,6 +179,7 @@ export const allowedPathsByRole = {
     "/activities",
     "/ia-orders",
     "/hr-payslips",
+    "/ia-invoices",
     "/edit-profile",
   ],
 
