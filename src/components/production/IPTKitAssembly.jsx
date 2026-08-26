@@ -80,6 +80,7 @@ function IPTKitAssembly({ socket }) {
     setEditingId(null);
     setForm(emptyForm());
     setFieldError({ field: null, message: '' });
+    setPreviewSerial('');
     setIsModalOpen(true);
     try {
       const res = await axios.get(`${API_URL}/api/ipt-kits/next-serial`, authHeaders);
@@ -240,7 +241,10 @@ function IPTKitAssembly({ socket }) {
                       fieldError.field === c.key ? 'border-red-400 focus:ring-red-200' : 'border-gray-200 focus:ring-amber-300'
                     }`}
                     value={form[c.key]}
-                    onChange={(e) => setForm({ ...form, [c.key]: e.target.value })}
+                    onChange={(e) => {
+                      setForm({ ...form, [c.key]: e.target.value });
+                      if (fieldError.field === c.key) setFieldError({ field: null, message: '' });
+                    }}
                   />
                   {fieldError.field === c.key && (
                     <p className="text-xs text-red-500 mt-1">{fieldError.message}</p>
