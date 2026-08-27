@@ -72,6 +72,7 @@ import ProductionPartDrawingsPage from "./components/production/ProductionPartDr
 import ProductionPDIPage from "./components/production/ProductionPDIPage";
 import ProductionBOMPage from "./components/production/ProductionBOMPage";
 import ProductionInventoryPage from "./components/production/ProductionInventoryPage";
+import IPTKitAssembly from "./components/production/IPTKitAssembly";
 
 // Customers
 import CustomerOrdersPage from "./components/customers/CustomerOrdersPage";
@@ -337,6 +338,11 @@ export const routeConfig = [
     path: "/production-inventory",
     allowedRoles: ["production"],
     component: ProductionInventoryPage,
+  },
+  {
+    path: "/ipt-kits",
+    allowedRoles: ["admin", "production"],
+    component: IPTKitAssembly,
   },
 
   // ── Store Routes ──────────────────────────────────────────────
