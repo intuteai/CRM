@@ -7,7 +7,8 @@ import {
   CheckSquare,
   BarChart,
   MessageSquare,
-  Wrench
+  Wrench,
+  Boxes
 } from "lucide-react";
 
 function ProductionDashboard() {
@@ -30,6 +31,7 @@ function ProductionDashboard() {
           <DashboardCard to="/production-bom-unpriced" icon={<BarChart />} title="Bill of Materials (Unpriced)" desc="View unpriced BOMs" />
           <DashboardCard to="/work-orders" icon={<Wrench />} title="Work Orders" desc="Manage work orders for production" />
           <DashboardCard to="/motor-recipes" icon={<Wrench />} title="Motor Recipes" desc="View and manage motor winding recipes" />
+          <DashboardCard to="/ipt-kits" icon={<Boxes />} title="IPT Kit Assembly" desc="Record component serials for each IPT Kit" />
         </Section>
       </div>
     </div>

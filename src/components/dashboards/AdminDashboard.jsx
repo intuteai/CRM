@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Package, MessageSquare, Truck, Users, FileText, BarChart,
-  PenTool, DollarSign, CheckSquare, Mail, MapPin, AlertTriangle, Wrench
+  PenTool, DollarSign, CheckSquare, Mail, MapPin, AlertTriangle, Wrench, Boxes
 } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 
@@ -77,6 +77,7 @@ function AdminDashboard({ socket }) {
         <Section title="Production Management">
           <DashboardCard to="/work-orders" icon={<Wrench />} title="Work Orders" desc="Manage work orders for production" />
           <DashboardCard to="/motor-recipes" icon={<Wrench />} title="Motor Recipes" desc="Winding specs per customer motor" />
+          <DashboardCard to="/ipt-kits" icon={<Boxes />} title="IPT Kit Assembly" desc="Record component serials for each IPT Kit" />
         </Section>
 
         {/* Quality & Logistics */}
