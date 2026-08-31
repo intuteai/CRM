@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { Boxes, Search, Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { Boxes, Search, Plus, Pencil, Trash2, Loader2, Settings2 } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
@@ -34,6 +34,10 @@ function IPTKitAssembly({ socket }) {
   const [form, setForm] = useState(emptyForm());
   const [fieldError, setFieldError] = useState({ field: null, message: '' });
   const [saving, setSaving] = useState(false);
+  const [editingSerial, setEditingSerial] = useState(false);
+  const [nextSerialInput, setNextSerialInput] = useState('');
+  const [serialSetError, setSerialSetError] = useState('');
+  const [settingSerial, setSettingSerial] = useState(false);
   const mountedRef = useRef(true);
 
   const token = localStorage.getItem('token');
@@ -81,12 +85,31 @@ function IPTKitAssembly({ socket }) {
     setForm(emptyForm());
     setFieldError({ field: null, message: '' });
     setPreviewSerial('');
+    setEditingSerial(false);
+    setNextSerialInput('');
+    setSerialSetError('');
     setIsModalOpen(true);
     try {
       const res = await axios.get(`${API_URL}/api/ipt-kits/next-serial`, authHeaders);
       setPreviewSerial(res.data.kit_serial);
     } catch {
       setPreviewSerial('');
+    }
+  };
+
+  const handleSetNextSerial = async (e) => {
+    e.preventDefault();
+    setSettingSerial(true);
+    setSerialSetError('');
+    try {
+      const res = await axios.put(`${API_URL}/api/ipt-kits/next-serial`, { next: nextSerialInput }, authHeaders);
+      setPreviewSerial(res.data.kit_serial);
+      setEditingSerial(false);
+      notifySuccess(`Next kit will be ${res.data.kit_serial}`);
+    } catch (err) {
+      setSerialSetError(err.response?.data?.error || 'Could not set next serial number');
+    } finally {
+      setSettingSerial(false);
     }
   };
 
@@ -227,9 +250,54 @@ function IPTKitAssembly({ socket }) {
             <h2 className="text-2xl font-bold text-gray-800 mb-1 text-center">
               {editingId ? 'Edit Kit' : 'New Kit'}
             </h2>
-            <p className="text-center text-sm text-gray-500 mb-6 font-mono">
+            <div className="text-center text-sm text-gray-500 mb-2 font-mono flex items-center justify-center gap-2">
               {previewSerial ? `Kit Serial: ${previewSerial}` : ''}
-            </p>
+              {!editingId && !editingSerial && (
+                <button
+                  type="button"
+                  onClick={() => { setEditingSerial(true); setNextSerialInput(''); setSerialSetError(''); }}
+                  title="Set starting number"
+                  className="text-amber-600 hover:text-amber-800"
+                >
+                  <Settings2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            {!editingId && editingSerial && (
+              <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <form onSubmit={handleSetNextSerial} className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 font-mono">IPT</span>
+                  <input
+                    type="number"
+                    min="1"
+                    autoFocus
+                    placeholder="e.g. 1"
+                    className={`w-24 px-3 py-1.5 rounded-lg border font-mono text-sm focus:ring-2 ${
+                      serialSetError ? 'border-red-400 focus:ring-red-200' : 'border-amber-300 focus:ring-amber-200'
+                    }`}
+                    value={nextSerialInput}
+                    onChange={(e) => { setNextSerialInput(e.target.value); setSerialSetError(''); }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={settingSerial || !nextSerialInput}
+                    className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                  >
+                    {settingSerial ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Set'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingSerial(false); setSerialSetError(''); }}
+                    className="px-3 py-1.5 text-gray-500 text-sm"
+                  >
+                    Cancel
+                  </button>
+                </form>
+                {serialSetError && (
+                  <p className="text-xs text-red-500 mt-2">⚠ {serialSetError}</p>
+                )}
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               {COMPONENT_FIELDS.map((c) => (
                 <div key={c.key}>
