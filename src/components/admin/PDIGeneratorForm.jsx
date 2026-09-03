@@ -90,6 +90,13 @@ const defaultForm = () => ({
   mechanical_remarks: 'ALL MOTORS OK, PASSED.',
   power_cable_length: '1250±50mm',
   sensor_cable_length: '1250±50mm',
+  // Mechanical table's "Specification" row — manual entry, varies by product
+  spec_motor_length: '',
+  spec_shaft_length: '',
+  spec_mounting_pcd: '153',
+  spec_mtg: '1.M6 / 2.Ø8.0',
+  spec_key_dim: 'Go/NG',
+  spec_locating_dia: '50.0 mm',
   drawing_image: null,
   photo_overall_motor: null,
   photo_name_plate: null,
@@ -476,8 +483,36 @@ export default function PDIGeneratorForm() {
             {/* ── Mechanical Tab ── */}
             {activeTab === 'mechanical' && (
               <div className="space-y-5">
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-xs text-amber-700">
-                  Specifications: PCD = 153 · MTG = 1.M6 / 2.Ø8.0 · Key = Go/NG · Locating Dia. = 50.0 mm
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <h3 className="text-xs font-semibold text-amber-800 mb-2">
+                    Specification Row (printed in the mechanical table below — free text, varies by product)
+                  </h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Motor Length</label>
+                      <input className={INPUT_CLS} value={form.spec_motor_length} onChange={(e) => setField('spec_motor_length', e.target.value)} placeholder="e.g. 254.4±0.5mm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Shaft O/P Dia./Length</label>
+                      <input className={INPUT_CLS} value={form.spec_shaft_length} onChange={(e) => setField('spec_shaft_length', e.target.value)} placeholder="e.g. 24.0 mm/53.3 mm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">PCD</label>
+                      <input className={INPUT_CLS} value={form.spec_mounting_pcd} onChange={(e) => setField('spec_mounting_pcd', e.target.value)} placeholder="e.g. 152.74" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">MTG</label>
+                      <input className={INPUT_CLS} value={form.spec_mtg} onChange={(e) => setField('spec_mtg', e.target.value)} placeholder="e.g. 4*M8" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Key Dim.</label>
+                      <input className={INPUT_CLS} value={form.spec_key_dim} onChange={(e) => setField('spec_key_dim', e.target.value)} placeholder="e.g. Go/NG" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Locating Dia.</label>
+                      <input className={INPUT_CLS} value={form.spec_locating_dia} onChange={(e) => setField('spec_locating_dia', e.target.value)} placeholder="e.g. 50.0 mm" />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto rounded-lg border border-gray-200">
