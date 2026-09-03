@@ -1,12 +1,26 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Modal from 'react-modal';
 import axios from 'axios';
-import { Download, FileText, ClipboardCheck } from 'lucide-react';
+import { Download, FileText, ClipboardCheck, Image as ImageIcon, X } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 
 Modal.setAppElement('#root');
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || '';
+
+// Matches the backend's PDI generator, which only embeds PNG/JPEG (see
+// decodeImageDataUri in models/operations/pdi_generator.js) and the
+// server.js JSON body limit (10mb) sized for up to three of these.
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg'];
+
+const fileToDataUri = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
 
 const ELECTRICAL_CHECKS = [
   { key: 'sound',          label: 'All Motors Sound' },
@@ -24,6 +38,14 @@ const MECHANICAL_CHECKS = [
 ];
 
 const MEASURED_OPTIONS = ['GO', 'NG', 'NA', 'OK'];
+
+// power_cable / sensor_cable labels embed a user-editable length spec
+// (form.power_cable_length / sensor_cable_length); everything else is fixed.
+const mechanicalCheckLabel = (check, form) => {
+  if (check.key === 'power_cable')  return `All Motor Power Cable Length ${form.power_cable_length || '1250±50mm'}`;
+  if (check.key === 'sensor_cable') return `All Motor Sensor Cable Length ${form.sensor_cable_length || '1250±50mm'}`;
+  return check.label;
+};
 
 const makeRow = (sno) => ({
   sno,
@@ -66,6 +88,11 @@ const defaultForm = () => ({
   approved_by: '',
   electrical_remarks: 'ALL MOTORS OK, PASSED.',
   mechanical_remarks: 'ALL MOTORS OK, PASSED.',
+  power_cable_length: '1250±50mm',
+  sensor_cable_length: '1250±50mm',
+  drawing_image: null,
+  photo_overall_motor: null,
+  photo_name_plate: null,
   rows: Array.from({ length: 20 }, (_, i) => makeRow(i + 1)),
   general_electrical: {
     ...initGeneralChecks(ELECTRICAL_CHECKS),
@@ -84,6 +111,47 @@ const SELECT_CLS =
   'border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400';
 const TH_CLS = 'py-2 px-2 text-xs font-semibold text-gray-700 bg-amber-100 border border-gray-200 whitespace-nowrap';
 const TD_CLS = 'py-1 px-1 border border-gray-100 text-sm text-gray-500 text-center';
+
+function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h-40' }) {
+  const inputRef = useRef(null);
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      {hint && <p className="text-xs text-gray-400 mb-1.5">{hint}</p>}
+      <div className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} flex items-center justify-center overflow-hidden ${value ? 'border-gray-200' : 'border-gray-300'}`}>
+        {value ? (
+          <>
+            <img src={value} alt={label} className="max-h-full max-w-full object-contain" />
+            <button
+              type="button"
+              onClick={onClear}
+              className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow hover:bg-white text-gray-600 hover:text-red-500"
+              title="Remove image"
+            >
+              <X size={14} />
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="flex flex-col items-center gap-1.5 text-gray-400 hover:text-amber-500 transition-colors"
+          >
+            <ImageIcon size={28} />
+            <span className="text-xs font-medium">Click to upload</span>
+          </button>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg"
+        className="hidden"
+        onChange={(e) => onSelect(e.target.files?.[0], e.target)}
+      />
+    </div>
+  );
+}
 
 export default function PDIGeneratorForm() {
   const [isOpen, setIsOpen] = useState(false);
@@ -114,6 +182,28 @@ export default function PDIGeneratorForm() {
       [type]: { ...prev[type], [key]: { ...prev[type][key], [subfield]: value } },
     }));
   }, []);
+
+  const handleImageSelect = useCallback(async (field, file, inputEl) => {
+    if (!file) return;
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      notifyError('Only PNG or JPEG images are supported.');
+      if (inputEl) inputEl.value = '';
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      notifyError(`Image is too large (max ${(MAX_IMAGE_BYTES / (1024 * 1024)).toFixed(0)}MB).`);
+      if (inputEl) inputEl.value = '';
+      return;
+    }
+    try {
+      const dataUri = await fileToDataUri(file);
+      setField(field, dataUri);
+    } catch {
+      notifyError('Failed to read image file.');
+    } finally {
+      if (inputEl) inputEl.value = '';
+    }
+  }, [setField, notifyError]);
 
   const handleOpen = () => {
     setForm(defaultForm());
@@ -264,6 +354,7 @@ export default function PDIGeneratorForm() {
                 {[
                   { key: 'electrical', label: 'Electrical Check (Pg 1)' },
                   { key: 'mechanical', label: 'Mechanical Check (Pg 2)' },
+                  { key: 'photos', label: 'Drawing & Photos (Pg 2-3)' },
                 ].map((tab) => (
                   <button
                     key={tab.key}
@@ -441,6 +532,28 @@ export default function PDIGeneratorForm() {
                 {/* Mechanical General Checks */}
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">General Checks</h3>
+
+                  <div className="grid grid-cols-2 gap-4 mb-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Power Cable Length</label>
+                      <input
+                        className={INPUT_CLS}
+                        value={form.power_cable_length}
+                        onChange={(e) => setField('power_cable_length', e.target.value)}
+                        placeholder="e.g. 1250±50mm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Sensor Cable Length</label>
+                      <input
+                        className={INPUT_CLS}
+                        value={form.sensor_cable_length}
+                        onChange={(e) => setField('sensor_cable_length', e.target.value)}
+                        placeholder="e.g. 1250±50mm"
+                      />
+                    </div>
+                  </div>
+
                   <div className="overflow-x-auto rounded-lg border border-gray-200">
                     <table className="w-full">
                       <thead>
@@ -454,7 +567,7 @@ export default function PDIGeneratorForm() {
                       <tbody>
                         {MECHANICAL_CHECKS.map((c) => (
                           <tr key={c.key} className="border-t border-gray-100">
-                            <td className="py-2 px-3 text-sm text-gray-700">{c.label}</td>
+                            <td className="py-2 px-3 text-sm text-gray-700">{mechanicalCheckLabel(c, form)}</td>
                             <td className={TD_CLS}>Go/NG</td>
                             <td className="py-1 px-2 border border-gray-100 text-center">
                               <select
@@ -486,6 +599,36 @@ export default function PDIGeneratorForm() {
                     className={INPUT_CLS}
                     value={form.mechanical_remarks}
                     onChange={(e) => setField('mechanical_remarks', e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ── Photos Tab ── */}
+            {activeTab === 'photos' && (
+              <div className="space-y-5">
+                <ImageUploadCard
+                  label="Technical Drawing (Pg 2)"
+                  hint="Shown in the Mechanical Check sheet's drawing box. PNG or JPEG, max 2MB. Leave blank to keep the text placeholder."
+                  value={form.drawing_image}
+                  onSelect={(file, el) => handleImageSelect('drawing_image', file, el)}
+                  onClear={() => setField('drawing_image', null)}
+                  heightCls="h-28"
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <ImageUploadCard
+                    label="1. Overall Motor Photo (Pg 3)"
+                    hint="PNG or JPEG, max 2MB."
+                    value={form.photo_overall_motor}
+                    onSelect={(file, el) => handleImageSelect('photo_overall_motor', file, el)}
+                    onClear={() => setField('photo_overall_motor', null)}
+                  />
+                  <ImageUploadCard
+                    label="2. Name Plate Photo (Pg 3)"
+                    hint="PNG or JPEG, max 2MB."
+                    value={form.photo_name_plate}
+                    onSelect={(file, el) => handleImageSelect('photo_name_plate', file, el)}
+                    onClear={() => setField('photo_name_plate', null)}
                   />
                 </div>
               </div>
