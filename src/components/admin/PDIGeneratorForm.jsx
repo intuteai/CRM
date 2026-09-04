@@ -1,18 +1,27 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Modal from 'react-modal';
+import Cropper from 'react-easy-crop';
 import axios from 'axios';
-import { Download, FileText, ClipboardCheck, Image as ImageIcon, X } from 'lucide-react';
+import { Download, FileText, ClipboardCheck, Image as ImageIcon, X, Trash2, Plus } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 
 Modal.setAppElement('#root');
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || '';
 
-// Matches the backend's PDI generator, which only embeds PNG/JPEG (see
-// decodeImageDataUri in models/operations/pdi_generator.js) and the
-// server.js JSON body limit (10mb) sized for up to three of these.
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
-const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg'];
+// Every image goes through crop + client-side compression before upload (see
+// cropAndCompress below), so the *sent* payload stays small regardless of
+// source size — this raw cap is just a backstop against absurd files before
+// we even try to decode them. server.js's JSON body limit (25mb) is sized
+// for MAX_PHOTOS compressed photos plus the drawing image.
+const MAX_RAW_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_PHOTOS = 12;
+const CROP_ASPECT = 4 / 3; // matches the printed photo box shape (see pdi_generator.js drawPhotoCell)
+const COMPRESS_MAX_DIM = 1600;
+const COMPRESS_QUALITY = 0.85;
+
+let photoIdCounter = 0;
+const makePhotoId = () => `photo-${Date.now()}-${photoIdCounter++}`;
 
 const fileToDataUri = (file) =>
   new Promise((resolve, reject) => {
@@ -21,6 +30,39 @@ const fileToDataUri = (file) =>
     reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
     reader.readAsDataURL(file);
   });
+
+const loadImage = (src) =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to decode image'));
+    img.src = src;
+  });
+
+// Crops to the selected pixel region, downsizes so the long edge is at most
+// COMPRESS_MAX_DIM, and re-encodes as JPEG — keeps even a 15-20MB camera
+// photo down to a few hundred KB regardless of the original format/size.
+async function cropAndCompress(imageSrc, cropPixels) {
+  const img = await loadImage(imageSrc);
+  const { x, y, width, height } = cropPixels;
+  let outW = width;
+  let outH = height;
+  if (Math.max(outW, outH) > COMPRESS_MAX_DIM) {
+    const scale = COMPRESS_MAX_DIM / Math.max(outW, outH);
+    outW = Math.round(outW * scale);
+    outH = Math.round(outH * scale);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, x, y, width, height, 0, 0, outW, outH);
+
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Failed to encode image'))), 'image/jpeg', COMPRESS_QUALITY);
+  });
+  return fileToDataUri(blob);
+}
 
 const ELECTRICAL_CHECKS = [
   { key: 'sound',          label: 'All Motors Sound' },
@@ -98,8 +140,10 @@ const defaultForm = () => ({
   spec_key_dim: 'Go/NG',
   spec_locating_dia: '50.0 mm',
   drawing_image: null,
-  photo_overall_motor: null,
-  photo_name_plate: null,
+  photos: [
+    { id: makePhotoId(), label: 'Overall Motor', image: null },
+    { id: makePhotoId(), label: 'Name Plate', image: null },
+  ],
   rows: Array.from({ length: 20 }, (_, i) => makeRow(i + 1)),
   general_electrical: {
     ...initGeneralChecks(ELECTRICAL_CHECKS),
@@ -123,12 +167,12 @@ function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h
   const inputRef = useRef(null);
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
       {hint && <p className="text-xs text-gray-400 mb-1.5">{hint}</p>}
       <div className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} flex items-center justify-center overflow-hidden ${value ? 'border-gray-200' : 'border-gray-300'}`}>
         {value ? (
           <>
-            <img src={value} alt={label} className="max-h-full max-w-full object-contain" />
+            <img src={value} alt={label || 'Uploaded'} className="max-h-full max-w-full object-contain" />
             <button
               type="button"
               onClick={onClear}
@@ -152,11 +196,92 @@ function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg"
+        accept="image/*"
         className="hidden"
         onChange={(e) => onSelect(e.target.files?.[0], e.target)}
       />
     </div>
+  );
+}
+
+// Drag-to-crop + pinch-zoom overlay shown after a file is picked, before it's
+// attached to the form. Crops to CROP_ASPECT then hands the result to onApply
+// as a compressed JPEG data URI (see cropAndCompress).
+function CropModal({ imageSrc, onCancel, onApply }) {
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const { notifyError } = useNotify();
+
+  const handleCropComplete = useCallback((_area, pixels) => {
+    setCroppedAreaPixels(pixels);
+  }, []);
+
+  const handleApply = async () => {
+    if (!croppedAreaPixels) return;
+    setBusy(true);
+    try {
+      const dataUri = await cropAndCompress(imageSrc, croppedAreaPixels);
+      onApply(dataUri);
+    } catch {
+      notifyError('Failed to process image. Please try a different photo.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      isOpen
+      onRequestClose={onCancel}
+      overlayClassName="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-[60] p-4"
+      className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-auto outline-none"
+      contentLabel="Crop Image"
+    >
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <h3 className="text-base font-semibold text-gray-800">Adjust photo</h3>
+        <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+      </div>
+      <div className="relative bg-gray-900" style={{ height: 320 }}>
+        <Cropper
+          image={imageSrc}
+          crop={crop}
+          zoom={zoom}
+          aspect={CROP_ASPECT}
+          onCropChange={setCrop}
+          onZoomChange={setZoom}
+          onCropComplete={handleCropComplete}
+        />
+      </div>
+      <div className="px-5 py-4 space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Zoom</label>
+          <input
+            type="range"
+            min={1}
+            max={3}
+            step={0.01}
+            value={zoom}
+            onChange={(e) => setZoom(Number(e.target.value))}
+            className="w-full"
+          />
+        </div>
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onCancel} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleApply}
+            disabled={busy || !croppedAreaPixels}
+            className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+          >
+            {busy ? 'Processing...' : 'Apply'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -190,27 +315,69 @@ export default function PDIGeneratorForm() {
     }));
   }, []);
 
-  const handleImageSelect = useCallback(async (field, file, inputEl) => {
+  // { type: 'drawing' } or { type: 'photo', id } identifying where a crop
+  // result should land, plus the source image being cropped.
+  const [cropTarget, setCropTarget] = useState(null);
+
+  const handleFileChosen = useCallback(async (target, file, inputEl) => {
     if (!file) return;
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      notifyError('Only PNG or JPEG images are supported.');
+    if (!file.type.startsWith('image/')) {
+      notifyError('Please choose an image file.');
       if (inputEl) inputEl.value = '';
       return;
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-      notifyError(`Image is too large (max ${(MAX_IMAGE_BYTES / (1024 * 1024)).toFixed(0)}MB).`);
+    if (file.size > MAX_RAW_IMAGE_BYTES) {
+      notifyError(`Image is too large (max ${(MAX_RAW_IMAGE_BYTES / (1024 * 1024)).toFixed(0)}MB).`);
       if (inputEl) inputEl.value = '';
       return;
     }
     try {
       const dataUri = await fileToDataUri(file);
-      setField(field, dataUri);
+      setCropTarget({ target, imageSrc: dataUri });
     } catch {
       notifyError('Failed to read image file.');
     } finally {
       if (inputEl) inputEl.value = '';
     }
-  }, [setField, notifyError]);
+  }, [notifyError]);
+
+  const applyCroppedImage = useCallback((dataUri) => {
+    setCropTarget((current) => {
+      if (!current) return current;
+      const { target } = current;
+      if (target.type === 'drawing') {
+        setField('drawing_image', dataUri);
+      } else {
+        setForm((prev) => ({
+          ...prev,
+          photos: prev.photos.map((p) => (p.id === target.id ? { ...p, image: dataUri } : p)),
+        }));
+      }
+      return null;
+    });
+  }, [setField]);
+
+  const cancelCrop = useCallback(() => setCropTarget(null), []);
+
+  const addPhoto = useCallback(() => {
+    setForm((prev) => (
+      prev.photos.length >= MAX_PHOTOS
+        ? prev
+        : { ...prev, photos: [...prev.photos, { id: makePhotoId(), label: '', image: null }] }
+    ));
+  }, []);
+
+  const removePhoto = useCallback((id) => {
+    setForm((prev) => ({ ...prev, photos: prev.photos.filter((p) => p.id !== id) }));
+  }, []);
+
+  const setPhotoLabel = useCallback((id, label) => {
+    setForm((prev) => ({ ...prev, photos: prev.photos.map((p) => (p.id === id ? { ...p, label } : p)) }));
+  }, []);
+
+  const clearPhotoImage = useCallback((id) => {
+    setForm((prev) => ({ ...prev, photos: prev.photos.map((p) => (p.id === id ? { ...p, image: null } : p)) }));
+  }, []);
 
   const handleOpen = () => {
     setForm(defaultForm());
@@ -644,27 +811,61 @@ export default function PDIGeneratorForm() {
               <div className="space-y-5">
                 <ImageUploadCard
                   label="Technical Drawing (Pg 2)"
-                  hint="Shown in the Mechanical Check sheet's drawing box. PNG or JPEG, max 2MB. Leave blank to keep the text placeholder."
+                  hint="Shown in the Mechanical Check sheet's drawing box. Leave blank to keep the text placeholder."
                   value={form.drawing_image}
-                  onSelect={(file, el) => handleImageSelect('drawing_image', file, el)}
+                  onSelect={(file, el) => handleFileChosen({ type: 'drawing' }, file, el)}
                   onClear={() => setField('drawing_image', null)}
                   heightCls="h-28"
                 />
-                <div className="grid grid-cols-2 gap-4">
-                  <ImageUploadCard
-                    label="1. Overall Motor Photo (Pg 3)"
-                    hint="PNG or JPEG, max 2MB."
-                    value={form.photo_overall_motor}
-                    onSelect={(file, el) => handleImageSelect('photo_overall_motor', file, el)}
-                    onClear={() => setField('photo_overall_motor', null)}
-                  />
-                  <ImageUploadCard
-                    label="2. Name Plate Photo (Pg 3)"
-                    hint="PNG or JPEG, max 2MB."
-                    value={form.photo_name_plate}
-                    onSelect={(file, el) => handleImageSelect('photo_name_plate', file, el)}
-                    onClear={() => setField('photo_name_plate', null)}
-                  />
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700">Photos (Pg 3)</h3>
+                      <p className="text-xs text-gray-400">On mobile, tap a slot to take a photo or choose one — you&rsquo;ll crop it next. Add as many as this inspection needs.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addPhoto}
+                      disabled={form.photos.length >= MAX_PHOTOS}
+                      className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium whitespace-nowrap"
+                    >
+                      <Plus size={14} /> Add Photo
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {form.photos.map((photo, idx) => (
+                      <div key={photo.id} className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            className={INPUT_CLS}
+                            value={photo.label}
+                            onChange={(e) => setPhotoLabel(photo.id, e.target.value)}
+                            placeholder={`Photo ${idx + 1} label`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removePhoto(photo.id)}
+                            className="shrink-0 p-1.5 text-gray-400 hover:text-red-500"
+                            title="Remove this photo slot"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                        <ImageUploadCard
+                          value={photo.image}
+                          onSelect={(file, el) => handleFileChosen({ type: 'photo', id: photo.id }, file, el)}
+                          onClear={() => clearPhotoImage(photo.id)}
+                          heightCls="h-32"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {form.photos.length === 0 && (
+                    <p className="text-sm text-gray-400 text-center py-6 border-2 border-dashed border-gray-200 rounded-lg">
+                      No photos added. Click &ldquo;Add Photo&rdquo; above.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -698,6 +899,10 @@ export default function PDIGeneratorForm() {
           </div>
         </form>
       </Modal>
+
+      {cropTarget && (
+        <CropModal imageSrc={cropTarget.imageSrc} onCancel={cancelCrop} onApply={applyCroppedImage} />
+      )}
     </div>
   );
 }
