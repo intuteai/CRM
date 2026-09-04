@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Brainstorm session mockups (superpowers skill)
+.superpowers/
