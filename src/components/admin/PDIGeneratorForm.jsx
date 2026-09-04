@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Modal from 'react-modal';
 import Cropper from 'react-easy-crop';
 import axios from 'axios';
-import { Download, FileText, ClipboardCheck, Image as ImageIcon, X, Trash2, Plus } from 'lucide-react';
+import { Download, FileText, ClipboardCheck, Image as ImageIcon, X, Trash2, Plus, Camera } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 
 Modal.setAppElement('#root');
@@ -16,6 +16,9 @@ const API_URL = import.meta.env.VITE_BACKEND_URL || '';
 // for MAX_PHOTOS compressed photos plus the drawing image.
 const MAX_RAW_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_PHOTOS = 12;
+// The generated PDF auto-paginates the motor tables with no hard limit
+// (verified up to 150 rows) — this is just a sane UI ceiling.
+const MAX_ROWS = 100;
 const CROP_ASPECT = 4 / 3; // matches the printed photo box shape (see pdi_generator.js drawPhotoCell)
 const COMPRESS_MAX_DIM = 1600;
 const COMPRESS_QUALITY = 0.85;
@@ -92,8 +95,9 @@ const mechanicalCheckLabel = (check, form) => {
 const makeRow = (sno) => ({
   sno,
   motor_sr_no: '',
-  // Electrical
+  // Electrical — a motor is tested running in one direction at a time
   voltage: '',
+  direction: 'F',
   current_standard: '',
   current_measured: '',
   rpm_specified: '',
@@ -103,6 +107,7 @@ const makeRow = (sno) => ({
   motor_length: '',
   shaft_length: '',
   mounting_pcd: '',
+  mtg: '',
   key_dim_result: 'GO',
   locating_dia_result: 'GO',
   mechanical_remarks: '',
@@ -164,7 +169,8 @@ const TH_CLS = 'py-2 px-2 text-xs font-semibold text-gray-700 bg-amber-100 borde
 const TD_CLS = 'py-1 px-1 border border-gray-100 text-sm text-gray-500 text-center';
 
 function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h-40' }) {
-  const inputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const fileInputRef = useRef(null);
   return (
     <div>
       {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
@@ -183,18 +189,40 @@ function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            className="flex flex-col items-center gap-1.5 text-gray-400 hover:text-amber-500 transition-colors"
-          >
-            <ImageIcon size={28} />
-            <span className="text-xs font-medium">Click to upload</span>
-          </button>
+          <div className="flex items-center gap-5 text-gray-400">
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+            >
+              <Camera size={26} />
+              <span className="text-xs font-medium">Take Photo</span>
+            </button>
+            <div className="w-px h-9 bg-gray-200" />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+            >
+              <ImageIcon size={26} />
+              <span className="text-xs font-medium">Choose File</span>
+            </button>
+          </div>
         )}
       </div>
+      {/* capture="environment" opens the device camera directly — needed because
+          Android's system Photo Picker (the default gallery chooser) has no camera
+          shortcut of its own, by design (it's a privacy-scoped media picker). */}
       <input
-        ref={inputRef}
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => onSelect(e.target.files?.[0], e.target)}
+      />
+      <input
+        ref={fileInputRef}
         type="file"
         accept="image/*"
         className="hidden"
@@ -306,6 +334,14 @@ export default function PDIGeneratorForm() {
       rows[idx] = { ...rows[idx], [field]: value };
       return { ...prev, rows };
     });
+  }, []);
+
+  const addRow = useCallback(() => {
+    setForm((prev) => (
+      prev.rows.length >= MAX_ROWS
+        ? prev
+        : { ...prev, rows: [...prev.rows, makeRow(prev.rows.length + 1)] }
+    ));
   }, []);
 
   const setCheck = useCallback((type, key, subfield, value) => {
@@ -549,6 +585,17 @@ export default function PDIGeneratorForm() {
             {/* ── Electrical Tab ── */}
             {activeTab === 'electrical' && (
               <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-700">Motor Rows ({form.rows.length})</h3>
+                  <button
+                    type="button"
+                    onClick={addRow}
+                    disabled={form.rows.length >= MAX_ROWS}
+                    className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium whitespace-nowrap"
+                  >
+                    <Plus size={14} /> Add Row
+                  </button>
+                </div>
                 <div className="overflow-x-auto rounded-lg border border-gray-200">
                   <table className="w-full text-left">
                     <thead>
@@ -556,10 +603,11 @@ export default function PDIGeneratorForm() {
                         <th className={TH_CLS}>S. No</th>
                         <th className={TH_CLS}>Motor Sr. No</th>
                         <th className={TH_CLS}>Voltage</th>
-                        <th className={TH_CLS}>Current Std (F)</th>
-                        <th className={TH_CLS}>Current Measured (F)</th>
-                        <th className={TH_CLS}>RPM Specified (F)</th>
-                        <th className={TH_CLS}>RPM Measured (F)</th>
+                        <th className={TH_CLS}>F / R</th>
+                        <th className={TH_CLS}>Current Std</th>
+                        <th className={TH_CLS}>Current Measured</th>
+                        <th className={TH_CLS}>RPM Specified</th>
+                        <th className={TH_CLS}>RPM Measured</th>
                         <th className={TH_CLS}>Remarks</th>
                       </tr>
                     </thead>
@@ -572,6 +620,12 @@ export default function PDIGeneratorForm() {
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input className={INPUT_CLS} value={row.voltage} onChange={(e) => setRowField(idx, 'voltage', e.target.value)} placeholder="V" />
+                          </td>
+                          <td className="py-1 px-2 border border-gray-100 text-center">
+                            <select className={SELECT_CLS} value={row.direction} onChange={(e) => setRowField(idx, 'direction', e.target.value)}>
+                              <option value="F">F</option>
+                              <option value="R">R</option>
+                            </select>
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input className={INPUT_CLS} value={row.current_standard} onChange={(e) => setRowField(idx, 'current_standard', e.target.value)} />
@@ -682,6 +736,17 @@ export default function PDIGeneratorForm() {
                   </div>
                 </div>
 
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-700">Motor Rows ({form.rows.length})</h3>
+                  <button
+                    type="button"
+                    onClick={addRow}
+                    disabled={form.rows.length >= MAX_ROWS}
+                    className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium whitespace-nowrap"
+                  >
+                    <Plus size={14} /> Add Row
+                  </button>
+                </div>
                 <div className="overflow-x-auto rounded-lg border border-gray-200">
                   <table className="w-full text-left">
                     <thead>
@@ -691,6 +756,7 @@ export default function PDIGeneratorForm() {
                         <th className={TH_CLS}>Motor Length</th>
                         <th className={TH_CLS}>Shaft O/P D/Length</th>
                         <th className={TH_CLS}>Mounting PCD</th>
+                        <th className={TH_CLS}>MTG</th>
                         <th className={TH_CLS}>Key Dim (Go/NG)</th>
                         <th className={TH_CLS}>Locating Dia (Go/NG)</th>
                         <th className={TH_CLS}>Remarks</th>
@@ -711,6 +777,9 @@ export default function PDIGeneratorForm() {
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input className={INPUT_CLS} value={row.mounting_pcd} onChange={(e) => setRowField(idx, 'mounting_pcd', e.target.value)} placeholder="153" />
+                          </td>
+                          <td className="py-1 px-1 border border-gray-100">
+                            <input className={INPUT_CLS} value={row.mtg} onChange={(e) => setRowField(idx, 'mtg', e.target.value)} placeholder="4*M8" />
                           </td>
                           <td className="py-1 px-2 border border-gray-100 text-center">
                             <select className={SELECT_CLS} value={row.key_dim_result} onChange={(e) => setRowField(idx, 'key_dim_result', e.target.value)}>
