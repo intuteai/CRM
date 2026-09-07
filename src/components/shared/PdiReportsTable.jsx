@@ -14,8 +14,6 @@ const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 // Everyone else (who can still see this dashboard) gets view/download only —
 // matches who already has route access to /pdi-generator today.
 const RESUME_ROLES = ['admin', 'production'];
-const userRole = localStorage.getItem('role');
-const canManage = RESUME_ROLES.includes(userRole);
 
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
@@ -28,7 +26,14 @@ const formatDate = (dateString) => {
   }
 };
 
-export default function PdiReportsTable({ socket: providedSocket, title = 'PDI Reports' }) {
+export default function PdiReportsTable({ socket: providedSocket, userRole: userRoleProp, title = 'PDI Reports' }) {
+  // Prefer a live `userRole` prop (threaded down from App.jsx/routeConfig.jsx
+  // via renderRoute) so a logout/login in the same tab — which this app does
+  // via SPA nav, no full page reload — is reflected immediately. Fall back to
+  // localStorage only when no prop is supplied, so the component still works
+  // standalone.
+  const userRole = userRoleProp || localStorage.getItem('role');
+  const canManage = RESUME_ROLES.includes(userRole);
   const [pdiReports, setPdiReports] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -62,9 +67,13 @@ export default function PdiReportsTable({ socket: providedSocket, title = 'PDI R
     [providedSocket]
   );
 
+  // Returns true on a successful fetch, false on failure — callers that move
+  // cursorHistory/currentCursor (handleNextPage/handlePrevPage) use this to
+  // only commit that bookkeeping once the new page has actually loaded, so a
+  // failed fetch leaves pagination state exactly as it was for a clean retry.
   const fetchPdiReports = useCallback(
     async (cursorToUse) => {
-      if (isFetching.current) return;
+      if (isFetching.current) return false;
       isFetching.current = true;
       setIsLoading(true);
       setError(null);
@@ -92,11 +101,13 @@ export default function PdiReportsTable({ socket: providedSocket, title = 'PDI R
         setPdiReports(responseData.data);
         setTotalItems(responseData.total || 0);
         setCursor(responseData.cursor || null);
+        return true;
       } catch (err) {
         console.error('Error fetching PDI reports:', err);
         const errorMessage = err.message || 'Network error. Please try again later.';
         setError(errorMessage);
         notifyError(errorMessage, { autoClose: 3000 });
+        return false;
       } finally {
         setIsLoading(false);
         isFetching.current = false;
@@ -228,19 +239,23 @@ export default function PdiReportsTable({ socket: providedSocket, title = 'PDI R
     [notifySuccess, notifyError]
   );
 
-  const handlePrevPage = useCallback(() => {
+  const handlePrevPage = useCallback(async () => {
     if (cursorHistory.length === 0) return;
     const prevCursor = cursorHistory[cursorHistory.length - 1];
+    const succeeded = await fetchPdiReports(prevCursor);
+    if (!succeeded) return; // leave cursorHistory/currentCursor untouched so retry/Prev stay correct
     setCursorHistory((h) => h.slice(0, -1));
     setCurrentCursor(prevCursor);
-    fetchPdiReports(prevCursor);
   }, [cursorHistory, fetchPdiReports]);
 
-  const handleNextPage = useCallback(() => {
+  const handleNextPage = useCallback(async () => {
     if (!cursor || isLoading) return;
-    setCursorHistory((h) => [...h, currentCursor]);
-    setCurrentCursor(cursor);
-    fetchPdiReports(cursor);
+    const targetCursor = cursor;
+    const previousCursor = currentCursor;
+    const succeeded = await fetchPdiReports(targetCursor);
+    if (!succeeded) return; // leave cursorHistory/currentCursor untouched so retry/Prev stay correct
+    setCursorHistory((h) => [...h, previousCursor]);
+    setCurrentCursor(targetCursor);
   }, [cursor, isLoading, currentCursor, fetchPdiReports]);
 
   const handleRefresh = useCallback(() => {
