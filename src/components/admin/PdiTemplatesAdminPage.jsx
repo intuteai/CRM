@@ -76,6 +76,10 @@ function ListEditor({ items, onChange, renderRow, newRow, addLabel }) {
 
 const FIELD_CLS = 'border border-gray-300 rounded px-2 py-1 text-sm w-full';
 
+// Deliberately doesn't expose logoAsset or extraFormatLines — both are rare
+// fields (only the hand-coded General/AutoNXT templates have ever needed a
+// logo or a 4th format-box line); a template authored through this UI simply
+// can't set them yet. Accepted v1 scope limit, not an oversight.
 function HeaderSectionEditor({ section, onChange }) {
   return (
     <div className="space-y-2">
@@ -224,6 +228,9 @@ function PhotoSectionEditor({ section, onChange }) {
   );
 }
 
+// Deliberately doesn't expose `width` (defaults to full content width via
+// the backend's `section.width || CW` fallback) — same rare-field reasoning
+// as HeaderSectionEditor's logoAsset/extraFormatLines above.
 function ImageSectionEditor({ section, onChange }) {
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -408,7 +415,10 @@ export default function PdiTemplatesAdminPage() {
   };
 
   const createTemplate = async () => {
-    if (!creatingId.trim() || !creatingName.trim()) return;
+    if (!creatingId.trim() || !creatingName.trim()) {
+      notifyError('Both an id and a name are required to create a template.');
+      return;
+    }
     try {
       const res = await fetch(`${BASE_URL}/api/pdi/admin/templates`, {
         method: 'POST', headers: authHeaders(),
