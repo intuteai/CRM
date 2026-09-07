@@ -316,8 +316,14 @@ function CropModal({ imageSrc, onCancel, onApply }) {
 export default function PDIGeneratorForm() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('electrical');
   const [form, setForm] = useState(defaultForm);
+  const [reportId, setReportId] = useState(null);
+  // Tracks whether Save has fired at least once on the current draft — a
+  // never-saved draft gets deleted on Cancel so opening the form by mistake
+  // doesn't leave an empty row behind; once saved, Cancel just closes.
+  const [hasSaved, setHasSaved] = useState(false);
   const { notifySuccess, notifyError } = useNotify();
   const abortRef = useRef(null);
 
@@ -415,10 +421,40 @@ export default function PDIGeneratorForm() {
     setForm((prev) => ({ ...prev, photos: prev.photos.map((p) => (p.id === id ? { ...p, image: null } : p)) }));
   }, []);
 
-  const handleOpen = () => {
-    setForm(defaultForm());
-    setActiveTab('electrical');
-    setIsOpen(true);
+  const handleOpen = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) { notifyError('Please log in first.'); return; }
+    try {
+      const response = await axios.post(`${API_URL}/api/pdi/reports`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setReportId(response.data.report_id);
+      setHasSaved(false);
+      setForm(defaultForm());
+      setActiveTab('electrical');
+      setIsOpen(true);
+    } catch (err) {
+      notifyError(err.response?.data?.error || 'Could not start a new PDI report.');
+    }
+  };
+
+  const handleSave = async () => {
+    if (!reportId) return;
+    const token = localStorage.getItem('token');
+    if (!token) { notifyError('Please log in first.'); return; }
+    setSaving(true);
+    try {
+      const { photos, ...data } = form;
+      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, { data, photos, status: 'In Progress' }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setHasSaved(true);
+      notifySuccess('Progress saved.');
+    } catch (err) {
+      notifyError(err.response?.data?.error || 'Failed to save progress.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleGenerate = async (e) => {
@@ -472,9 +508,21 @@ export default function PDIGeneratorForm() {
     }
   };
 
-  const handleClose = () => {
+  const handleClose = async () => {
     if (abortRef.current) abortRef.current.abort();
+    if (reportId && !hasSaved) {
+      try {
+        const token = localStorage.getItem('token');
+        await axios.delete(`${API_URL}/api/pdi/reports/${reportId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch (err) {
+        console.error('Failed to clean up unsaved PDI draft:', err);
+      }
+    }
     setIsOpen(false);
+    setReportId(null);
+    setHasSaved(false);
   };
 
   return (
@@ -953,18 +1001,28 @@ export default function PDIGeneratorForm() {
           </div>
 
           {/* Modal footer */}
-          <div className="flex justify-end gap-3 px-8 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
-            <button type="button" onClick={handleClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm">
-              Cancel
-            </button>
+          <div className="flex justify-between gap-3 px-8 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
             <button
-              type="submit"
-              disabled={loading}
-              className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+              type="button"
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm font-semibold"
             >
-              <Download size={16} />
-              {loading ? 'Generating PDF...' : 'Generate PDF'}
+              {saving ? 'Saving...' : 'Save'}
             </button>
+            <div className="flex gap-3">
+              <button type="button" onClick={handleClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+              >
+                <Download size={16} />
+                {loading ? 'Generating PDF...' : 'Generate PDF'}
+              </button>
+            </div>
           </div>
         </form>
       </Modal>
