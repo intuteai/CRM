@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotify } from '../../hooks/useNotify';
+import ConnectionError from '../pages/ConnectionError.jsx';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -9,11 +10,14 @@ export default function PdiTemplatePicker() {
   const navigate = useNavigate();
   const { notifyError } = useNotify();
   const [templates, setTemplates] = useState(null);
+  const [error, setError] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        setError(null);
         const token = localStorage.getItem('token');
         const response = await fetch(`${BASE_URL}/api/pdi/templates`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -28,14 +32,33 @@ export default function PdiTemplatePicker() {
         }
         setTemplates(list);
       } catch (err) {
-        if (!cancelled) notifyError(err.message || 'Could not load PDI templates.', { autoClose: 3000 });
+        if (!cancelled) {
+          const errorMsg = err.message || 'Could not load PDI templates.';
+          notifyError(errorMsg, { autoClose: 3000 });
+          setError(errorMsg);
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [navigate, notifyError]);
+  }, [navigate, notifyError, retryCount]);
 
-  if (!templates) {
+  const handleRetry = () => {
+    setRetryCount(c => c + 1);
+  };
+
+  // Loading state
+  if (templates === null && !error) {
     return <div className="p-8 text-center text-gray-500">Loading PDI templates…</div>;
+  }
+
+  // Error state
+  if (error) {
+    return <ConnectionError onRetry={handleRetry} />;
+  }
+
+  // Empty state
+  if (templates.length === 0) {
+    return <div className="p-8 text-center text-gray-500">No PDI templates are available.</div>;
   }
 
   return (

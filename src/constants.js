@@ -66,6 +66,9 @@ export const allowedPathsByRole = {
     "/purchase-order",
     "/part-creation",
     "/delivery-challan",
+    // PDI template routes — each new template (e.g. a future "autonxt") needs
+    // its own /pdi-generator/<id> entry added here, per role, or it'll be
+    // silently bounced back to the dashboard despite routeConfig.jsx allowing it.
     "/pdi-generator",
     "/pdi-generator/general",
     "/motor-recipes",
@@ -116,6 +119,9 @@ export const allowedPathsByRole = {
     "/production-part-drawings",
     "/production-part-drawings-raw",
     "/production-pdi",
+    // PDI template routes — each new template (e.g. a future "autonxt") needs
+    // its own /pdi-generator/<id> entry added here, per role, or it'll be
+    // silently bounced back to the dashboard despite routeConfig.jsx allowing it.
     "/pdi-generator",
     "/pdi-generator/general",
     "/production-bom-unpriced",
