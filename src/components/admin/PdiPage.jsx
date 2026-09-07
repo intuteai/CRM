@@ -1,4 +1,3 @@
-import React from 'react';
 import PdiReportsTable from '../shared/PdiReportsTable';
 
 export default function PdiPage({ socket, userRole }) {
