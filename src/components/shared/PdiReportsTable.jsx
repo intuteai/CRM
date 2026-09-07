@@ -1,7 +1,6 @@
 // CRM/src/components/shared/PdiReportsTable.jsx
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatDate as importedFormatDate } from '../../utils/helpers';
 import { ArrowDownUp, Search, Eye, Pencil, Trash2 } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
@@ -15,9 +14,11 @@ const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 // matches who already has route access to /pdi-generator today.
 const RESUME_ROLES = ['admin', 'production'];
 
+// Date-only on purpose — the dashboard shows the inspection date, not a
+// timestamp, so this deliberately doesn't use utils/helpers' formatDate
+// (which includes the time).
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
-  if (typeof importedFormatDate === 'function') return importedFormatDate(dateString);
   try {
     return new Date(dateString).toLocaleDateString();
   } catch (error) {

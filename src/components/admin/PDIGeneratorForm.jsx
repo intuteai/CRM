@@ -483,7 +483,13 @@ export default function PDIGeneratorForm() {
     setSaving(true);
     try {
       const { photos, ...data } = form;
-      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, { data, photos, status: 'In Progress' }, {
+      // "Inspected By" on the dashboard should reflect who's actually doing
+      // the inspection (the Prepared By field), not just whoever's logged-in
+      // account happened to create the draft — only send it once it's typed,
+      // so an empty field doesn't blank out a name already saved.
+      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
+        data, photos, status: 'In Progress', inspected_by: form.prepared_by?.trim() || undefined,
+      }, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setHasSaved(true);
@@ -514,7 +520,9 @@ export default function PDIGeneratorForm() {
       // form state — save first so the PDF reflects exactly what's on screen,
       // even if the user never clicked Save themselves.
       const { photos, ...data } = form;
-      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, { data, photos }, {
+      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
+        data, photos, inspected_by: form.prepared_by?.trim() || undefined,
+      }, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
