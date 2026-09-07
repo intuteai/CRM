@@ -51,6 +51,7 @@ import PDIGeneratorForm from "./components/admin/PDIGeneratorForm";
 import MotorRecipesPage from "./components/admin/MotorRecipesPage";
 import DocumentsHub from "./components/admin/DocumentsHub";
 import PurchaseOrderForm from "./components/admin/PurchaseOrderForm";
+import PdiTemplatePicker from "./components/shared/PdiTemplatePicker";
 
 // Sales
 import SalesQueriesPage from "./components/sales/SalesQueriesPage";
@@ -220,6 +221,11 @@ export const routeConfig = [
   },
   {
     path: "/pdi-generator",
+    allowedRoles: ["admin", "production"],
+    component: PdiTemplatePicker,
+  },
+  {
+    path: "/pdi-generator/general",
     allowedRoles: ["admin", "production"],
     component: PDIGeneratorForm,
   },

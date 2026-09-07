@@ -193,7 +193,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
 
   const handleResume = useCallback(
     (report) => {
-      navigate(`/pdi-generator?report=${report.report_id}`);
+      navigate(`/pdi-generator/${report.template_id || 'general'}?report=${report.report_id}`);
     },
     [navigate]
   );
