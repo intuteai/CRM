@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Package, MessageSquare, Truck, Users, FileText, BarChart,
-  PenTool, DollarSign, CheckSquare, Mail, MapPin, AlertTriangle, Wrench, Boxes
+  PenTool, DollarSign, CheckSquare, Mail, MapPin, AlertTriangle, Wrench, Boxes, FileEdit
 } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 
@@ -84,6 +84,7 @@ function AdminDashboard({ socket }) {
         <Section title="Quality & Logistics">
           <DashboardCard to="/pdi" icon={<CheckSquare />} title="PDI Records" desc="View pre-dispatch inspection records" />
           <DashboardCard to="/pdi-generator" icon={<CheckSquare />} title="PDI Generator" desc="Generate PDI inspection report PDFs" />
+          <DashboardCard to="/pdi-templates" icon={<FileEdit />} title="PDI Templates" desc="Author new PDI report formats" />
           <DashboardCard to="/dispatch-tracking" icon={<MapPin />} title="Dispatch Tracking" desc="Track dispatch status" />
           <DashboardCard to="/problems" icon={<AlertTriangle />} title="Problems" desc="Manage reported problems" />
         </Section>

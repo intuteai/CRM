@@ -72,6 +72,7 @@ export const allowedPathsByRole = {
     "/pdi-generator",
     "/pdi-generator/general",
     "/pdi-generator/autonxt",
+    "/pdi-templates",
     "/motor-recipes",
     "/service-repair",
     "/documents",

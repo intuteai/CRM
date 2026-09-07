@@ -53,6 +53,7 @@ import MotorRecipesPage from "./components/admin/MotorRecipesPage";
 import DocumentsHub from "./components/admin/DocumentsHub";
 import PurchaseOrderForm from "./components/admin/PurchaseOrderForm";
 import PdiTemplatePicker from "./components/shared/PdiTemplatePicker";
+import PdiTemplatesAdminPage from "./components/admin/PdiTemplatesAdminPage";
 
 // Sales
 import SalesQueriesPage from "./components/sales/SalesQueriesPage";
@@ -234,6 +235,11 @@ export const routeConfig = [
     path: "/pdi-generator/autonxt",
     allowedRoles: ["admin", "production"],
     component: AutoNXTGeneratorForm,
+  },
+  {
+    path: "/pdi-templates",
+    allowedRoles: ["admin"],
+    component: PdiTemplatesAdminPage,
   },
   {
     path: "/part-creation",
