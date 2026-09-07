@@ -316,6 +316,7 @@ function CropModal({ imageSrc, onCancel, onApply }) {
 export default function PDIGeneratorForm() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('electrical');
   const [form, setForm] = useState(defaultForm);
@@ -422,8 +423,10 @@ export default function PDIGeneratorForm() {
   }, []);
 
   const handleOpen = async () => {
+    if (opening) return;
     const token = localStorage.getItem('token');
     if (!token) { notifyError('Please log in first.'); return; }
+    setOpening(true);
     try {
       const response = await axios.post(`${API_URL}/api/pdi/reports`, {}, {
         headers: { Authorization: `Bearer ${token}` },
@@ -435,6 +438,8 @@ export default function PDIGeneratorForm() {
       setIsOpen(true);
     } catch (err) {
       notifyError(err.response?.data?.error || 'Could not start a new PDI report.');
+    } finally {
+      setOpening(false);
     }
   };
 
