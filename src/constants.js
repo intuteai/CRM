@@ -71,6 +71,7 @@ export const allowedPathsByRole = {
     // silently bounced back to the dashboard despite routeConfig.jsx allowing it.
     "/pdi-generator",
     "/pdi-generator/general",
+    "/pdi-generator/autonxt",
     "/motor-recipes",
     "/service-repair",
     "/documents",
@@ -124,6 +125,7 @@ export const allowedPathsByRole = {
     // silently bounced back to the dashboard despite routeConfig.jsx allowing it.
     "/pdi-generator",
     "/pdi-generator/general",
+    "/pdi-generator/autonxt",
     "/production-bom-unpriced",
     "/bom",
     "/ipt-kits",

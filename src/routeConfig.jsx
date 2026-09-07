@@ -48,6 +48,7 @@ import CreateNonMotorProcess from "./components/admin/CreateNonMotorProcess";
 import PartCreation from "./components/admin/PartCreation";
 import DeliveryChallanForm from "./components/admin/DeliveryChallanForm";
 import PDIGeneratorForm from "./components/admin/PDIGeneratorForm";
+import AutoNXTGeneratorForm from "./components/admin/AutoNXTGeneratorForm";
 import MotorRecipesPage from "./components/admin/MotorRecipesPage";
 import DocumentsHub from "./components/admin/DocumentsHub";
 import PurchaseOrderForm from "./components/admin/PurchaseOrderForm";
@@ -228,6 +229,11 @@ export const routeConfig = [
     path: "/pdi-generator/general",
     allowedRoles: ["admin", "production"],
     component: PDIGeneratorForm,
+  },
+  {
+    path: "/pdi-generator/autonxt",
+    allowedRoles: ["admin", "production"],
+    component: AutoNXTGeneratorForm,
   },
   {
     path: "/part-creation",
