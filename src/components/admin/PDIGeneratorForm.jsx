@@ -485,6 +485,7 @@ export default function PDIGeneratorForm() {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
+      setHasSaved(true);
 
       const response = await axios.post(`${API_URL}/api/pdi/reports/${reportId}/finalize`, {}, {
         headers: { Authorization: `Bearer ${token}` },
