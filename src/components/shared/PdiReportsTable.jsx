@@ -356,15 +356,14 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                   <td className="py-4 px-3 text-gray-600 text-base">{report.inspection_date ? formatDate(report.inspection_date) : 'N/A'}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">
                     <div className="flex items-center gap-1">
-                      {canManage ? (
+                      {canManage && (
                         <button onClick={() => handleResume(report)} className="p-2 hover:bg-amber-100 rounded-full text-amber-700" title="Resume in Generator" aria-label={`Resume PDI report ${report.pdi_no || report.report_id}`}>
                           <Pencil size={18} />
                         </button>
-                      ) : (
-                        <button onClick={() => handleViewDownload(report)} className="p-2 hover:bg-amber-100 rounded-full text-amber-700" title="View / Download PDF" aria-label={`View PDI report ${report.pdi_no || report.report_id}`}>
-                          <Eye size={18} />
-                        </button>
                       )}
+                      <button onClick={() => handleViewDownload(report)} className="p-2 hover:bg-amber-100 rounded-full text-amber-700" title="View / Download PDF" aria-label={`View PDI report ${report.pdi_no || report.report_id}`}>
+                        <Eye size={18} />
+                      </button>
                       {canManage && (
                         <button onClick={() => handleDelete(report)} className="p-2 hover:bg-red-50 rounded-full text-red-500" title="Delete" aria-label={`Delete PDI report ${report.pdi_no || report.report_id}`}>
                           <Trash2 size={18} />
