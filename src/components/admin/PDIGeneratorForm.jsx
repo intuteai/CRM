@@ -462,10 +462,11 @@ export default function PDIGeneratorForm() {
     }
   };
 
-  const handleGenerate = async (e) => {
+  const handleFinalize = async (e) => {
     e.preventDefault();
     if (!form.customer_name.trim()) { notifyError('Customer name is required.'); return; }
     if (!form.pdi_no.trim()) { notifyError('PDI No. is required.'); return; }
+    if (!reportId) { notifyError('Report not initialized yet — please close and reopen the form.'); return; }
 
     const token = localStorage.getItem('token');
     if (!token) { notifyError('Please log in first.'); return; }
@@ -476,7 +477,16 @@ export default function PDIGeneratorForm() {
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_URL}/api/pdi/generate`, form, {
+      // Finalize renders whatever is currently saved server-side, not the live
+      // form state — save first so the PDF reflects exactly what's on screen,
+      // even if the user never clicked Save themselves.
+      const { photos, ...data } = form;
+      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, { data, photos }, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
+
+      const response = await axios.post(`${API_URL}/api/pdi/reports/${reportId}/finalize`, {}, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob',
         signal: controller.signal,
@@ -491,21 +501,22 @@ export default function PDIGeneratorForm() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      notifySuccess('PDI PDF downloaded successfully.');
+      notifySuccess('PDI finalized and PDF downloaded successfully.');
       setIsOpen(false);
+      setReportId(null);
+      setHasSaved(false);
     } catch (err) {
       if (err.name === 'CanceledError' || err.name === 'AbortError') return;
-      // When responseType is 'blob', error bodies arrive as Blobs — parse them back
       if (err.response?.data instanceof Blob) {
         try {
           const text = await err.response.data.text();
           const parsed = JSON.parse(text);
-          notifyError(parsed.error || text || 'Failed to generate PDI PDF.');
+          notifyError(parsed.error || text || 'Failed to finalize PDI.');
         } catch {
-          notifyError('Failed to generate PDI PDF.');
+          notifyError('Failed to finalize PDI.');
         }
       } else {
-        notifyError(err.response?.data?.error || 'Failed to generate PDI PDF.');
+        notifyError(err.response?.data?.error || 'Failed to finalize PDI.');
       }
     } finally {
       setLoading(false);
@@ -568,7 +579,7 @@ export default function PDIGeneratorForm() {
         className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 outline-none"
         contentLabel="PDI Generator Form"
       >
-        <form onSubmit={handleGenerate}>
+        <form onSubmit={handleFinalize}>
           {/* Modal header */}
           <div className="flex items-center justify-between px-8 py-5 border-b border-gray-100">
             <div className="flex items-center gap-3">
@@ -1025,7 +1036,7 @@ export default function PDIGeneratorForm() {
                 className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
               >
                 <Download size={16} />
-                {loading ? 'Generating PDF...' : 'Generate PDF'}
+                {loading ? 'Finalizing...' : 'Finalize & Generate PDF'}
               </button>
             </div>
           </div>
