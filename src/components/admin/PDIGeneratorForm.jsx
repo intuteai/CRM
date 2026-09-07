@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Modal from 'react-modal';
 import Cropper from 'react-easy-crop';
 import axios from 'axios';
+import { useSearchParams } from 'react-router-dom';
 import { Download, FileText, ClipboardCheck, Image as ImageIcon, X, Trash2, Plus, Camera } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 
@@ -330,6 +331,38 @@ export default function PDIGeneratorForm() {
 
   // Cancel any in-flight request if the component unmounts
   useEffect(() => () => { abortRef.current?.abort(); }, []);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Resume: if the dashboard linked here with ?report=<id>, load that report
+  // and open pre-filled instead of waiting for "+ Create PDI".
+  useEffect(() => {
+    const resumeId = searchParams.get('report');
+    if (!resumeId) return;
+
+    (async () => {
+      const token = localStorage.getItem('token');
+      if (!token) { notifyError('Please log in first.'); setSearchParams({}, { replace: true }); return; }
+      try {
+        const response = await axios.get(`${API_URL}/api/pdi/reports/${resumeId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const report = response.data;
+        setForm({ ...defaultForm(), ...(report.data || {}), photos: report.photos?.length ? report.photos : defaultForm().photos });
+        setReportId(report.report_id);
+        // It already exists server-side — Cancel should close, never delete it.
+        setHasSaved(true);
+        setActiveTab('electrical');
+        setIsOpen(true);
+      } catch (err) {
+        notifyError(err.response?.data?.error || 'Could not load that PDI report.');
+      } finally {
+        setSearchParams({}, { replace: true });
+      }
+    })();
+    // Only ever run this for the query param present on initial load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setField = useCallback((field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
