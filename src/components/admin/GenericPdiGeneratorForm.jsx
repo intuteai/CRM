@@ -16,6 +16,11 @@ const SELECT_CLS =
   'border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400';
 const TH_CLS = 'py-2 px-2 text-xs font-semibold text-gray-700 bg-amber-100 border border-gray-200 whitespace-nowrap';
 
+// Same ceilings as PDIGeneratorForm.jsx, for the same reason: server.js's
+// express.json({ limit: '25mb' }) caps the request body Save/Finalize send.
+const MAX_PHOTOS = 12;
+const MAX_ROWS = 100;
+
 const todayIST = () =>
   new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
@@ -114,7 +119,8 @@ function RepeatableTableSection({ section, form, addRow, removeRow, setCell }) {
         <button
           type="button"
           onClick={() => addRow(section.dataKey, cols)}
-          className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 text-xs font-medium"
+          disabled={rows.length >= MAX_ROWS}
+          className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium"
         >
           <Plus size={14} /> Add Row
         </button>
@@ -130,15 +136,25 @@ function RepeatableTableSection({ section, form, addRow, removeRow, setCell }) {
           <tbody>
             {rows.map((row, idx) => (
               <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                {cols.map((c) => (
-                  <td key={c.key} className="py-1 px-1 border border-gray-100">
-                    {(!c.cell || c.cell.source === 'row') ? (
-                      <input className={INPUT_CLS} value={row[c.key] || ''} onChange={(e) => setCell(section.dataKey, idx, c.key, e.target.value)} />
-                    ) : (
-                      <span className="text-sm text-gray-400 px-2">—</span>
-                    )}
-                  </td>
-                ))}
+                {cols.map((c) => {
+                  if (!c.cell || c.cell.source === 'row') {
+                    return (
+                      <td key={c.key} className="py-1 px-1 border border-gray-100">
+                        <input className={INPUT_CLS} value={row[c.key] || ''} onChange={(e) => setCell(section.dataKey, idx, c.key, e.target.value)} />
+                      </td>
+                    );
+                  }
+                  // 'constant' is the same value in every row; a repeatable row has no
+                  // fixed row.key to look up in sectionData the way FixedTableSection
+                  // does, so 'sectionData' here has no live per-row value — show the
+                  // configured default instead, matching authoredTemplate.js's own
+                  // resolveOverride fallback (sectionData[row.key] is always undefined
+                  // for a repeatable row, so the renderer always prints cell.default too).
+                  const displayVal = c.cell.source === 'constant' ? c.cell.value : c.cell.default;
+                  return (
+                    <td key={c.key} className="py-2 px-3 text-sm text-gray-500">{displayVal ?? ''}</td>
+                  );
+                })}
                 <td className="py-1 px-1 border border-gray-100 text-center">
                   <button type="button" onClick={() => removeRow(section.dataKey, idx)} className="text-gray-400 hover:text-red-500">
                     <Trash2 size={16} />
@@ -205,7 +221,8 @@ function FreeformPhotoSection({ section, form, addPhoto, removePhoto, setLabel, 
         <button
           type="button"
           onClick={() => addPhoto(section.dataKey)}
-          className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 text-xs font-medium"
+          disabled={photos.length >= MAX_PHOTOS}
+          className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium"
         >
           <Plus size={14} /> Add Photo
         </button>
@@ -392,8 +409,14 @@ export default function GenericPdiGeneratorForm() {
   }, []);
 
   const addRepeatableRow = useCallback((dataKey, columns) => {
-    setForm((prev) => ({ ...prev, [dataKey]: [...(prev[dataKey] || []), makeEmptyRow(columns)] }));
-  }, []);
+    setForm((prev) => {
+      if ((prev[dataKey] || []).length >= MAX_ROWS) {
+        notifyError(`Maximum of ${MAX_ROWS} rows reached.`);
+        return prev;
+      }
+      return { ...prev, [dataKey]: [...(prev[dataKey] || []), makeEmptyRow(columns)] };
+    });
+  }, [notifyError]);
   const removeRepeatableRow = useCallback((dataKey, idx) => {
     setForm((prev) => ({ ...prev, [dataKey]: prev[dataKey].filter((_, i) => i !== idx) }));
   }, []);
@@ -413,8 +436,14 @@ export default function GenericPdiGeneratorForm() {
   }, []);
 
   const addFreeformPhoto = useCallback((dataKey) => {
-    setForm((prev) => ({ ...prev, [dataKey]: [...(prev[dataKey] || []), { label: '', image: null }] }));
-  }, []);
+    setForm((prev) => {
+      if ((prev[dataKey] || []).length >= MAX_PHOTOS) {
+        notifyError(`Maximum of ${MAX_PHOTOS} photos reached.`);
+        return prev;
+      }
+      return { ...prev, [dataKey]: [...(prev[dataKey] || []), { label: '', image: null }] };
+    });
+  }, [notifyError]);
   const removeFreeformPhoto = useCallback((dataKey, idx) => {
     setForm((prev) => ({ ...prev, [dataKey]: prev[dataKey].filter((_, i) => i !== idx) }));
   }, []);
