@@ -60,10 +60,10 @@ function App() {
 
     const isAllowedPath = allowedPaths.some((path) => {
       if (path.includes(":")) {
-        let regexPattern = path
-          .replace(":orderId", "[^/]+")
-          .replace(":action", "[a-zA-Z]+");
-        regexPattern = `^${regexPattern}$`;
+        // Match any ":param" segment generically (not just the couple of
+        // param names this used to hardcode) so newly added dynamic routes
+        // (e.g. "/pdi-generator/:templateId") are recognized here too.
+        const regexPattern = `^${path.replace(/:[^/]+/g, "[^/]+")}$`;
         const regex = new RegExp(regexPattern);
         return regex.test(normalizedPath);
       }

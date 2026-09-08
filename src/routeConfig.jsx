@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 // Dashboards
@@ -49,6 +49,7 @@ import PartCreation from "./components/admin/PartCreation";
 import DeliveryChallanForm from "./components/admin/DeliveryChallanForm";
 import PDIGeneratorForm from "./components/admin/PDIGeneratorForm";
 import AutoNXTGeneratorForm from "./components/admin/AutoNXTGeneratorForm";
+import GenericPdiGeneratorForm from "./components/admin/GenericPdiGeneratorForm";
 import MotorRecipesPage from "./components/admin/MotorRecipesPage";
 import DocumentsHub from "./components/admin/DocumentsHub";
 import PurchaseOrderForm from "./components/admin/PurchaseOrderForm";
@@ -106,6 +107,21 @@ import IAHRPayslipForm from "./components/IA/IAHRPayslipForm";
 import IAInvoiceForm from "./components/IA/IAInvoiceForm";
 import IAAttendanceSummary from "./components/IA/IAAttendanceSummary";
 import IAAttendanceHistory from "./components/IA/IAAttendanceHistory";
+
+// GenericPdiGeneratorForm is shared across every admin-authored PDI template,
+// keyed only by the :templateId route param. React Router reuses the same
+// component instance across param-only navigations (e.g. one admin template
+// to another) rather than remounting it, which would otherwise leak a
+// previous template's fetched definition/form/reportId state into the next.
+// Keying the rendered element by templateId forces a full remount whenever
+// the id in the URL changes. (This file's other exports are route data/
+// helpers rather than components, so fast-refresh's "only export components"
+// lint rule doesn't apply here — it has no bearing on the production build.)
+// eslint-disable-next-line react-refresh/only-export-components
+function PdiTemplateFillOutForm(props) {
+  const { templateId } = useParams();
+  return <GenericPdiGeneratorForm key={templateId} {...props} />;
+}
 
 // Route configuration array
 export const routeConfig = [
@@ -235,6 +251,11 @@ export const routeConfig = [
     path: "/pdi-generator/autonxt",
     allowedRoles: ["admin", "production"],
     component: AutoNXTGeneratorForm,
+  },
+  {
+    path: "/pdi-generator/:templateId",
+    allowedRoles: ["admin", "production"],
+    component: PdiTemplateFillOutForm,
   },
   {
     path: "/pdi-templates",
