@@ -89,6 +89,17 @@ function isSectionFilled(section, form) {
   }
 }
 
+function UndoToast({ message, onUndo }) {
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white rounded-lg shadow-lg px-4 py-3 flex items-center gap-4 z-50">
+      <span className="text-sm">{message}</span>
+      <button type="button" onClick={onUndo} className="text-amber-400 text-sm font-semibold hover:text-amber-300">
+        Undo
+      </button>
+    </div>
+  );
+}
+
 function ReviewPanel({ items, onFinalizeAnyway, finalizing }) {
   const incomplete = items.filter((i) => !i.filled);
   return (
@@ -148,6 +159,23 @@ export default function GenericPdiGeneratorForm() {
   const [reportId, setReportId] = useState(null);
   const [hasSaved, setHasSaved] = useState(false);
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
+
+  const [undoState, setUndoState] = useState(null); // { message, restore: () => void } | null
+  const undoTimerRef = useRef(null);
+
+  const showUndo = useCallback((message, restore) => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoState({ message, restore });
+    undoTimerRef.current = setTimeout(() => setUndoState(null), 5000);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoState((current) => {
+      current?.restore();
+      return null;
+    });
+  }, []);
 
   // "Latest ref" pattern: these mirror the newest render's values so the
   // stable (useCallback([])) save functions below never act on stale data,
@@ -296,8 +324,18 @@ export default function GenericPdiGeneratorForm() {
     });
   }, [notifyError]);
   const removeRepeatableRow = useCallback((dataKey, idx) => {
-    setForm((prev) => ({ ...prev, [dataKey]: prev[dataKey].filter((_, i) => i !== idx) }));
-  }, []);
+    setForm((prev) => {
+      const removedRow = prev[dataKey][idx];
+      showUndo('Row removed', () => {
+        setForm((p2) => {
+          const rows = [...p2[dataKey]];
+          rows.splice(idx, 0, removedRow);
+          return { ...p2, [dataKey]: rows };
+        });
+      });
+      return { ...prev, [dataKey]: prev[dataKey].filter((_, i) => i !== idx) };
+    });
+  }, [showUndo]);
   const setRepeatableCell = useCallback((dataKey, idx, colKey, value) => {
     setForm((prev) => {
       const rows = [...(prev[dataKey] || [])];
@@ -323,8 +361,18 @@ export default function GenericPdiGeneratorForm() {
     });
   }, [notifyError]);
   const removeFreeformPhoto = useCallback((dataKey, idx) => {
-    setForm((prev) => ({ ...prev, [dataKey]: prev[dataKey].filter((_, i) => i !== idx) }));
-  }, []);
+    setForm((prev) => {
+      const removedPhoto = prev[dataKey][idx];
+      showUndo('Photo removed', () => {
+        setForm((p2) => {
+          const list = [...p2[dataKey]];
+          list.splice(idx, 0, removedPhoto);
+          return { ...p2, [dataKey]: list };
+        });
+      });
+      return { ...prev, [dataKey]: prev[dataKey].filter((_, i) => i !== idx) };
+    });
+  }, [showUndo]);
   const setFreeformPhotoLabel = useCallback((dataKey, idx, label) => {
     setForm((prev) => {
       const list = [...prev[dataKey]];
@@ -668,6 +716,7 @@ export default function GenericPdiGeneratorForm() {
         </div>
 
         {cropTarget && <CropModal imageSrc={cropTarget.imageSrc} onCancel={cancelCrop} onApply={applyCroppedImage} />}
+        {undoState && <UndoToast message={undoState.message} onUndo={handleUndo} />}
       </div>
     );
   }
