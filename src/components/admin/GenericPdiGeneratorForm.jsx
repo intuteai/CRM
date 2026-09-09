@@ -68,8 +68,20 @@ function isSectionFilled(section, form) {
       {
         const sectionData = form[section.dataKey] || {};
         const editableCols = section.columns.filter((c) => c.cell && c.cell.source === 'sectionData');
+        // A cell still sitting at its own author-configured default (e.g. a
+        // GO/NG/NA column defaulting to 'GO') hasn't actually been looked at
+        // by anyone yet, even though buildDefaultFormData pre-fills it —
+        // don't let that pre-fill alone mark a mechanical-check section
+        // "filled" and wave it through the Review & Finalize gate unread.
+        // Re-selecting the same option the default already showed won't
+        // register as a change either; that's an accepted, safety-conservative
+        // trade-off (under-reports completion rather than over-reports it).
         return (section.fixedRows || []).some((row) =>
-          editableCols.some((c) => String((sectionData[row.key] && sectionData[row.key][c.cell.subfield]) || '').trim())
+          editableCols.some((c) => {
+            const value = String((sectionData[row.key] && sectionData[row.key][c.cell.subfield]) || '').trim();
+            if (!value) return false;
+            return value !== String(c.cell.default || '').trim();
+          })
         );
       }
     case 'photo':
@@ -161,11 +173,29 @@ export default function GenericPdiGeneratorForm() {
   const activeEntry = activeIndex >= 0 ? sidebarItems[activeIndex] : null;
 
   const [reportId, setReportId] = useState(null);
-  const [hasSaved, setHasSaved] = useState(false);
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
+  const [closing, setClosing] = useState(false);
+
+  // Whether the current draft has ever been successfully saved — used only
+  // by handleClose to decide whether to delete an abandoned draft. This is a
+  // plain ref, not useState: handleClose can itself trigger a save (awaiting
+  // runDataSave) and then, in that same function call, needs to know the
+  // *post-save* result. A useState value captured by closure when this
+  // render's handleClose was created would not retroactively reflect a state
+  // update that happened later in the same call — awaiting an async function
+  // does not "refresh" an already-captured const. hasSavedRef.current is
+  // written inline, synchronously, at the exact moment each save succeeds
+  // (see runDataSave/runPhotosSave/handleSave/doFinalize below), so reading
+  // it here always sees the latest truth regardless of render timing.
+  const hasSavedRef = useRef(false);
 
   const [undoState, setUndoState] = useState(null); // { message, restore: () => void } | null
   const undoTimerRef = useRef(null);
+  // Latest-ref mirror for undoState, used only by handleUndo (see below) —
+  // fine to update via effect since handleUndo only runs from an explicit
+  // click well after state has settled, unlike hasSavedRef's tighter timing.
+  const undoStateRef = useRef(null);
+  useEffect(() => { undoStateRef.current = undoState; }, [undoState]);
 
   const showUndo = useCallback((message, restore) => {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -173,12 +203,15 @@ export default function GenericPdiGeneratorForm() {
     undoTimerRef.current = setTimeout(() => setUndoState(null), 5000);
   }, []);
 
+  // Reads the restore closure via a ref and calls it OUTSIDE the setState
+  // updater — calling setForm (which is what `restore` does) from inside a
+  // setUndoState updater function is an impure updater (React may invoke
+  // updaters more than once, e.g. under StrictMode, double-firing the restore).
   const handleUndo = useCallback(() => {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    setUndoState((current) => {
-      current?.restore();
-      return null;
-    });
+    const current = undoStateRef.current;
+    setUndoState(null);
+    current?.restore();
   }, []);
 
   // "Latest ref" pattern: these mirror the newest render's values so the
@@ -194,13 +227,25 @@ export default function GenericPdiGeneratorForm() {
   const dataSaveTimerRef = useRef(null);
   const dataInFlightRef = useRef(false);
   const dataPendingRef = useRef(false);
+  const photosSaveTimerRef = useRef(null);
   const photosInFlightRef = useRef(false);
   const photosPendingRef = useRef(false);
-  // Guards against the initial setForm(base) in handleOpen/resume itself
-  // triggering an autosave of a still-blank draft — reset to false whenever
-  // a fresh form is established (see Step 3).
-  const skippedFirstDataChangeRef = useRef(false);
-  const skippedFirstPhotosChangeRef = useRef(false);
+  // Tracks which reportId each channel's "baseline" (the setForm(base) from
+  // handleOpen/resume, not a real user edit) has already been seen for.
+  // A content-based "have we skipped the first change yet" boolean (the
+  // previous design) breaks the moment two different sessions happen to
+  // produce byte-identical form snapshots (e.g. open, don't touch anything,
+  // close, reopen — buildDefaultFormData() returns the same JSON both times):
+  // React's effect dependency comparison then sees no change at all and
+  // never re-fires, so the boolean never gets a chance to reset, and the
+  // user's actual first edit in the new session gets silently swallowed as
+  // if it were still the old baseline. Keying the "seen" marker to reportId
+  // instead sidesteps this — reportId is always freshly assigned by the
+  // server on every open/resume and always passes through `null` while
+  // closed, so it can never spuriously collide across sessions the way
+  // JSON-stringified form content can.
+  const dataArmedForReportRef = useRef(null);
+  const photosArmedForReportRef = useRef(null);
 
   const runDataSave = useCallback(async () => {
     if (!reportIdRef.current) return;
@@ -217,7 +262,7 @@ export default function GenericPdiGeneratorForm() {
         data, status: 'In Progress',
         inspected_by: inspectedByRef.current(), inspection_date: inspectionDateRef.current(formRef.current),
       }, { headers: { Authorization: `Bearer ${token}` } });
-      setHasSaved(true);
+      hasSavedRef.current = true;
       setSaveStatus('saved');
     } catch {
       setSaveStatus('error');
@@ -240,7 +285,7 @@ export default function GenericPdiGeneratorForm() {
       await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
         photos: formRef.current.photos,
       }, { headers: { Authorization: `Bearer ${token}` } });
-      setHasSaved(true);
+      hasSavedRef.current = true;
       setSaveStatus('saved');
     } catch {
       setSaveStatus('error');
@@ -256,6 +301,21 @@ export default function GenericPdiGeneratorForm() {
   const abortRef = useRef(null);
 
   useEffect(() => () => { abortRef.current?.abort(); }, []);
+
+  // A drop that misses an ImageUploadCard's own drop-zone (a few pixels off,
+  // or a genuine mis-drop) still bubbles to the window — without this guard
+  // the browser's default behavior is to navigate the whole tab to the
+  // dropped file, tearing down the form and losing anything unsaved.
+  useEffect(() => {
+    if (!isOpen) return;
+    const preventDefault = (e) => e.preventDefault();
+    window.addEventListener('dragover', preventDefault);
+    window.addEventListener('drop', preventDefault);
+    return () => {
+      window.removeEventListener('dragover', preventDefault);
+      window.removeEventListener('drop', preventDefault);
+    };
+  }, [isOpen]);
 
   // Fetch the template definition once on mount.
   useEffect(() => {
@@ -294,8 +354,6 @@ export default function GenericPdiGeneratorForm() {
         const base = buildDefaultFormData(definition);
         const reportPhotos = report.photos;
         const hasRealPhotos = reportPhotos && (Array.isArray(reportPhotos) ? reportPhotos.length > 0 : Object.keys(reportPhotos).length > 0);
-        skippedFirstDataChangeRef.current = false;
-        skippedFirstPhotosChangeRef.current = false;
         setForm({
           ...base,
           ...(report.data || {}),
@@ -303,7 +361,7 @@ export default function GenericPdiGeneratorForm() {
         });
         setActiveKey(flattenSections(definition)[0]?.key ?? 'review');
         setReportId(report.report_id);
-        setHasSaved(true);
+        hasSavedRef.current = true;
         setIsOpen(true);
       } catch (err) {
         notifyError(err.response?.data?.error || 'Could not load that PDI report.');
@@ -442,9 +500,7 @@ export default function GenericPdiGeneratorForm() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setReportId(response.data.report_id);
-      setHasSaved(false);
-      skippedFirstDataChangeRef.current = false;
-      skippedFirstPhotosChangeRef.current = false;
+      hasSavedRef.current = false;
       setForm(base);
       setActiveKey(flattenSections(definition)[0]?.key ?? 'review');
       setIsOpen(true);
@@ -494,26 +550,62 @@ export default function GenericPdiGeneratorForm() {
   // eslint-disable-next-line no-unused-vars
   const dataSignature = form ? JSON.stringify((({ photos, ...rest }) => rest)(form)) : null;
   useEffect(() => {
-    if (!form || !isOpen) return;
-    if (!skippedFirstDataChangeRef.current) { skippedFirstDataChangeRef.current = true; return; }
+    if (!form || !isOpen || !reportId) return;
+    if (dataArmedForReportRef.current !== reportId) {
+      // First time this effect has seen THIS report's form — this is the
+      // setForm(base)/setForm(resumed data) snapshot from handleOpen/resume,
+      // not a real user edit. Arm the baseline and stop, regardless of
+      // whether dataSignature's text happens to match a previous session's
+      // (see the long comment on dataArmedForReportRef above for why content
+      // comparison alone isn't reliable here).
+      dataArmedForReportRef.current = reportId;
+      return;
+    }
     setSaveStatus('unsaved');
     if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
     dataSaveTimerRef.current = setTimeout(runDataSave, 1500);
     return () => clearTimeout(dataSaveTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataSignature]);
+  }, [dataSignature, reportId]);
 
+  // Photos get their own debounce timer too (not truly "immediate") — a
+  // freeform photo's label is a plain text field living inside this same
+  // array, and without debouncing, every keystroke in that label would fire
+  // its own full-payload (base64 image data included) PATCH. 1.5s is still
+  // effectively instant for the discrete add/remove/crop actions this
+  // channel exists for.
   const photosSignature = form ? JSON.stringify(form.photos) : null;
   useEffect(() => {
-    if (!form || !isOpen) return;
-    if (!skippedFirstPhotosChangeRef.current) { skippedFirstPhotosChangeRef.current = true; return; }
-    runPhotosSave();
+    if (!form || !isOpen || !reportId) return;
+    if (photosArmedForReportRef.current !== reportId) {
+      photosArmedForReportRef.current = reportId;
+      return;
+    }
+    setSaveStatus('unsaved');
+    if (photosSaveTimerRef.current) clearTimeout(photosSaveTimerRef.current);
+    photosSaveTimerRef.current = setTimeout(runPhotosSave, 1500);
+    return () => clearTimeout(photosSaveTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photosSignature]);
+  }, [photosSignature, reportId]);
+
+  // Best-effort flush on unmount (e.g. the user navigates away via the app's
+  // own nav rather than the in-page Back button, which has its own explicit
+  // flush in handleClose below). This only helps for in-SPA navigation —
+  // the JS runtime keeps running and the fire-and-forget request can still
+  // complete. It cannot do anything for a hard tab close/reload; there is no
+  // navigation-blocking guard in this app for that case.
+  useEffect(() => {
+    return () => {
+      if (dataSaveTimerRef.current) { clearTimeout(dataSaveTimerRef.current); runDataSave(); }
+      if (photosSaveTimerRef.current) { clearTimeout(photosSaveTimerRef.current); runPhotosSave(); }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSave = async () => {
     if (!reportId) return;
     if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
+    if (photosSaveTimerRef.current) clearTimeout(photosSaveTimerRef.current);
     const token = localStorage.getItem('token');
     if (!token) { notifyError('Please log in first.'); return; }
     setSaving(true);
@@ -528,7 +620,7 @@ export default function GenericPdiGeneratorForm() {
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setHasSaved(true);
+      hasSavedRef.current = true;
       setSaveStatus('saved');
       notifySuccess('Progress saved.');
     } catch (err) {
@@ -550,6 +642,14 @@ export default function GenericPdiGeneratorForm() {
     const token = localStorage.getItem('token');
     if (!token) { notifyError('Please log in first.'); return; }
 
+    // A scheduled-but-not-yet-fired autosave must not be allowed to land
+    // after finalize — the finalize PATCH below already carries the latest
+    // data, and a stray later autosave PATCH sends status: 'In Progress',
+    // which would flip a just-Completed report back to In Progress on the
+    // dashboard.
+    if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
+    if (photosSaveTimerRef.current) clearTimeout(photosSaveTimerRef.current);
+
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -564,7 +664,7 @@ export default function GenericPdiGeneratorForm() {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
-      setHasSaved(true);
+      hasSavedRef.current = true;
 
       const response = await axios.post(`${API_URL}/api/pdi/reports/${reportId}/finalize`, {}, {
         headers: { Authorization: `Bearer ${token}` },
@@ -584,7 +684,7 @@ export default function GenericPdiGeneratorForm() {
       notifySuccess('PDI finalized and PDF downloaded successfully.');
       setIsOpen(false);
       setReportId(null);
-      setHasSaved(false);
+      hasSavedRef.current = false;
     } catch (err) {
       if (err.name === 'CanceledError' || err.name === 'AbortError') return;
       if (err.response?.data instanceof Blob) {
@@ -605,37 +705,49 @@ export default function GenericPdiGeneratorForm() {
   };
 
   const handleClose = async () => {
-    if (abortRef.current) abortRef.current.abort();
-    // A still-armed timer means there's an edit debounced but not yet sent —
-    // flush it via a direct save instead of silently dropping it, since the
-    // UI's "Unsaved changes" / "Saving…" status implies autosave is
-    // continuous and authoritative, not best-effort.
-    if (dataSaveTimerRef.current) {
-      clearTimeout(dataSaveTimerRef.current);
-      await runDataSave();
-    }
-    // An autosave PATCH already sent to the server (in-flight) or queued to
-    // fire immediately after one resolves (pending) means the report now has
-    // — or is about to have — real saved content, even though `hasSaved`
-    // itself hasn't flipped true yet (it only flips after the request
-    // resolves). Racing a DELETE against that in-flight PATCH has no
-    // ordering guarantee and could silently wipe the user's just-saved edit,
-    // so treat in-flight/pending exactly like `hasSaved` for this decision.
-    const saveInProgressOrPending =
-      dataInFlightRef.current || photosInFlightRef.current || dataPendingRef.current || photosPendingRef.current;
-    if (reportId && !hasSaved && !saveInProgressOrPending) {
-      try {
-        const token = localStorage.getItem('token');
-        await axios.delete(`${API_URL}/api/pdi/reports/${reportId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch (err) {
-        console.error('Failed to clean up unsaved PDI draft:', err);
+    if (closing) return; // guards against a double-click issuing two flushes/deletes
+    setClosing(true);
+    try {
+      if (abortRef.current) abortRef.current.abort();
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoState(null);
+      // A still-armed timer means there's an edit debounced but not yet sent —
+      // flush it via a direct save instead of silently dropping it, since the
+      // UI's "Unsaved changes" / "Saving…" status implies autosave is
+      // continuous and authoritative, not best-effort.
+      if (dataSaveTimerRef.current) {
+        clearTimeout(dataSaveTimerRef.current);
+        await runDataSave();
       }
+      if (photosSaveTimerRef.current) {
+        clearTimeout(photosSaveTimerRef.current);
+        await runPhotosSave();
+      }
+      // An autosave PATCH already sent to the server (in-flight) or queued to
+      // fire immediately after one resolves (pending) means the report now has
+      // — or is about to have — real saved content, even though hasSavedRef
+      // itself hasn't flipped true yet (it only flips after the request
+      // resolves). Racing a DELETE against that in-flight PATCH has no
+      // ordering guarantee and could silently wipe the user's just-saved edit,
+      // so treat in-flight/pending exactly like hasSavedRef for this decision.
+      const saveInProgressOrPending =
+        dataInFlightRef.current || photosInFlightRef.current || dataPendingRef.current || photosPendingRef.current;
+      if (reportId && !hasSavedRef.current && !saveInProgressOrPending) {
+        try {
+          const token = localStorage.getItem('token');
+          await axios.delete(`${API_URL}/api/pdi/reports/${reportId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } catch (err) {
+          console.error('Failed to clean up unsaved PDI draft:', err);
+        }
+      }
+      setIsOpen(false);
+      setReportId(null);
+      hasSavedRef.current = false;
+    } finally {
+      setClosing(false);
     }
-    setIsOpen(false);
-    setReportId(null);
-    setHasSaved(false);
   };
 
   if (loadError) {
@@ -700,7 +812,7 @@ export default function GenericPdiGeneratorForm() {
             <button type="button" onClick={goNext} disabled={activeIndex < 0 || activeIndex >= sidebarItems.length - 1} className="px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-40 text-sm">
               Next &rarr;
             </button>
-            <button type="button" onClick={handleClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm">
+            <button type="button" onClick={handleClose} disabled={closing} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm">
               Back
             </button>
             <button
