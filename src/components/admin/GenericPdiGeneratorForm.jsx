@@ -147,7 +147,80 @@ export default function GenericPdiGeneratorForm() {
 
   const [reportId, setReportId] = useState(null);
   const [hasSaved, setHasSaved] = useState(false);
-  const [saveStatus] = useState('idle');
+  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
+
+  // "Latest ref" pattern: these mirror the newest render's values so the
+  // stable (useCallback([])) save functions below never act on stale data,
+  // without needing to be recreated (and therefore re-scheduled) every render.
+  const formRef = useRef(form);
+  useEffect(() => { formRef.current = form; }, [form]);
+  const reportIdRef = useRef(reportId);
+  useEffect(() => { reportIdRef.current = reportId; }, [reportId]);
+  const inspectedByRef = useRef(() => undefined);
+  const inspectionDateRef = useRef(() => undefined);
+
+  const dataSaveTimerRef = useRef(null);
+  const dataInFlightRef = useRef(false);
+  const dataPendingRef = useRef(false);
+  const photosInFlightRef = useRef(false);
+  const photosPendingRef = useRef(false);
+  // Guards against the initial setForm(base) in handleOpen/resume itself
+  // triggering an autosave of a still-blank draft — reset to false whenever
+  // a fresh form is established (see Step 3).
+  const skippedFirstDataChangeRef = useRef(false);
+  const skippedFirstPhotosChangeRef = useRef(false);
+
+  const runDataSave = useCallback(async () => {
+    if (!reportIdRef.current) return;
+    if (dataInFlightRef.current) { dataPendingRef.current = true; return; }
+    dataInFlightRef.current = true;
+    setSaveStatus('saving');
+    try {
+      const token = localStorage.getItem('token');
+      // photos is intentionally excluded from the data-channel payload (see
+      // the CRITICAL CONTRACT note above) — it has its own save channel.
+      // eslint-disable-next-line no-unused-vars
+      const { photos, ...data } = formRef.current;
+      await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
+        data, status: 'In Progress',
+        inspected_by: inspectedByRef.current(), inspection_date: inspectionDateRef.current(formRef.current),
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      setHasSaved(true);
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('error');
+    } finally {
+      dataInFlightRef.current = false;
+      if (dataPendingRef.current) {
+        dataPendingRef.current = false;
+        runDataSave();
+      }
+    }
+  }, []);
+
+  const runPhotosSave = useCallback(async () => {
+    if (!reportIdRef.current) return;
+    if (photosInFlightRef.current) { photosPendingRef.current = true; return; }
+    photosInFlightRef.current = true;
+    setSaveStatus('saving');
+    try {
+      const token = localStorage.getItem('token');
+      await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
+        photos: formRef.current.photos,
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      setHasSaved(true);
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('error');
+    } finally {
+      photosInFlightRef.current = false;
+      if (photosPendingRef.current) {
+        photosPendingRef.current = false;
+        runPhotosSave();
+      }
+    }
+  }, []);
+
   const abortRef = useRef(null);
 
   useEffect(() => () => { abortRef.current?.abort(); }, []);
@@ -189,6 +262,8 @@ export default function GenericPdiGeneratorForm() {
         const base = buildDefaultFormData(definition);
         const reportPhotos = report.photos;
         const hasRealPhotos = reportPhotos && (Array.isArray(reportPhotos) ? reportPhotos.length > 0 : Object.keys(reportPhotos).length > 0);
+        skippedFirstDataChangeRef.current = false;
+        skippedFirstPhotosChangeRef.current = false;
         setForm({
           ...base,
           ...(report.data || {}),
@@ -320,6 +395,8 @@ export default function GenericPdiGeneratorForm() {
       });
       setReportId(response.data.report_id);
       setHasSaved(false);
+      skippedFirstDataChangeRef.current = false;
+      skippedFirstPhotosChangeRef.current = false;
       setForm(base);
       setActiveKey(flattenSections(definition)[0]?.key ?? 'review');
       setIsOpen(true);
@@ -361,11 +438,38 @@ export default function GenericPdiGeneratorForm() {
     return undefined;
   };
 
+  useEffect(() => {
+    inspectedByRef.current = inspectedByValue;
+    inspectionDateRef.current = inspectionDateValue;
+  });
+
+  // eslint-disable-next-line no-unused-vars
+  const dataSignature = form ? JSON.stringify((({ photos, ...rest }) => rest)(form)) : null;
+  useEffect(() => {
+    if (!form || !isOpen) return;
+    if (!skippedFirstDataChangeRef.current) { skippedFirstDataChangeRef.current = true; return; }
+    setSaveStatus('unsaved');
+    if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
+    dataSaveTimerRef.current = setTimeout(runDataSave, 1500);
+    return () => clearTimeout(dataSaveTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataSignature]);
+
+  const photosSignature = form ? JSON.stringify(form.photos) : null;
+  useEffect(() => {
+    if (!form || !isOpen) return;
+    if (!skippedFirstPhotosChangeRef.current) { skippedFirstPhotosChangeRef.current = true; return; }
+    runPhotosSave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photosSignature]);
+
   const handleSave = async () => {
     if (!reportId) return;
+    if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
     const token = localStorage.getItem('token');
     if (!token) { notifyError('Please log in first.'); return; }
     setSaving(true);
+    setSaveStatus('saving');
     try {
       // See the contract note at the top of this task — this destructuring
       // is load-bearing, not optional style. Do not send `photos` inside `data`.
@@ -377,8 +481,10 @@ export default function GenericPdiGeneratorForm() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setHasSaved(true);
+      setSaveStatus('saved');
       notifySuccess('Progress saved.');
     } catch (err) {
+      setSaveStatus('error');
       notifyError(err.response?.data?.error || 'Failed to save progress.');
     } finally {
       setSaving(false);
