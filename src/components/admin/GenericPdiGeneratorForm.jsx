@@ -558,10 +558,14 @@ export default function GenericPdiGeneratorForm() {
 
   const handleClose = async () => {
     if (abortRef.current) abortRef.current.abort();
-    // Cancel any debounce timer that hasn't fired yet — if we don't, and nothing
-    // else guards against it, a save could otherwise still fire after this
-    // function has already decided whether to delete the draft below.
-    if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
+    // A still-armed timer means there's an edit debounced but not yet sent —
+    // flush it via a direct save instead of silently dropping it, since the
+    // UI's "Unsaved changes" / "Saving…" status implies autosave is
+    // continuous and authoritative, not best-effort.
+    if (dataSaveTimerRef.current) {
+      clearTimeout(dataSaveTimerRef.current);
+      await runDataSave();
+    }
     // An autosave PATCH already sent to the server (in-flight) or queued to
     // fire immediately after one resolves (pending) means the report now has
     // — or is about to have — real saved content, even though `hasSaved`
