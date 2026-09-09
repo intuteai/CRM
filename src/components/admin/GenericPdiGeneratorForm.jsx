@@ -558,7 +558,20 @@ export default function GenericPdiGeneratorForm() {
 
   const handleClose = async () => {
     if (abortRef.current) abortRef.current.abort();
-    if (reportId && !hasSaved) {
+    // Cancel any debounce timer that hasn't fired yet — if we don't, and nothing
+    // else guards against it, a save could otherwise still fire after this
+    // function has already decided whether to delete the draft below.
+    if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
+    // An autosave PATCH already sent to the server (in-flight) or queued to
+    // fire immediately after one resolves (pending) means the report now has
+    // — or is about to have — real saved content, even though `hasSaved`
+    // itself hasn't flipped true yet (it only flips after the request
+    // resolves). Racing a DELETE against that in-flight PATCH has no
+    // ordering guarantee and could silently wipe the user's just-saved edit,
+    // so treat in-flight/pending exactly like `hasSaved` for this decision.
+    const saveInProgressOrPending =
+      dataInFlightRef.current || photosInFlightRef.current || dataPendingRef.current || photosPendingRef.current;
+    if (reportId && !hasSaved && !saveInProgressOrPending) {
       try {
         const token = localStorage.getItem('token');
         await axios.delete(`${API_URL}/api/pdi/reports/${reportId}`, {
