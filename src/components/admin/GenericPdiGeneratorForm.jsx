@@ -485,7 +485,10 @@ export default function GenericPdiGeneratorForm() {
     setActiveKey(sidebarItems[idx].key);
   };
   const goPrevious = () => goToIndex(activeIndex - 1);
-  const goNext = () => goToIndex(activeIndex + 1);
+  // activeIndex is -1 while on the virtual 'review' entry (not a real section) —
+  // guard explicitly rather than relying on the Next button's disabled state to
+  // be the only thing preventing a jump to section 0 from there.
+  const goNext = () => { if (activeIndex < 0) return; goToIndex(activeIndex + 1); };
 
   if (isOpen && form) {
     return (
