@@ -1,5 +1,5 @@
 // CRM/src/components/admin/GenericPdiGeneratorForm.jsx
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import axios from 'axios';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Download, FileText } from 'lucide-react';
@@ -231,19 +231,23 @@ export default function GenericPdiGeneratorForm() {
   // "Latest ref" pattern: these mirror the newest render's values so the
   // stable (useCallback([])) save functions below never act on stale data,
   // without needing to be recreated (and therefore re-scheduled) every render.
+  // useLayoutEffect, not useEffect: formRef is read from several
+  // click-driven paths (handleClose, the unmount flush, and the undo
+  // restore-index lookups in removeRepeatableRow/removeFreeformPhoto) where
+  // it matters that the mirror has already committed before the user can
+  // possibly interact again — passive effects (useEffect) are scheduled on
+  // a macrotask after paint, leaving a narrow window where a click landing
+  // right after a form-changing render could still see a one-render-stale
+  // formRef.current.
   const formRef = useRef(form);
-  useEffect(() => { formRef.current = form; }, [form]);
+  useLayoutEffect(() => { formRef.current = form; }, [form]);
   const reportIdRef = useRef(reportId);
   useEffect(() => { reportIdRef.current = reportId; }, [reportId]);
   const inspectedByRef = useRef(() => undefined);
   const inspectionDateRef = useRef(() => undefined);
 
   const dataSaveTimerRef = useRef(null);
-  const dataInFlightRef = useRef(false);
-  const dataPendingRef = useRef(false);
   const photosSaveTimerRef = useRef(null);
-  const photosInFlightRef = useRef(false);
-  const photosPendingRef = useRef(false);
 
   // The signature (see dataOnlySignature above) of the data most recently
   // CONFIRMED saved to the server — set to the baseline's own signature the
@@ -270,64 +274,74 @@ export default function GenericPdiGeneratorForm() {
   const photosSavedSignatureRef = useRef(null);
   const dataSavedSignatureRef = useRef(null);
 
-  const runDataSave = useCallback(async () => {
-    if (!reportIdRef.current) return;
-    if (dataInFlightRef.current) { dataPendingRef.current = true; return; }
-    dataInFlightRef.current = true;
-    setSaveStatus('saving');
-    try {
-      const token = localStorage.getItem('token');
-      // photos is intentionally excluded from the data-channel payload (see
-      // the CRITICAL CONTRACT note above) — it has its own save channel.
+  // Each channel's saves are chained onto a single promise rather than
+  // guarded by an in-flight/pending boolean pair. A caller (a debounce
+  // timer, handleClose, the unmount flush, doFinalize) always gets back a
+  // promise for a real request that reflects formRef.current AT THE MOMENT
+  // ITS TURN IN THE CHAIN ACTUALLY RUNS — not a promise that can resolve
+  // instantly without sending anything just because something else happened
+  // to be in flight. That "resolves without doing anything" behavior was
+  // the earlier boolean-mutex design's actual bug: handleClose would await
+  // it, believe the flush had happened, and proceed to null out reportId —
+  // permanently disarming the queued retry's own guard clause before it
+  // ever got a chance to run.
+  const dataSaveChainRef = useRef(Promise.resolve());
+  const photosSaveChainRef = useRef(Promise.resolve());
+
+  const runDataSave = useCallback(() => {
+    const next = dataSaveChainRef.current.then(async () => {
+      if (!reportIdRef.current || !formRef.current) return;
+      // photos is intentionally excluded from the data-channel payload —
+      // it has its own channel/column, saved by runPhotosSave below (see
+      // the backend's `patchReport`, which treats `data` and `photos` as
+      // independent, individually-optional columns).
       // eslint-disable-next-line no-unused-vars
       const { photos, ...data } = formRef.current;
-      // Captured BEFORE the await, from the exact same `data` object being
-      // sent — so if formRef.current changes again while this request is in
-      // flight, dataSavedSignatureRef only advances to what was actually
-      // sent, and a fresh comparison against the (now different) live
-      // signature still correctly reports "unsaved."
       const sentSignature = JSON.stringify(data);
-      await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
-        data, status: 'In Progress',
-        inspected_by: inspectedByRef.current(), inspection_date: inspectionDateRef.current(formRef.current),
-      }, { headers: { Authorization: `Bearer ${token}` } });
-      hasSavedRef.current = true;
-      dataSavedSignatureRef.current = sentSignature;
-      setSaveStatus('saved');
-    } catch {
-      setSaveStatus('error');
-    } finally {
-      dataInFlightRef.current = false;
-      if (dataPendingRef.current) {
-        dataPendingRef.current = false;
-        runDataSave();
+      if (sentSignature === dataSavedSignatureRef.current) return; // nothing new since we were queued
+      setSaveStatus('saving');
+      try {
+        const token = localStorage.getItem('token');
+        await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
+          data, status: 'In Progress',
+          inspected_by: inspectedByRef.current(), inspection_date: inspectionDateRef.current(formRef.current),
+        }, { headers: { Authorization: `Bearer ${token}` } });
+        hasSavedRef.current = true;
+        dataSavedSignatureRef.current = sentSignature;
+        // Compares against a FRESH read of formRef.current, not the
+        // sentSignature we just confirmed — if something changed again
+        // while this request was in flight, the live signature has already
+        // moved past what was just saved, and the status should say so.
+        setSaveStatus(sentSignature === dataOnlySignature(formRef.current) ? 'saved' : 'unsaved');
+      } catch {
+        setSaveStatus('error');
       }
-    }
+    });
+    dataSaveChainRef.current = next;
+    return next;
   }, []);
 
-  const runPhotosSave = useCallback(async () => {
-    if (!reportIdRef.current) return;
-    if (photosInFlightRef.current) { photosPendingRef.current = true; return; }
-    photosInFlightRef.current = true;
-    setSaveStatus('saving');
-    try {
-      const token = localStorage.getItem('token');
-      const sentSignature = JSON.stringify(formRef.current.photos);
-      await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
-        photos: formRef.current.photos,
-      }, { headers: { Authorization: `Bearer ${token}` } });
-      hasSavedRef.current = true;
-      photosSavedSignatureRef.current = sentSignature;
-      setSaveStatus('saved');
-    } catch {
-      setSaveStatus('error');
-    } finally {
-      photosInFlightRef.current = false;
-      if (photosPendingRef.current) {
-        photosPendingRef.current = false;
-        runPhotosSave();
+  const runPhotosSave = useCallback(() => {
+    const next = photosSaveChainRef.current.then(async () => {
+      if (!reportIdRef.current || !formRef.current) return;
+      const photos = formRef.current.photos;
+      const sentSignature = JSON.stringify(photos);
+      if (sentSignature === photosSavedSignatureRef.current) return;
+      setSaveStatus('saving');
+      try {
+        const token = localStorage.getItem('token');
+        await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, { photos }, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        hasSavedRef.current = true;
+        photosSavedSignatureRef.current = sentSignature;
+        setSaveStatus(sentSignature === JSON.stringify(formRef.current.photos) ? 'saved' : 'unsaved');
+      } catch {
+        setSaveStatus('error');
       }
-    }
+    });
+    photosSaveChainRef.current = next;
+    return next;
   }, []);
 
   const abortRef = useRef(null);
@@ -705,19 +719,12 @@ export default function GenericPdiGeneratorForm() {
     const token = localStorage.getItem('token');
     if (!token) { notifyError('Please log in first.'); return; }
 
-    // A scheduled-but-not-yet-fired autosave must not be allowed to land
-    // after finalize — the finalize PATCH below already carries the latest
-    // data, and a stray later autosave PATCH sends status: 'In Progress',
-    // which would flip a just-Completed report back to In Progress on the
-    // dashboard. Clearing the *pending* flags too (not just the timers)
-    // matters just as much: if an autosave happened to be in flight right as
-    // finalize started, its own finally-block would otherwise still queue
-    // and fire a follow-up save after this function's PATCH — a request
-    // created after finalize began, not merely one already in transit.
+    // Cancel any scheduled-but-not-yet-fired debounce timer first, so no NEW
+    // autosave gets scheduled once loading=true takes effect (the debounce
+    // effects also bail on `loading` themselves, but this covers the window
+    // before that re-render lands).
     if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
     if (photosSaveTimerRef.current) clearTimeout(photosSaveTimerRef.current);
-    dataPendingRef.current = false;
-    photosPendingRef.current = false;
 
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
@@ -725,12 +732,30 @@ export default function GenericPdiGeneratorForm() {
     setLoading(true);
 
     try {
-      const { photos, ...data } = form;
+      // Let any already-queued or in-flight autosave finish first — it
+      // reads formRef.current fresh when its turn actually comes, so this
+      // can't send stale data, and it guarantees this function's own
+      // combined save below (which the code right after this depends on
+      // being the LAST write before finalize) can't be overtaken by an
+      // autosave landing on the wire afterward and reverting
+      // status: 'In Progress' over what finalize is about to set to
+      // 'Completed'.
+      await runDataSave();
+      await runPhotosSave();
+
+      // Read via formRef/the latest-ref function mirrors, not the closure
+      // `form`/`inspectedByValue`/`inspectionDateValue` — this function has
+      // now awaited twice above, and inputs aren't disabled while that
+      // happens, so an edit made in that window would otherwise be invisible
+      // to a read of the plain closure variables (those were captured once,
+      // when this specific invocation of doFinalize started, and don't
+      // update just because state changed elsewhere).
+      const { photos, ...data } = formRef.current;
       const sentDataSignature = JSON.stringify(data);
       const sentPhotosSignature = JSON.stringify(photos);
       await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
-        data, photos, inspected_by: inspectedByValue(),
-        inspection_date: inspectionDateValue(form),
+        data, photos, inspected_by: inspectedByRef.current(),
+        inspection_date: inspectionDateRef.current(formRef.current),
       }, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
@@ -784,35 +809,42 @@ export default function GenericPdiGeneratorForm() {
       if (abortRef.current) abortRef.current.abort();
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
       setUndoState(null);
-      // Live content not matching what's saved means there's an edit that
-      // hasn't been sent yet — flush it via a direct save instead of
-      // silently dropping it, since the UI's "Unsaved changes" / "Saving…"
-      // status implies autosave is continuous and authoritative, not
-      // best-effort. Read via formRef, not the closure `form`, and computed
-      // fresh right here rather than relying on any flag set earlier — see
-      // dataSavedSignatureRef's own comment above for why a separately-
-      // maintained flag (of any kind: a raw timer-ref check, a reportId-keyed
-      // "armed" marker, a boolean "dirty" bit) kept drifting out of sync with
-      // reality in three different ways across three earlier attempts at
-      // this exact function.
-      if (formRef.current && dataOnlySignature(formRef.current) !== dataSavedSignatureRef.current) {
-        clearTimeout(dataSaveTimerRef.current);
-        await runDataSave();
-      }
-      if (formRef.current && JSON.stringify(formRef.current.photos) !== photosSavedSignatureRef.current) {
-        clearTimeout(photosSaveTimerRef.current);
-        await runPhotosSave();
-      }
-      // An autosave PATCH already sent to the server (in-flight) or queued to
-      // fire immediately after one resolves (pending) means the report now has
-      // — or is about to have — real saved content, even though hasSavedRef
-      // itself hasn't flipped true yet (it only flips after the request
-      // resolves). Racing a DELETE against that in-flight PATCH has no
-      // ordering guarantee and could silently wipe the user's just-saved edit,
-      // so treat in-flight/pending exactly like hasSavedRef for this decision.
-      const saveInProgressOrPending =
-        dataInFlightRef.current || photosInFlightRef.current || dataPendingRef.current || photosPendingRef.current;
-      if (reportId && !hasSavedRef.current && !saveInProgressOrPending) {
+      if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
+      if (photosSaveTimerRef.current) clearTimeout(photosSaveTimerRef.current);
+      // Always flush both channels rather than pre-checking whether they
+      // look dirty — each one internally no-ops if the live content already
+      // matches what's saved (see runDataSave/runPhotosSave above), and
+      // awaiting them here genuinely waits for a real request that reflects
+      // formRef.current at the moment it actually runs — including anything
+      // already queued or in flight ahead of this call, not merely for a
+      // flag saying "something is pending." A prior version of this function
+      // awaited a promise that could resolve instantly without sending
+      // anything whenever a save happened to already be in flight, then
+      // proceeded to null out reportId — permanently disarming that queued
+      // save's own guard clause before it ever got to run, silently losing
+      // the edit it was supposed to cover.
+      await runDataSave();
+      await runPhotosSave();
+
+      // Re-check against formRef.current AFTER the flush, not before — this
+      // is what tells apart "the flush actually saved everything" from "the
+      // flush ran but failed" (runDataSave/runPhotosSave swallow their own
+      // errors into `saveStatus: 'error'` rather than throwing, so `await`
+      // alone can't distinguish the two).
+      const stillDirty =
+        (formRef.current && dataOnlySignature(formRef.current) !== dataSavedSignatureRef.current) ||
+        (formRef.current && JSON.stringify(formRef.current.photos) !== photosSavedSignatureRef.current);
+
+      if (stillDirty) {
+        // Don't delete a draft that might still hold real, unsaved work —
+        // leave it as a resumable "In Progress" draft and tell the user,
+        // rather than silently discarding whatever the flush above failed
+        // to persist.
+        notifyError("Couldn't save your latest changes before closing — this draft was kept so you can resume and try again.");
+      } else if (reportId && !hasSavedRef.current) {
+        // Nothing was ever dirty this session (matches the pristine baseline
+        // handleOpen/resume seeded) AND nothing was ever successfully saved
+        // — a genuinely abandoned, untouched draft. Safe to clean up.
         try {
           const token = localStorage.getItem('token');
           await axios.delete(`${API_URL}/api/pdi/reports/${reportId}`, {
