@@ -101,6 +101,20 @@ function isSectionFilled(section, form) {
   }
 }
 
+// The JSON signature of everything in a form object EXCEPT `photos` — used
+// both to detect real data-channel edits (the render-body `dataSignature`
+// below) and to record exactly what a save actually sent (see runDataSave).
+// A plain module-level function, not a hook: needs no closure over
+// component state, and using the identical function at both "did this
+// change" and "what did I just save" call sites is what makes the two
+// comparable at all.
+function dataOnlySignature(formObj) {
+  if (!formObj) return null;
+  // eslint-disable-next-line no-unused-vars
+  const { photos, ...rest } = formObj;
+  return JSON.stringify(rest);
+}
+
 function UndoToast({ message, onUndo }) {
   return (
     <div
@@ -230,35 +244,31 @@ export default function GenericPdiGeneratorForm() {
   const photosSaveTimerRef = useRef(null);
   const photosInFlightRef = useRef(false);
   const photosPendingRef = useRef(false);
-  // Tracks which reportId each channel's "baseline" (the setForm(base) from
-  // handleOpen/resume, not a real user edit) has already been seen for.
-  // A content-based "have we skipped the first change yet" boolean (the
-  // previous design) breaks the moment two different sessions happen to
-  // produce byte-identical form snapshots (e.g. open, don't touch anything,
-  // close, reopen — buildDefaultFormData() returns the same JSON both times):
-  // React's effect dependency comparison then sees no change at all and
-  // never re-fires, so the boolean never gets a chance to reset, and the
-  // user's actual first edit in the new session gets silently swallowed as
-  // if it were still the old baseline. Keying the "seen" marker to reportId
-  // instead sidesteps this — reportId is always freshly assigned by the
-  // server on every open/resume and always passes through `null` while
-  // closed, so it can never spuriously collide across sessions the way
-  // JSON-stringified form content can.
-  const dataArmedForReportRef = useRef(null);
-  const photosArmedForReportRef = useRef(null);
 
-  // Whether there is an edit that's been debounced/scheduled but not yet
-  // successfully sent. This is DELIBERATELY separate from
-  // "dataSaveTimerRef.current is truthy" — a setTimeout handle is a plain
-  // positive integer that's never reset to null after it fires, so checking
-  // its truthiness really means "has a timer EVER been scheduled during this
-  // component's lifetime," not "is one pending right now." Every place that
-  // used to gate a flush on the raw timer ref's truthiness must use these
-  // dirty flags instead, or a stale handle from an earlier, already-completed
-  // session silently triggers a same-outcome-as-"unsaved" flush on a report
-  // that was never actually touched.
-  const dataDirtyRef = useRef(false);
-  const photosDirtyRef = useRef(false);
+  // The signature (see dataOnlySignature above) of the data most recently
+  // CONFIRMED saved to the server — set to the baseline's own signature the
+  // instant a session starts (handleOpen/resume, right alongside setForm),
+  // and updated to whatever was actually just sent every time a save
+  // succeeds (runDataSave/handleSave/doFinalize). "Is there anything
+  // unsaved right now" is then always just "does the live signature still
+  // equal this," computed fresh wherever it's needed — never a separately-
+  // maintained boolean/counter that itself needs to be kept in sync and can
+  // drift out of true. This one field replaces three earlier, each-narrower
+  // attempts at the same idea:
+  //   1. A raw "has the debounce timer fired" check — wrong the moment any
+  //      timer had EVER fired, since a setTimeout handle is a plain integer
+  //      that's never reset to null afterward.
+  //   2. A reportId-keyed "have I armed the baseline yet" ref — correctly
+  //      distinguished "the initial setForm(base) snapshot" from a real
+  //      edit, but said nothing about whether a *later* edit had actually
+  //      been saved.
+  //   3. A boolean "dirty" flag, cleared unconditionally on save success —
+  //      wrong if a newer edit arrived while that save was still in flight:
+  //      the flag would read "clean" even though the just-sent payload no
+  //      longer matched the live form.
+  // Comparing actual content sidesteps all three at once.
+  const photosSavedSignatureRef = useRef(null);
+  const dataSavedSignatureRef = useRef(null);
 
   const runDataSave = useCallback(async () => {
     if (!reportIdRef.current) return;
@@ -271,12 +281,18 @@ export default function GenericPdiGeneratorForm() {
       // the CRITICAL CONTRACT note above) — it has its own save channel.
       // eslint-disable-next-line no-unused-vars
       const { photos, ...data } = formRef.current;
+      // Captured BEFORE the await, from the exact same `data` object being
+      // sent — so if formRef.current changes again while this request is in
+      // flight, dataSavedSignatureRef only advances to what was actually
+      // sent, and a fresh comparison against the (now different) live
+      // signature still correctly reports "unsaved."
+      const sentSignature = JSON.stringify(data);
       await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
         data, status: 'In Progress',
         inspected_by: inspectedByRef.current(), inspection_date: inspectionDateRef.current(formRef.current),
       }, { headers: { Authorization: `Bearer ${token}` } });
       hasSavedRef.current = true;
-      dataDirtyRef.current = false;
+      dataSavedSignatureRef.current = sentSignature;
       setSaveStatus('saved');
     } catch {
       setSaveStatus('error');
@@ -296,11 +312,12 @@ export default function GenericPdiGeneratorForm() {
     setSaveStatus('saving');
     try {
       const token = localStorage.getItem('token');
+      const sentSignature = JSON.stringify(formRef.current.photos);
       await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
         photos: formRef.current.photos,
       }, { headers: { Authorization: `Bearer ${token}` } });
       hasSavedRef.current = true;
-      photosDirtyRef.current = false;
+      photosSavedSignatureRef.current = sentSignature;
       setSaveStatus('saved');
     } catch {
       setSaveStatus('error');
@@ -369,11 +386,16 @@ export default function GenericPdiGeneratorForm() {
         const base = buildDefaultFormData(definition);
         const reportPhotos = report.photos;
         const hasRealPhotos = reportPhotos && (Array.isArray(reportPhotos) ? reportPhotos.length > 0 : Object.keys(reportPhotos).length > 0);
-        setForm({
+        const resumedForm = {
           ...base,
           ...(report.data || {}),
           photos: hasRealPhotos ? reportPhotos : base.photos,
-        });
+        };
+        // Whatever we just loaded IS what's saved server-side — record its
+        // own signature as the baseline, same reasoning as handleOpen above.
+        dataSavedSignatureRef.current = dataOnlySignature(resumedForm);
+        photosSavedSignatureRef.current = JSON.stringify(resumedForm.photos);
+        setForm(resumedForm);
         setActiveKey(flattenSections(definition)[0]?.key ?? 'review');
         setReportId(report.report_id);
         hasSavedRef.current = true;
@@ -520,6 +542,13 @@ export default function GenericPdiGeneratorForm() {
       setReportId(response.data.report_id);
       hasSavedRef.current = false;
       setSaveStatus('idle'); // a previous session's "All changes saved" shouldn't carry into this new one
+      // The freshly-built baseline IS what's "saved" (the server just created
+      // exactly this row) — recording its own signature here, rather than
+      // leaving these refs at whatever a previous session last left them,
+      // means the debounce effects and handleClose both correctly see "no
+      // edits yet" from the first render of this new session onward.
+      dataSavedSignatureRef.current = dataOnlySignature(base);
+      photosSavedSignatureRef.current = JSON.stringify(base.photos);
       setForm(base);
       setActiveKey(flattenSections(definition)[0]?.key ?? 'review');
       setIsOpen(true);
@@ -566,8 +595,7 @@ export default function GenericPdiGeneratorForm() {
     inspectionDateRef.current = inspectionDateValue;
   });
 
-  // eslint-disable-next-line no-unused-vars
-  const dataSignature = form ? JSON.stringify((({ photos, ...rest }) => rest)(form)) : null;
+  const dataSignature = dataOnlySignature(form);
   useEffect(() => {
     // Also bail while closing/finalizing — those paths do their own
     // explicit, complete save of whatever's in `form` at that moment, so a
@@ -575,18 +603,12 @@ export default function GenericPdiGeneratorForm() {
     // fires after finalize's own PATCH, would overwrite a just-Completed
     // report's status back to 'In Progress' at worst.
     if (!form || !isOpen || !reportId || closing || loading) return;
-    if (dataArmedForReportRef.current !== reportId) {
-      // First time this effect has seen THIS report's form — this is the
-      // setForm(base)/setForm(resumed data) snapshot from handleOpen/resume,
-      // not a real user edit. Arm the baseline and stop, regardless of
-      // whether dataSignature's text happens to match a previous session's
-      // (see the long comment on dataArmedForReportRef above for why content
-      // comparison alone isn't reliable here).
-      dataArmedForReportRef.current = reportId;
-      return;
-    }
+    // Nothing to do if the live content already matches what's saved —
+    // covers both the initial setForm(base)/setForm(resumed data) snapshot
+    // (handleOpen/resume set the saved-signature refs to match it exactly,
+    // see their own comments) and the moment right after a save succeeds.
+    if (dataSignature === dataSavedSignatureRef.current) return;
     setSaveStatus('unsaved');
-    dataDirtyRef.current = true;
     if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
     dataSaveTimerRef.current = setTimeout(runDataSave, 1500);
     return () => clearTimeout(dataSaveTimerRef.current);
@@ -602,12 +624,8 @@ export default function GenericPdiGeneratorForm() {
   const photosSignature = form ? JSON.stringify(form.photos) : null;
   useEffect(() => {
     if (!form || !isOpen || !reportId || closing || loading) return;
-    if (photosArmedForReportRef.current !== reportId) {
-      photosArmedForReportRef.current = reportId;
-      return;
-    }
+    if (photosSignature === photosSavedSignatureRef.current) return;
     setSaveStatus('unsaved');
-    photosDirtyRef.current = true;
     if (photosSaveTimerRef.current) clearTimeout(photosSaveTimerRef.current);
     photosSaveTimerRef.current = setTimeout(runPhotosSave, 1500);
     return () => clearTimeout(photosSaveTimerRef.current);
@@ -621,17 +639,24 @@ export default function GenericPdiGeneratorForm() {
   // complete. It cannot do anything for a hard tab close/reload; there is no
   // navigation-blocking guard in this app for that case.
   //
-  // Gated on the dirty flags, not the raw timer refs' truthiness — a
+  // Compares live content against the saved-signature refs (via formRef, not
+  // the closure `form`, since this cleanup can run long after the render
+  // that created it) rather than checking the raw timer refs' truthiness — a
   // setTimeout handle is a plain integer that's never reset to null after it
   // fires, so `dataSaveTimerRef.current` being truthy only ever means "a
   // timer was scheduled at some point during this mount," not "one is
-  // pending right now." Checking that instead of the dirty flag would flush
-  // (and, worse, count as "saved" for handleClose's abandoned-draft check)
-  // on every close, even a session where nothing was ever actually edited.
+  // pending right now."
   useEffect(() => {
     return () => {
-      if (dataDirtyRef.current) { clearTimeout(dataSaveTimerRef.current); runDataSave(); }
-      if (photosDirtyRef.current) { clearTimeout(photosSaveTimerRef.current); runPhotosSave(); }
+      if (!formRef.current) return;
+      if (dataOnlySignature(formRef.current) !== dataSavedSignatureRef.current) {
+        clearTimeout(dataSaveTimerRef.current);
+        runDataSave();
+      }
+      if (JSON.stringify(formRef.current.photos) !== photosSavedSignatureRef.current) {
+        clearTimeout(photosSaveTimerRef.current);
+        runPhotosSave();
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -648,6 +673,8 @@ export default function GenericPdiGeneratorForm() {
       // See the contract note at the top of this task — this destructuring
       // is load-bearing, not optional style. Do not send `photos` inside `data`.
       const { photos, ...data } = form;
+      const sentDataSignature = JSON.stringify(data);
+      const sentPhotosSignature = JSON.stringify(photos);
       await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
         data, photos, status: 'In Progress', inspected_by: inspectedByValue(),
         inspection_date: inspectionDateValue(form),
@@ -655,8 +682,8 @@ export default function GenericPdiGeneratorForm() {
         headers: { Authorization: `Bearer ${token}` },
       });
       hasSavedRef.current = true;
-      dataDirtyRef.current = false;
-      photosDirtyRef.current = false;
+      dataSavedSignatureRef.current = sentDataSignature;
+      photosSavedSignatureRef.current = sentPhotosSignature;
       setSaveStatus('saved');
       notifySuccess('Progress saved.');
     } catch (err) {
@@ -699,6 +726,8 @@ export default function GenericPdiGeneratorForm() {
 
     try {
       const { photos, ...data } = form;
+      const sentDataSignature = JSON.stringify(data);
+      const sentPhotosSignature = JSON.stringify(photos);
       await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
         data, photos, inspected_by: inspectedByValue(),
         inspection_date: inspectionDateValue(form),
@@ -707,8 +736,8 @@ export default function GenericPdiGeneratorForm() {
         signal: controller.signal,
       });
       hasSavedRef.current = true;
-      dataDirtyRef.current = false;
-      photosDirtyRef.current = false;
+      dataSavedSignatureRef.current = sentDataSignature;
+      photosSavedSignatureRef.current = sentPhotosSignature;
 
       const response = await axios.post(`${API_URL}/api/pdi/reports/${reportId}/finalize`, {}, {
         headers: { Authorization: `Bearer ${token}` },
@@ -755,19 +784,22 @@ export default function GenericPdiGeneratorForm() {
       if (abortRef.current) abortRef.current.abort();
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
       setUndoState(null);
-      // A dirty flag means there's an edit debounced but not yet sent — flush
-      // it via a direct save instead of silently dropping it, since the UI's
-      // "Unsaved changes" / "Saving…" status implies autosave is continuous
-      // and authoritative, not best-effort. Gated on the dirty flags, not the
-      // raw timer refs' truthiness — see the long comment on the unmount-
-      // flush effect above for why a setTimeout handle alone can't tell
-      // "a save is pending" from "a timer merely fired at some point in this
-      // mount's history."
-      if (dataDirtyRef.current) {
+      // Live content not matching what's saved means there's an edit that
+      // hasn't been sent yet — flush it via a direct save instead of
+      // silently dropping it, since the UI's "Unsaved changes" / "Saving…"
+      // status implies autosave is continuous and authoritative, not
+      // best-effort. Read via formRef, not the closure `form`, and computed
+      // fresh right here rather than relying on any flag set earlier — see
+      // dataSavedSignatureRef's own comment above for why a separately-
+      // maintained flag (of any kind: a raw timer-ref check, a reportId-keyed
+      // "armed" marker, a boolean "dirty" bit) kept drifting out of sync with
+      // reality in three different ways across three earlier attempts at
+      // this exact function.
+      if (formRef.current && dataOnlySignature(formRef.current) !== dataSavedSignatureRef.current) {
         clearTimeout(dataSaveTimerRef.current);
         await runDataSave();
       }
-      if (photosDirtyRef.current) {
+      if (formRef.current && JSON.stringify(formRef.current.photos) !== photosSavedSignatureRef.current) {
         clearTimeout(photosSaveTimerRef.current);
         await runPhotosSave();
       }
