@@ -5,7 +5,7 @@ import { ImageUploadCard } from '../shared/PdiImageUpload';
 
 export const INPUT_CLS =
   'w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400';
-const TH_CLS = 'py-2 px-2 text-xs font-semibold text-gray-700 bg-amber-100 border border-gray-200 whitespace-nowrap';
+const TH_CLS = 'py-3 px-3 text-xs font-semibold text-gray-700 bg-amber-100 border border-gray-200 whitespace-nowrap';
 
 // Same ceilings as PDIGeneratorForm.jsx, for the same reason: server.js's
 // express.json({ limit: '25mb' }) caps the request body Save/Finalize send.
@@ -130,7 +130,7 @@ function RepeatableTableSection({ section, form, addRow, removeRow, setCell }) {
                 {cols.map((c) => {
                   if (!c.cell || c.cell.source === 'row') {
                     return (
-                      <td key={c.key} className="py-1 px-1 border border-gray-100">
+                      <td key={c.key} className="py-2 px-2 border border-gray-100">
                         <input className={INPUT_CLS} value={row[c.key] || ''} onChange={(e) => setCell(section.dataKey, idx, c.key, e.target.value)} />
                       </td>
                     );
@@ -143,10 +143,10 @@ function RepeatableTableSection({ section, form, addRow, removeRow, setCell }) {
                   // for a repeatable row, so the renderer always prints cell.default too).
                   const displayVal = c.cell.source === 'constant' ? c.cell.value : c.cell.default;
                   return (
-                    <td key={c.key} className="py-2 px-3 text-sm text-gray-500">{displayVal ?? ''}</td>
+                    <td key={c.key} className="py-3 px-3 text-sm text-gray-500">{displayVal ?? ''}</td>
                   );
                 })}
-                <td className="py-1 px-1 border border-gray-100 text-center">
+                <td className="py-2 px-2 border border-gray-100 text-center">
                   <button type="button" onClick={() => removeRow(section.dataKey, idx)} className="text-gray-400 hover:text-red-500">
                     <Trash2 size={16} />
                   </button>
@@ -178,16 +178,29 @@ function FixedTableSection({ section, form, setCell }) {
                   const editable = c.cell && c.cell.source === 'sectionData';
                   if (!editable) {
                     const displayVal = c.cell && c.cell.source === 'constant' ? c.cell.value : row[c.key];
-                    return <td key={c.key} className="py-2 px-3 text-sm text-gray-500">{displayVal ?? ''}</td>;
+                    return <td key={c.key} className="py-3 px-3 text-sm text-gray-500">{displayVal ?? ''}</td>;
                   }
                   const value = (sectionData[row.key] && sectionData[row.key][c.cell.subfield]) || '';
                   const isSelect = ['GO', 'NG', 'NA'].includes(String(c.cell.default || '').toUpperCase());
                   return (
-                    <td key={c.key} className="py-1 px-2 border border-gray-100 text-center">
+                    <td key={c.key} className="py-2 px-3 border border-gray-100 text-center">
                       {isSelect ? (
-                        <select className={INPUT_CLS} value={value} onChange={(e) => setCell(section.dataKey, row.key, c.cell.subfield, e.target.value)}>
-                          {['GO', 'NG', 'NA'].map((o) => <option key={o}>{o}</option>)}
-                        </select>
+                        <div className="inline-flex rounded-md border border-gray-300 overflow-hidden">
+                          {['GO', 'NG', 'NA'].map((o) => {
+                            const active = value === o;
+                            const activeCls = o === 'GO' ? 'bg-green-600 text-white' : o === 'NG' ? 'bg-red-600 text-white' : 'bg-gray-500 text-white';
+                            return (
+                              <button
+                                key={o}
+                                type="button"
+                                onClick={() => setCell(section.dataKey, row.key, c.cell.subfield, o)}
+                                className={`px-3 py-1.5 text-xs font-semibold transition-colors ${active ? activeCls : 'bg-white text-gray-500 hover:bg-gray-50'} ${o !== 'GO' ? 'border-l border-gray-300' : ''}`}
+                              >
+                                {o}
+                              </button>
+                            );
+                          })}
+                        </div>
                       ) : (
                         <input className={INPUT_CLS} value={value} onChange={(e) => setCell(section.dataKey, row.key, c.cell.subfield, e.target.value)} />
                       )}
