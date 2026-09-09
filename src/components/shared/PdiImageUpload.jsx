@@ -11,11 +11,36 @@ Modal.setAppElement('#root');
 export function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h-40' }) {
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (!value) setDragActive(true);
+  };
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+  };
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (value) return; // don't accept a drop on an already-filled slot — clear it first
+    const file = e.dataTransfer.files?.[0];
+    if (file) onSelect(file, null);
+  };
+
   return (
     <div>
       {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
       {hint && <p className="text-xs text-gray-400 mb-1.5">{hint}</p>}
-      <div className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} flex items-center justify-center overflow-hidden ${value ? 'border-gray-200' : 'border-gray-300'}`}>
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} flex items-center justify-center overflow-hidden ${
+          dragActive ? 'border-amber-400 bg-amber-50' : value ? 'border-gray-200' : 'border-gray-300'
+        }`}
+      >
         {value ? (
           <>
             <img src={value} alt={label || 'Uploaded'} className="max-h-full max-w-full object-contain" />
@@ -29,24 +54,27 @@ export function ImageUploadCard({ label, hint, value, onSelect, onClear, heightC
             </button>
           </>
         ) : (
-          <div className="flex items-center gap-5 text-gray-400">
-            <button
-              type="button"
-              onClick={() => cameraInputRef.current?.click()}
-              className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
-            >
-              <Camera size={26} />
-              <span className="text-xs font-medium">Take Photo</span>
-            </button>
-            <div className="w-px h-9 bg-gray-200" />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
-            >
-              <ImageIcon size={26} />
-              <span className="text-xs font-medium">Choose File</span>
-            </button>
+          <div className="flex flex-col items-center gap-2 text-gray-400">
+            <div className="flex items-center gap-5">
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+              >
+                <Camera size={26} />
+                <span className="text-xs font-medium">Take Photo</span>
+              </button>
+              <div className="w-px h-9 bg-gray-200" />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+              >
+                <ImageIcon size={26} />
+                <span className="text-xs font-medium">Choose File</span>
+              </button>
+            </div>
+            <span className="text-[11px] text-gray-300">or drag a photo here</span>
           </div>
         )}
       </div>
