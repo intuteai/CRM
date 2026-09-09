@@ -1,6 +1,5 @@
 // CRM/src/components/admin/GenericPdiGeneratorForm.jsx
 import { useState, useRef, useCallback, useEffect } from 'react';
-import Modal from 'react-modal';
 import axios from 'axios';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Download, FileText } from 'lucide-react';
@@ -8,8 +7,17 @@ import { useNotify } from '../../hooks/useNotify';
 import { CropModal } from '../shared/PdiImageUpload';
 import { fileToDataUri, MAX_RAW_IMAGE_BYTES } from '../../utils/pdiImageUpload';
 import { INPUT_CLS, MAX_PHOTOS, MAX_ROWS, buildDefaultFormData, makeEmptyRow, renderSection } from './GenericPdiSections';
+import GenericPdiSidebar from './GenericPdiSidebar';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || '';
+
+const SAVE_STATUS_LABEL = {
+  idle: '',
+  unsaved: 'Unsaved changes',
+  saving: 'Saving…',
+  saved: 'All changes saved',
+  error: "Couldn't save — retrying",
+};
 
 function flattenSections(definition) {
   const flat = [];
@@ -81,6 +89,39 @@ function isSectionFilled(section, form) {
   }
 }
 
+function ReviewPanel({ items, onFinalizeAnyway, finalizing }) {
+  const incomplete = items.filter((i) => !i.filled);
+  return (
+    <div className="max-w-xl">
+      <h2 className="text-xl font-bold text-gray-800 mb-2">Review &amp; Finalize</h2>
+      {incomplete.length === 0 ? (
+        <p className="text-sm text-gray-500 mb-6">Every section has at least some data filled in. You&apos;re good to finalize.</p>
+      ) : (
+        <p className="text-sm text-amber-700 mb-4">
+          {incomplete.length} section{incomplete.length === 1 ? '' : 's'} still empty: {incomplete.map((i) => i.label).join(', ')}.
+        </p>
+      )}
+      <ul className="space-y-1.5 mb-6">
+        {items.map((i) => (
+          <li key={i.key} className="flex items-center gap-2 text-sm">
+            <span className={i.filled ? 'text-green-600' : 'text-gray-300'}>{i.filled ? '✓' : '○'}</span>
+            <span className={i.filled ? 'text-gray-700' : 'text-gray-400'}>{i.label}</span>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        onClick={onFinalizeAnyway}
+        disabled={finalizing}
+        className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+      >
+        <Download size={16} />
+        {finalizing ? 'Finalizing...' : 'Finalize Anyway'}
+      </button>
+    </div>
+  );
+}
+
 export default function GenericPdiGeneratorForm() {
   const { templateId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -94,7 +135,6 @@ export default function GenericPdiGeneratorForm() {
   const [loading, setLoading] = useState(false);
   const [opening, setOpening] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
   const [form, setForm] = useState(null);
   const [activeKey, setActiveKey] = useState(null); // one of the flattened keys, or 'review'
 
@@ -103,11 +143,11 @@ export default function GenericPdiGeneratorForm() {
     ? flatSections.map(({ key, section, label }) => ({ key, section, label, filled: isSectionFilled(section, form) }))
     : [];
   const activeIndex = sidebarItems.findIndex((i) => i.key === activeKey);
-  // eslint-disable-next-line no-unused-vars -- consumed by the content-area render wired in the next task
   const activeEntry = activeIndex >= 0 ? sidebarItems[activeIndex] : null;
 
   const [reportId, setReportId] = useState(null);
   const [hasSaved, setHasSaved] = useState(false);
+  const [saveStatus] = useState('idle');
   const abortRef = useRef(null);
 
   useEffect(() => () => { abortRef.current?.abort(); }, []);
@@ -157,7 +197,6 @@ export default function GenericPdiGeneratorForm() {
         setActiveKey(flattenSections(definition)[0]?.key ?? 'review');
         setReportId(report.report_id);
         setHasSaved(true);
-        setActiveTab(0);
         setIsOpen(true);
       } catch (err) {
         notifyError(err.response?.data?.error || 'Could not load that PDI report.');
@@ -283,7 +322,6 @@ export default function GenericPdiGeneratorForm() {
       setHasSaved(false);
       setForm(base);
       setActiveKey(flattenSections(definition)[0]?.key ?? 'review');
-      setActiveTab(0);
       setIsOpen(true);
     } catch (err) {
       notifyError(err.response?.data?.error || 'Could not start a new PDI report.');
@@ -347,10 +385,13 @@ export default function GenericPdiGeneratorForm() {
     }
   };
 
-  const handleFinalize = async (e) => {
-    e.preventDefault();
+  const doFinalize = async (force) => {
     if (!form.pdi_no.trim()) { notifyError('PDI No. is required.'); return; }
     if (!reportId) { notifyError('Report not initialized yet — please close and reopen the form.'); return; }
+    if (!force && sidebarItems.some((i) => !i.filled)) {
+      setActiveKey('review');
+      return;
+    }
 
     const token = localStorage.getItem('token');
     if (!token) { notifyError('Please log in first.'); return; }
@@ -439,6 +480,72 @@ export default function GenericPdiGeneratorForm() {
     setFixedSlotImage, setImageField, handleFileChosen,
   } : null;
 
+  const goToIndex = (idx) => {
+    if (idx < 0 || idx >= sidebarItems.length) return;
+    setActiveKey(sidebarItems[idx].key);
+  };
+  const goPrevious = () => goToIndex(activeIndex - 1);
+  const goNext = () => goToIndex(activeIndex + 1);
+
+  if (isOpen && form) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <FileText className="text-amber-500 shrink-0" size={22} />
+            <h1 className="text-lg font-bold text-gray-800 truncate">{templateName}</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-500">PDI No.</label>
+              <input className={INPUT_CLS + ' w-40'} value={form.pdi_no} onChange={(e) => setField('pdi_no', e.target.value)} placeholder="e.g. PDI-2026-001" />
+            </div>
+            <span className="text-xs text-gray-400 w-36 text-right shrink-0">{SAVE_STATUS_LABEL[saveStatus]}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-1 overflow-hidden">
+          <GenericPdiSidebar templateName={templateName} items={sidebarItems} activeKey={activeKey} onSelect={setActiveKey} />
+          <div className="flex-1 overflow-y-auto px-10 py-8">
+            {activeKey === 'review' ? (
+              <ReviewPanel items={sidebarItems} onFinalizeAnyway={() => doFinalize(true)} finalizing={loading} />
+            ) : (
+              activeEntry && renderSection(activeEntry.section, ctx)
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-between gap-3 px-8 py-4 border-t border-gray-200 bg-white shrink-0">
+          <button type="button" onClick={handleSave} disabled={saving} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm font-semibold">
+            {saving ? 'Saving...' : 'Save Progress'}
+          </button>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={goPrevious} disabled={activeIndex <= 0} className="px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-40 text-sm">
+              &larr; Previous
+            </button>
+            <button type="button" onClick={goNext} disabled={activeIndex < 0 || activeIndex >= sidebarItems.length - 1} className="px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-40 text-sm">
+              Next &rarr;
+            </button>
+            <button type="button" onClick={handleClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm">
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={() => doFinalize(false)}
+              disabled={loading}
+              className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+            >
+              <Download size={16} />
+              {loading ? 'Finalizing...' : 'Finalize & Generate PDF'}
+            </button>
+          </div>
+        </div>
+
+        {cropTarget && <CropModal imageSrc={cropTarget.imageSrc} onCancel={cancelCrop} onApply={applyCroppedImage} />}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
       <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">{templateName}</h1>
@@ -460,86 +567,6 @@ export default function GenericPdiGeneratorForm() {
           </div>
         </div>
       </div>
-
-      <Modal
-        isOpen={isOpen && !!form}
-        onRequestClose={handleClose}
-        overlayClassName="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-start justify-center z-50 overflow-y-auto py-8"
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 outline-none"
-        contentLabel={templateName}
-      >
-        {form && (
-          <form onSubmit={handleFinalize}>
-            <div className="flex items-center justify-between px-8 py-5 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <FileText className="text-amber-500" size={24} />
-                <h2 className="text-xl font-bold text-gray-800">{templateName}</h2>
-              </div>
-              <button type="button" onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
-            </div>
-
-            <div className="px-8 py-6 space-y-6 max-h-[80vh] overflow-y-auto">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">PDI No. <span className="text-red-500">*</span></label>
-                <input className={INPUT_CLS} value={form.pdi_no} onChange={(e) => setField('pdi_no', e.target.value)} placeholder="e.g. PDI-2026-001" />
-              </div>
-
-              {definition.pages.length > 1 && (
-                <div className="border-b border-gray-200">
-                  <nav className="flex gap-1">
-                    {definition.pages.map((_, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => setActiveTab(i)}
-                        className={`px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
-                          activeTab === i
-                            ? 'border-amber-500 text-amber-600 bg-amber-50'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        Page {i + 1}
-                      </button>
-                    ))}
-                  </nav>
-                </div>
-              )}
-
-              {definition.pages[activeTab]?.sections.map((section, i) => (
-                <div key={i}>{renderSection(section, ctx)}</div>
-              ))}
-            </div>
-
-            <div className="flex justify-between gap-3 px-8 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving || loading}
-                className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm font-semibold"
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-              <div className="flex gap-3">
-                <button type="button" onClick={handleClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm">
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
-                >
-                  <Download size={16} />
-                  {loading ? 'Finalizing...' : 'Finalize & Generate PDF'}
-                </button>
-              </div>
-            </div>
-          </form>
-        )}
-      </Modal>
-
-      {cropTarget && (
-        <CropModal imageSrc={cropTarget.imageSrc} onCancel={cancelCrop} onApply={applyCroppedImage} />
-      )}
     </div>
   );
 }
