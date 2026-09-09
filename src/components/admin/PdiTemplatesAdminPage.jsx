@@ -76,6 +76,25 @@ function ListEditor({ items, onChange, renderRow, newRow, addLabel }) {
 
 const FIELD_CLS = 'border border-gray-300 rounded px-2 py-1 text-sm w-full';
 
+const STATUS_STYLES = {
+  draft: 'bg-gray-100 text-gray-600',
+  active: 'bg-green-100 text-green-700',
+  archived: 'bg-amber-100 text-amber-700',
+};
+
+function StatusBadge({ status }) {
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[status] || 'bg-gray-100 text-gray-600'}`}>
+      {status}
+    </span>
+  );
+}
+
+function formatDate(value) {
+  if (!value) return '';
+  return new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 // Deliberately doesn't expose logoAsset or extraFormatLines — both are rare
 // fields (only the hand-coded General/AutoNXT templates have ever needed a
 // logo or a 4th format-box line); a template authored through this UI simply
@@ -414,6 +433,23 @@ export default function PdiTemplatesAdminPage() {
     }
   };
 
+  const deleteTemplate = async (t) => {
+    if (!window.confirm(`Delete template "${t.name}"? This removes all ${t.version} version(s) and cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/pdi/admin/templates/${t.id}`, {
+        method: 'DELETE', headers: authHeaders(),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Delete failed');
+      }
+      notifySuccess(`Template "${t.name}" deleted.`);
+      await refresh();
+    } catch (err) {
+      notifyError(err.message);
+    }
+  };
+
   const createTemplate = async () => {
     if (!creatingId.trim() || !creatingName.trim()) {
       notifyError('Both an id and a name are required to create a template.');
@@ -452,32 +488,53 @@ export default function PdiTemplatesAdminPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">PDI Templates</h1>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold">PDI Templates</h1>
+          <p className="text-sm text-gray-500 mt-1">Author, publish, and manage the PDI templates end users can fill out and generate.</p>
+        </div>
 
-        <div className="bg-white rounded-xl shadow p-4 mb-6 flex gap-2 items-end">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">New template id (slug)</label>
-            <input className={FIELD_CLS} value={creatingId} onChange={(e) => setCreatingId(e.target.value)} placeholder="e.g. acme-motor-pdi" />
+        <div className="bg-white rounded-xl shadow p-4 mb-6">
+          <div className="text-sm font-semibold text-gray-700 mb-3">Create a new template</div>
+          <div className="flex gap-2 items-end flex-wrap">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">New template id (slug)</label>
+              <input className={FIELD_CLS} value={creatingId} onChange={(e) => setCreatingId(e.target.value)} placeholder="e.g. acme-motor-pdi" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+              <input className={FIELD_CLS} value={creatingName} onChange={(e) => setCreatingName(e.target.value)} placeholder="e.g. Acme Motor PDI" />
+            </div>
+            <button type="button" onClick={createTemplate} className="flex items-center gap-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded text-sm font-medium transition-colors">
+              <Plus size={16} /> New Template
+            </button>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
-            <input className={FIELD_CLS} value={creatingName} onChange={(e) => setCreatingName(e.target.value)} placeholder="e.g. Acme Motor PDI" />
-          </div>
-          <button type="button" onClick={createTemplate} className="flex items-center gap-1 px-4 py-2 bg-amber-500 text-white rounded text-sm font-medium">
-            <Plus size={16} /> New Template
-          </button>
         </div>
 
         <div className="bg-white rounded-xl shadow divide-y">
-          {!list && <div className="p-4 text-gray-400">Loading...</div>}
-          {list && list.length === 0 && <div className="p-4 text-gray-400">No authored templates yet.</div>}
+          {!list && <div className="p-6 text-gray-400 text-sm">Loading...</div>}
+          {list && list.length === 0 && <div className="p-6 text-gray-400 text-sm">No authored templates yet. Create one above to get started.</div>}
           {list && list.map((t) => (
-            <div key={t.id} className="p-4 flex items-center justify-between">
-              <div>
-                <div className="font-medium">{t.name}</div>
-                <div className="text-xs text-gray-400">{t.id} · v{t.version} · {t.status}</div>
+            <div key={t.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <div className="font-medium text-gray-900 truncate">{t.name}</div>
+                  <StatusBadge status={t.status} />
+                </div>
+                <div className="text-xs text-gray-400 mt-0.5">
+                  {t.id} · v{t.version}{t.created_at ? ` · created ${formatDate(t.created_at)}` : ''}
+                </div>
               </div>
-              <button type="button" onClick={() => openEditor(t.id)} className="text-sm text-amber-700 font-medium">Edit</button>
+              <div className="flex items-center gap-3 shrink-0 ml-4">
+                <button type="button" onClick={() => openEditor(t.id)} className="text-sm text-amber-700 font-medium hover:text-amber-800">Edit</button>
+                <button
+                  type="button"
+                  onClick={() => deleteTemplate(t)}
+                  className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700"
+                  title="Delete this template"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
