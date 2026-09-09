@@ -247,6 +247,19 @@ export default function GenericPdiGeneratorForm() {
   const dataArmedForReportRef = useRef(null);
   const photosArmedForReportRef = useRef(null);
 
+  // Whether there is an edit that's been debounced/scheduled but not yet
+  // successfully sent. This is DELIBERATELY separate from
+  // "dataSaveTimerRef.current is truthy" — a setTimeout handle is a plain
+  // positive integer that's never reset to null after it fires, so checking
+  // its truthiness really means "has a timer EVER been scheduled during this
+  // component's lifetime," not "is one pending right now." Every place that
+  // used to gate a flush on the raw timer ref's truthiness must use these
+  // dirty flags instead, or a stale handle from an earlier, already-completed
+  // session silently triggers a same-outcome-as-"unsaved" flush on a report
+  // that was never actually touched.
+  const dataDirtyRef = useRef(false);
+  const photosDirtyRef = useRef(false);
+
   const runDataSave = useCallback(async () => {
     if (!reportIdRef.current) return;
     if (dataInFlightRef.current) { dataPendingRef.current = true; return; }
@@ -263,6 +276,7 @@ export default function GenericPdiGeneratorForm() {
         inspected_by: inspectedByRef.current(), inspection_date: inspectionDateRef.current(formRef.current),
       }, { headers: { Authorization: `Bearer ${token}` } });
       hasSavedRef.current = true;
+      dataDirtyRef.current = false;
       setSaveStatus('saved');
     } catch {
       setSaveStatus('error');
@@ -286,6 +300,7 @@ export default function GenericPdiGeneratorForm() {
         photos: formRef.current.photos,
       }, { headers: { Authorization: `Bearer ${token}` } });
       hasSavedRef.current = true;
+      photosDirtyRef.current = false;
       setSaveStatus('saved');
     } catch {
       setSaveStatus('error');
@@ -455,6 +470,8 @@ export default function GenericPdiGeneratorForm() {
   }, []);
 
   const [cropTarget, setCropTarget] = useState(null); // { apply: (dataUri) => void, imageSrc } | null
+  const cropTargetRef = useRef(null);
+  useEffect(() => { cropTargetRef.current = cropTarget; }, [cropTarget]);
 
   const handleFileChosen = useCallback(async (applyFn, file, inputEl) => {
     if (!file) return;
@@ -478,12 +495,13 @@ export default function GenericPdiGeneratorForm() {
     }
   }, [notifyError]);
 
+  // Same reasoning as handleUndo above: read the target via a ref and apply
+  // it outside the setCropTarget updater, rather than calling setForm
+  // (via current.apply) from inside the updater itself.
   const applyCroppedImage = useCallback((dataUri) => {
-    setCropTarget((current) => {
-      if (!current) return current;
-      current.apply(dataUri);
-      return null;
-    });
+    const current = cropTargetRef.current;
+    setCropTarget(null);
+    current?.apply(dataUri);
   }, []);
   const cancelCrop = useCallback(() => setCropTarget(null), []);
 
@@ -501,6 +519,7 @@ export default function GenericPdiGeneratorForm() {
       });
       setReportId(response.data.report_id);
       hasSavedRef.current = false;
+      setSaveStatus('idle'); // a previous session's "All changes saved" shouldn't carry into this new one
       setForm(base);
       setActiveKey(flattenSections(definition)[0]?.key ?? 'review');
       setIsOpen(true);
@@ -550,7 +569,12 @@ export default function GenericPdiGeneratorForm() {
   // eslint-disable-next-line no-unused-vars
   const dataSignature = form ? JSON.stringify((({ photos, ...rest }) => rest)(form)) : null;
   useEffect(() => {
-    if (!form || !isOpen || !reportId) return;
+    // Also bail while closing/finalizing — those paths do their own
+    // explicit, complete save of whatever's in `form` at that moment, so a
+    // freshly-scheduled autosave here would be redundant at best and, if it
+    // fires after finalize's own PATCH, would overwrite a just-Completed
+    // report's status back to 'In Progress' at worst.
+    if (!form || !isOpen || !reportId || closing || loading) return;
     if (dataArmedForReportRef.current !== reportId) {
       // First time this effect has seen THIS report's form — this is the
       // setForm(base)/setForm(resumed data) snapshot from handleOpen/resume,
@@ -562,11 +586,12 @@ export default function GenericPdiGeneratorForm() {
       return;
     }
     setSaveStatus('unsaved');
+    dataDirtyRef.current = true;
     if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
     dataSaveTimerRef.current = setTimeout(runDataSave, 1500);
     return () => clearTimeout(dataSaveTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataSignature, reportId]);
+  }, [dataSignature, reportId, closing, loading]);
 
   // Photos get their own debounce timer too (not truly "immediate") — a
   // freeform photo's label is a plain text field living inside this same
@@ -576,17 +601,18 @@ export default function GenericPdiGeneratorForm() {
   // channel exists for.
   const photosSignature = form ? JSON.stringify(form.photos) : null;
   useEffect(() => {
-    if (!form || !isOpen || !reportId) return;
+    if (!form || !isOpen || !reportId || closing || loading) return;
     if (photosArmedForReportRef.current !== reportId) {
       photosArmedForReportRef.current = reportId;
       return;
     }
     setSaveStatus('unsaved');
+    photosDirtyRef.current = true;
     if (photosSaveTimerRef.current) clearTimeout(photosSaveTimerRef.current);
     photosSaveTimerRef.current = setTimeout(runPhotosSave, 1500);
     return () => clearTimeout(photosSaveTimerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photosSignature, reportId]);
+  }, [photosSignature, reportId, closing, loading]);
 
   // Best-effort flush on unmount (e.g. the user navigates away via the app's
   // own nav rather than the in-page Back button, which has its own explicit
@@ -594,10 +620,18 @@ export default function GenericPdiGeneratorForm() {
   // the JS runtime keeps running and the fire-and-forget request can still
   // complete. It cannot do anything for a hard tab close/reload; there is no
   // navigation-blocking guard in this app for that case.
+  //
+  // Gated on the dirty flags, not the raw timer refs' truthiness — a
+  // setTimeout handle is a plain integer that's never reset to null after it
+  // fires, so `dataSaveTimerRef.current` being truthy only ever means "a
+  // timer was scheduled at some point during this mount," not "one is
+  // pending right now." Checking that instead of the dirty flag would flush
+  // (and, worse, count as "saved" for handleClose's abandoned-draft check)
+  // on every close, even a session where nothing was ever actually edited.
   useEffect(() => {
     return () => {
-      if (dataSaveTimerRef.current) { clearTimeout(dataSaveTimerRef.current); runDataSave(); }
-      if (photosSaveTimerRef.current) { clearTimeout(photosSaveTimerRef.current); runPhotosSave(); }
+      if (dataDirtyRef.current) { clearTimeout(dataSaveTimerRef.current); runDataSave(); }
+      if (photosDirtyRef.current) { clearTimeout(photosSaveTimerRef.current); runPhotosSave(); }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -621,6 +655,8 @@ export default function GenericPdiGeneratorForm() {
         headers: { Authorization: `Bearer ${token}` },
       });
       hasSavedRef.current = true;
+      dataDirtyRef.current = false;
+      photosDirtyRef.current = false;
       setSaveStatus('saved');
       notifySuccess('Progress saved.');
     } catch (err) {
@@ -646,9 +682,15 @@ export default function GenericPdiGeneratorForm() {
     // after finalize — the finalize PATCH below already carries the latest
     // data, and a stray later autosave PATCH sends status: 'In Progress',
     // which would flip a just-Completed report back to In Progress on the
-    // dashboard.
+    // dashboard. Clearing the *pending* flags too (not just the timers)
+    // matters just as much: if an autosave happened to be in flight right as
+    // finalize started, its own finally-block would otherwise still queue
+    // and fire a follow-up save after this function's PATCH — a request
+    // created after finalize began, not merely one already in transit.
     if (dataSaveTimerRef.current) clearTimeout(dataSaveTimerRef.current);
     if (photosSaveTimerRef.current) clearTimeout(photosSaveTimerRef.current);
+    dataPendingRef.current = false;
+    photosPendingRef.current = false;
 
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
@@ -665,6 +707,8 @@ export default function GenericPdiGeneratorForm() {
         signal: controller.signal,
       });
       hasSavedRef.current = true;
+      dataDirtyRef.current = false;
+      photosDirtyRef.current = false;
 
       const response = await axios.post(`${API_URL}/api/pdi/reports/${reportId}/finalize`, {}, {
         headers: { Authorization: `Bearer ${token}` },
@@ -711,15 +755,19 @@ export default function GenericPdiGeneratorForm() {
       if (abortRef.current) abortRef.current.abort();
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
       setUndoState(null);
-      // A still-armed timer means there's an edit debounced but not yet sent —
-      // flush it via a direct save instead of silently dropping it, since the
-      // UI's "Unsaved changes" / "Saving…" status implies autosave is
-      // continuous and authoritative, not best-effort.
-      if (dataSaveTimerRef.current) {
+      // A dirty flag means there's an edit debounced but not yet sent — flush
+      // it via a direct save instead of silently dropping it, since the UI's
+      // "Unsaved changes" / "Saving…" status implies autosave is continuous
+      // and authoritative, not best-effort. Gated on the dirty flags, not the
+      // raw timer refs' truthiness — see the long comment on the unmount-
+      // flush effect above for why a setTimeout handle alone can't tell
+      // "a save is pending" from "a timer merely fired at some point in this
+      // mount's history."
+      if (dataDirtyRef.current) {
         clearTimeout(dataSaveTimerRef.current);
         await runDataSave();
       }
-      if (photosSaveTimerRef.current) {
+      if (photosDirtyRef.current) {
         clearTimeout(photosSaveTimerRef.current);
         await runPhotosSave();
       }
