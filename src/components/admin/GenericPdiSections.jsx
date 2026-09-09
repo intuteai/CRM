@@ -185,7 +185,7 @@ function FixedTableSection({ section, form, setCell }) {
                   return (
                     <td key={c.key} className="py-2 px-3 border border-gray-100 text-center">
                       {isSelect ? (
-                        <div className="inline-flex rounded-md border border-gray-300 overflow-hidden">
+                        <div className="inline-flex rounded-md border border-gray-300 overflow-hidden" role="group" aria-label="GO/NG/NA result">
                           {['GO', 'NG', 'NA'].map((o) => {
                             const active = value === o;
                             const activeCls = o === 'GO' ? 'bg-green-600 text-white' : o === 'NG' ? 'bg-red-600 text-white' : 'bg-gray-500 text-white';
@@ -193,6 +193,7 @@ function FixedTableSection({ section, form, setCell }) {
                               <button
                                 key={o}
                                 type="button"
+                                aria-pressed={active}
                                 onClick={() => setCell(section.dataKey, row.key, c.cell.subfield, o)}
                                 className={`px-3 py-1.5 text-xs font-semibold transition-colors ${active ? activeCls : 'bg-white text-gray-500 hover:bg-gray-50'} ${o !== 'GO' ? 'border-l border-gray-300' : ''}`}
                               >
