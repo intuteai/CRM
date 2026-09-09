@@ -289,7 +289,7 @@ export default function GenericPdiGeneratorForm() {
   const photosSaveChainRef = useRef(Promise.resolve());
 
   const runDataSave = useCallback(() => {
-    const next = dataSaveChainRef.current.then(async () => {
+    const attempt = async () => {
       if (!reportIdRef.current || !formRef.current) return;
       // photos is intentionally excluded from the data-channel payload —
       // it has its own channel/column, saved by runPhotosSave below (see
@@ -316,13 +316,21 @@ export default function GenericPdiGeneratorForm() {
       } catch {
         setSaveStatus('error');
       }
-    });
+    };
+    // `.then(attempt, attempt)` rather than `.then(attempt)`: if some future
+    // change ever lets a rejection reach the chain (today nothing does —
+    // every throw-capable call above sits inside attempt's own try/catch),
+    // a plain `.then(attempt)` would skip attempt entirely and re-reject,
+    // permanently wedging every later call chained onto this ref for the
+    // rest of the component's lifetime. Passing attempt as both handlers
+    // means a rejected predecessor still lets this turn run.
+    const next = dataSaveChainRef.current.then(attempt, attempt);
     dataSaveChainRef.current = next;
     return next;
   }, []);
 
   const runPhotosSave = useCallback(() => {
-    const next = photosSaveChainRef.current.then(async () => {
+    const attempt = async () => {
       if (!reportIdRef.current || !formRef.current) return;
       const photos = formRef.current.photos;
       const sentSignature = JSON.stringify(photos);
@@ -339,7 +347,8 @@ export default function GenericPdiGeneratorForm() {
       } catch {
         setSaveStatus('error');
       }
-    });
+    };
+    const next = photosSaveChainRef.current.then(attempt, attempt);
     photosSaveChainRef.current = next;
     return next;
   }, []);
