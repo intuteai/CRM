@@ -11,6 +11,76 @@ import { INPUT_CLS, MAX_PHOTOS, MAX_ROWS, buildDefaultFormData, makeEmptyRow, re
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || '';
 
+function flattenSections(definition) {
+  const flat = [];
+  definition.pages.forEach((page, pageIdx) => {
+    page.sections.forEach((section, sectionIdx) => {
+      flat.push({ key: `${pageIdx}-${sectionIdx}`, section });
+    });
+  });
+  return flat;
+}
+
+function baseSectionLabel(section) {
+  switch (section.type) {
+    case 'header': return 'Header';
+    case 'table': return section.title || 'Table';
+    case 'photo': return 'Photos';
+    case 'image': return section.title || 'Image';
+    case 'signature': return 'Signatures';
+    case 'text': return section.label || 'Notes';
+    default: return 'Section';
+  }
+}
+
+// Disambiguates sections that would otherwise share an identical label
+// (whether both fell back to the same default, or both used the same
+// custom title) by appending " (2)", " (3)", ... in order of appearance.
+function labelFlattenedSections(flat) {
+  const seenCounts = new Map();
+  return flat.map(({ key, section }) => {
+    const base = baseSectionLabel(section);
+    const count = (seenCounts.get(base) || 0) + 1;
+    seenCounts.set(base, count);
+    return { key, section, label: count === 1 ? base : `${base} (${count})` };
+  });
+}
+
+function isSectionFilled(section, form) {
+  switch (section.type) {
+    case 'header':
+      return section.infoFields.some((f) =>
+        (f.leftKey && String(form[f.leftKey] || '').trim()) ||
+        (f.rightKey && String(form[f.rightKey] || '').trim())
+      );
+    case 'table':
+      if (section.mode === 'repeatable') {
+        return (form[section.dataKey] || []).length > 0;
+      }
+      {
+        const sectionData = form[section.dataKey] || {};
+        const editableCols = section.columns.filter((c) => c.cell && c.cell.source === 'sectionData');
+        return (section.fixedRows || []).some((row) =>
+          editableCols.some((c) => String((sectionData[row.key] && sectionData[row.key][c.cell.subfield]) || '').trim())
+        );
+      }
+    case 'photo':
+      if (section.mode === 'fixed-slots') {
+        const slotData = form[section.dataKey] || {};
+        return section.slots.some((s) => !!slotData[s.key]);
+      }
+      return (form[section.dataKey] || []).some((p) => !!p.image);
+    case 'image':
+      return !!form[section.dataKey];
+    case 'signature':
+      return section.roles.some((r) => String(form[r.key] || '').trim());
+    case 'text':
+      return String(form[section.dataKey] || '').trim().length > 0;
+    default:
+      return false;
+  }
+}
+
 export default function GenericPdiGeneratorForm() {
   const { templateId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -26,6 +96,16 @@ export default function GenericPdiGeneratorForm() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [form, setForm] = useState(null);
+  const [activeKey, setActiveKey] = useState(null); // one of the flattened keys, or 'review'
+
+  const flatSections = definition ? labelFlattenedSections(flattenSections(definition)) : [];
+  const sidebarItems = form
+    ? flatSections.map(({ key, section, label }) => ({ key, section, label, filled: isSectionFilled(section, form) }))
+    : [];
+  const activeIndex = sidebarItems.findIndex((i) => i.key === activeKey);
+  // eslint-disable-next-line no-unused-vars -- consumed by the content-area render wired in the next task
+  const activeEntry = activeIndex >= 0 ? sidebarItems[activeIndex] : null;
+
   const [reportId, setReportId] = useState(null);
   const [hasSaved, setHasSaved] = useState(false);
   const abortRef = useRef(null);
@@ -74,6 +154,7 @@ export default function GenericPdiGeneratorForm() {
           ...(report.data || {}),
           photos: hasRealPhotos ? reportPhotos : base.photos,
         });
+        setActiveKey(flattenSections(definition)[0]?.key ?? 'review');
         setReportId(report.report_id);
         setHasSaved(true);
         setActiveTab(0);
@@ -201,6 +282,7 @@ export default function GenericPdiGeneratorForm() {
       setReportId(response.data.report_id);
       setHasSaved(false);
       setForm(base);
+      setActiveKey(flattenSections(definition)[0]?.key ?? 'review');
       setActiveTab(0);
       setIsOpen(true);
     } catch (err) {
