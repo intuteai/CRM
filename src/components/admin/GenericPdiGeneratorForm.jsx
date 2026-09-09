@@ -91,7 +91,11 @@ function isSectionFilled(section, form) {
 
 function UndoToast({ message, onUndo }) {
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white rounded-lg shadow-lg px-4 py-3 flex items-center gap-4 z-50">
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white rounded-lg shadow-lg px-4 py-3 flex items-center gap-4 z-50"
+    >
       <span className="text-sm">{message}</span>
       <button type="button" onClick={onUndo} className="text-amber-400 text-sm font-semibold hover:text-amber-300">
         Undo
@@ -324,17 +328,15 @@ export default function GenericPdiGeneratorForm() {
     });
   }, [notifyError]);
   const removeRepeatableRow = useCallback((dataKey, idx) => {
-    setForm((prev) => {
-      const removedRow = prev[dataKey][idx];
-      showUndo('Row removed', () => {
-        setForm((p2) => {
-          const rows = [...p2[dataKey]];
-          rows.splice(idx, 0, removedRow);
-          return { ...p2, [dataKey]: rows };
-        });
+    const removedRow = formRef.current[dataKey][idx];
+    showUndo('Row removed', () => {
+      setForm((p2) => {
+        const rows = [...p2[dataKey]];
+        rows.splice(idx, 0, removedRow);
+        return { ...p2, [dataKey]: rows };
       });
-      return { ...prev, [dataKey]: prev[dataKey].filter((_, i) => i !== idx) };
     });
+    setForm((prev) => ({ ...prev, [dataKey]: prev[dataKey].filter((_, i) => i !== idx) }));
   }, [showUndo]);
   const setRepeatableCell = useCallback((dataKey, idx, colKey, value) => {
     setForm((prev) => {
@@ -361,17 +363,15 @@ export default function GenericPdiGeneratorForm() {
     });
   }, [notifyError]);
   const removeFreeformPhoto = useCallback((dataKey, idx) => {
-    setForm((prev) => {
-      const removedPhoto = prev[dataKey][idx];
-      showUndo('Photo removed', () => {
-        setForm((p2) => {
-          const list = [...p2[dataKey]];
-          list.splice(idx, 0, removedPhoto);
-          return { ...p2, [dataKey]: list };
-        });
+    const removedPhoto = formRef.current[dataKey][idx];
+    showUndo('Photo removed', () => {
+      setForm((p2) => {
+        const list = [...p2[dataKey]];
+        list.splice(idx, 0, removedPhoto);
+        return { ...p2, [dataKey]: list };
       });
-      return { ...prev, [dataKey]: prev[dataKey].filter((_, i) => i !== idx) };
     });
+    setForm((prev) => ({ ...prev, [dataKey]: prev[dataKey].filter((_, i) => i !== idx) }));
   }, [showUndo]);
   const setFreeformPhotoLabel = useCallback((dataKey, idx, label) => {
     setForm((prev) => {
