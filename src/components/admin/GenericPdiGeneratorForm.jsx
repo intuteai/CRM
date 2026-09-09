@@ -509,12 +509,15 @@ export default function GenericPdiGeneratorForm() {
     if (!token) { notifyError('Please log in first.'); return; }
     setOpening(true);
     try {
-      const response = await axios.post(`${API_URL}/api/pdi/reports`, { template_id: templateId }, {
+      const base = buildDefaultFormData(definition);
+      const response = await axios.post(`${API_URL}/api/pdi/reports`, {
+        template_id: templateId, inspection_date: inspectionDateValue(base),
+      }, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setReportId(response.data.report_id);
       setHasSaved(false);
-      setForm(buildDefaultFormData(definition));
+      setForm(base);
       setActiveTab(0);
       setIsOpen(true);
     } catch (err) {
@@ -536,6 +539,25 @@ export default function GenericPdiGeneratorForm() {
     return names.length ? names.join(' / ') : undefined;
   };
 
+  // The dashboard's Inspection Date column reads a separate top-level column,
+  // not anything inside `data` — unlike General/AutoNXT, a generic template
+  // has no fixed "date" key, so find whichever header infoField the author
+  // mapped to a date format and use its value. Falls back to undefined (not
+  // sent) if the template defines no date field at all, matching how
+  // inspectedByValue() omits the field rather than sending a blank string.
+  const inspectionDateValue = (formObj) => {
+    for (const page of definition.pages) {
+      for (const section of page.sections) {
+        if (section.type !== 'header') continue;
+        for (const f of section.infoFields) {
+          if (f.leftFormat === 'date' && f.leftKey && formObj[f.leftKey]) return formObj[f.leftKey];
+          if (f.rightFormat === 'date' && f.rightKey && formObj[f.rightKey]) return formObj[f.rightKey];
+        }
+      }
+    }
+    return undefined;
+  };
+
   const handleSave = async () => {
     if (!reportId) return;
     const token = localStorage.getItem('token');
@@ -547,6 +569,7 @@ export default function GenericPdiGeneratorForm() {
       const { photos, ...data } = form;
       await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
         data, photos, status: 'In Progress', inspected_by: inspectedByValue(),
+        inspection_date: inspectionDateValue(form),
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -576,6 +599,7 @@ export default function GenericPdiGeneratorForm() {
       const { photos, ...data } = form;
       await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
         data, photos, inspected_by: inspectedByValue(),
+        inspection_date: inspectionDateValue(form),
       }, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,

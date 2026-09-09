@@ -461,7 +461,7 @@ export default function PDIGeneratorForm() {
     if (!token) { notifyError('Please log in first.'); return; }
     setOpening(true);
     try {
-      const response = await axios.post(`${API_URL}/api/pdi/reports`, {}, {
+      const response = await axios.post(`${API_URL}/api/pdi/reports`, { inspection_date: todayIST() }, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setReportId(response.data.report_id);
@@ -489,6 +489,7 @@ export default function PDIGeneratorForm() {
       // so an empty field doesn't blank out a name already saved.
       await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
         data, photos, status: 'In Progress', inspected_by: form.prepared_by?.trim() || undefined,
+        inspection_date: form.date || undefined,
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -522,6 +523,7 @@ export default function PDIGeneratorForm() {
       const { photos, ...data } = form;
       await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
         data, photos, inspected_by: form.prepared_by?.trim() || undefined,
+        inspection_date: form.date || undefined,
       }, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,

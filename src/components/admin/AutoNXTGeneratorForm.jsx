@@ -391,7 +391,7 @@ export default function AutoNXTGeneratorForm() {
     if (!token) { notifyError('Please log in first.'); return; }
     setOpening(true);
     try {
-      const response = await axios.post(`${API_URL}/api/pdi/reports`, { template_id: 'autonxt' }, {
+      const response = await axios.post(`${API_URL}/api/pdi/reports`, { template_id: 'autonxt', inspection_date: todayIST() }, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setReportId(response.data.report_id);
@@ -428,6 +428,7 @@ export default function AutoNXTGeneratorForm() {
       const { photos, ...data } = form;
       await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
         data, photos, status: 'In Progress', inspected_by: inspectedByValue(),
+        inspection_date: form.date || undefined,
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -458,6 +459,7 @@ export default function AutoNXTGeneratorForm() {
       const { photos, ...data } = form;
       await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
         data, photos, inspected_by: inspectedByValue(),
+        inspection_date: form.date || undefined,
       }, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
