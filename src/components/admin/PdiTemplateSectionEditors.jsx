@@ -188,6 +188,14 @@ export function HeaderSectionEditor({ section, onChange, definition }) {
             if (row.rightKey) excludingLeft.add(row.rightKey);
             const excludingRight = new Set(siblingKeys);
             if (row.leftKey) excludingRight.add(row.leftKey);
+            // The format <select>s need the `!w-20` (important) prefix, not
+            // plain `w-20` — FIELD_CLS already carries `w-full`, and two
+            // same-specificity Tailwind width utilities on one element
+            // resolve by CSS source order, not by which appears later in
+            // the className string. Without `!`, `w-full` was winning,
+            // stretching the select and squeezing its sibling LabeledKeyField
+            // down to a few pixels (found live in the Task 6 browser pass —
+            // no lint/build/unit-level check catches a CSS cascade fight).
             return (
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="flex gap-1 items-start">
@@ -200,7 +208,7 @@ export function HeaderSectionEditor({ section, onChange, definition }) {
                       onChange={({ label, key }) => update({ ...row, leftLabel: label, leftKey: key })}
                     />
                   </div>
-                  <select className={FIELD_CLS + ' w-20'} value={row.leftFormat} onChange={(e) => update({ ...row, leftFormat: e.target.value })}>
+                  <select className={FIELD_CLS + ' !w-20'} value={row.leftFormat} onChange={(e) => update({ ...row, leftFormat: e.target.value })}>
                     <option value="text">text</option><option value="date">date</option>
                   </select>
                 </div>
@@ -214,7 +222,7 @@ export function HeaderSectionEditor({ section, onChange, definition }) {
                       onChange={({ label, key }) => update({ ...row, rightLabel: label, rightKey: key })}
                     />
                   </div>
-                  <select className={FIELD_CLS + ' w-20'} value={row.rightFormat} onChange={(e) => update({ ...row, rightFormat: e.target.value })}>
+                  <select className={FIELD_CLS + ' !w-20'} value={row.rightFormat} onChange={(e) => update({ ...row, rightFormat: e.target.value })}>
                     <option value="text">text</option><option value="date">date</option>
                   </select>
                 </div>
