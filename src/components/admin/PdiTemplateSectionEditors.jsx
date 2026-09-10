@@ -81,7 +81,7 @@ export function LabeledKeyField({ label, keyValue, usedKeysExcludingSelf, onChan
 // index-key/DOM-recycling jank that a live-reorder-during-drag approach
 // would risk (React reassigning the dragged browser element to a different
 // logical row mid-gesture).
-export function ListEditor({ items, onChange, renderRow, newRow, addLabel }) {
+export function ListEditor({ items, onChange, renderRow, newRow, addLabel, hideAddButton }) {
   const [dragIndex, setDragIndex] = useState(null);
   const [overIndex, setOverIndex] = useState(null);
 
@@ -124,13 +124,15 @@ export function ListEditor({ items, onChange, renderRow, newRow, addLabel }) {
           </button>
         </div>
       ))}
-      <button
-        type="button"
-        onClick={() => onChange([...items, newRow()])}
-        className="flex items-center gap-1 text-xs font-medium text-amber-700 border border-amber-300 rounded px-2 py-1 hover:bg-amber-50"
-      >
-        <Plus size={14} /> {addLabel}
-      </button>
+      {!hideAddButton && (
+        <button
+          type="button"
+          onClick={() => onChange([...items, newRow()])}
+          className="flex items-center gap-1 text-xs font-medium text-amber-700 border border-amber-300 rounded px-2 py-1 hover:bg-amber-50"
+        >
+          <Plus size={14} /> {addLabel}
+        </button>
+      )}
     </div>
   );
 }

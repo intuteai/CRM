@@ -1,7 +1,13 @@
 // CRM/src/components/admin/PdiTemplatesAdminPage.jsx
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, ChevronUp, ChevronDown, Eye, Upload, Archive } from 'lucide-react';
+import { Plus, Trash2, Upload, Archive, ChevronDown, ChevronUp } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
+import { labelToKey } from '../../utils/pdiTemplateSlug';
+import {
+  FIELD_CLS, ListEditor, AddSectionPicker, SectionEditorFor,
+  sectionTypeOption, sectionCardTitle,
+} from './PdiTemplateSectionEditors';
+import PdiTemplatePreviewPane from './PdiTemplatePreviewPane';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -10,71 +16,9 @@ function authHeaders() {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
-const SECTION_TYPES = ['header', 'table', 'photo', 'image', 'signature', 'text'];
-
-function emptySection(type) {
-  switch (type) {
-    case 'header':
-      return { type, companyName: '', formatNo: '', revNo: '', effDate: '', extraFormatLines: [], logoAsset: null, infoFields: [] };
-    case 'table':
-      return { type, title: '', mode: 'repeatable', dataKey: '', columns: [], headerHeight: 20, rowHeight: 14, filterKey: '', fixedRows: [] };
-    case 'photo':
-      return { type, mode: 'freeform', dataKey: '', slots: [] };
-    case 'image':
-      return { type, dataKey: '', width: null, height: 100, title: '', placeholder: null };
-    case 'signature':
-      return { type, roles: [] };
-    case 'text':
-      return { type, label: '', dataKey: '', default: '' };
-    default:
-      throw new Error(`Unknown section type: ${type}`);
-  }
-}
-
 function emptyDefinition() {
   return { pages: [{ sections: [] }] };
 }
-
-function moveItem(arr, index, delta) {
-  const next = [...arr];
-  const target = index + delta;
-  if (target < 0 || target >= next.length) return arr;
-  [next[index], next[target]] = [next[target], next[index]];
-  return next;
-}
-
-// ── Small reusable list-editor: add/remove/reorder rows of a fixed shape ──
-function ListEditor({ items, onChange, renderRow, newRow, addLabel }) {
-  return (
-    <div className="space-y-2">
-      {items.map((item, i) => (
-        <div key={i} className="flex items-center gap-2 border border-gray-200 rounded p-2">
-          <div className="flex flex-col">
-            <button type="button" onClick={() => onChange(moveItem(items, i, -1))} disabled={i === 0} className="disabled:opacity-30">
-              <ChevronUp size={14} />
-            </button>
-            <button type="button" onClick={() => onChange(moveItem(items, i, 1))} disabled={i === items.length - 1} className="disabled:opacity-30">
-              <ChevronDown size={14} />
-            </button>
-          </div>
-          <div className="flex-1">{renderRow(item, (updated) => onChange(items.map((it, idx) => (idx === i ? updated : it))))}</div>
-          <button type="button" onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-700">
-            <Trash2 size={16} />
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={() => onChange([...items, newRow()])}
-        className="flex items-center gap-1 text-xs font-medium text-amber-700 border border-amber-300 rounded px-2 py-1 hover:bg-amber-50"
-      >
-        <Plus size={14} /> {addLabel}
-      </button>
-    </div>
-  );
-}
-
-const FIELD_CLS = 'border border-gray-300 rounded px-2 py-1 text-sm w-full';
 
 const STATUS_STYLES = {
   draft: 'bg-gray-100 text-gray-600',
@@ -95,234 +39,48 @@ function formatDate(value) {
   return new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// Deliberately doesn't expose logoAsset or extraFormatLines — both are rare
-// fields (only the hand-coded General/AutoNXT templates have ever needed a
-// logo or a 4th format-box line); a template authored through this UI simply
-// can't set them yet. Accepted v1 scope limit, not an oversight.
-function HeaderSectionEditor({ section, onChange }) {
+// A section's collapsed-by-default card — expands to its editor on click.
+// Collapsed by default keeps a multi-section page scannable instead of one
+// long wall of open editors.
+function SectionCard({ section, onChange, definition }) {
+  const [expanded, setExpanded] = useState(false);
+  const typeOption = sectionTypeOption(section);
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-2 gap-2">
-        <input className={FIELD_CLS} placeholder="Company name" value={section.companyName} onChange={(e) => onChange({ ...section, companyName: e.target.value })} />
-        <input className={FIELD_CLS} placeholder="Format No." value={section.formatNo} onChange={(e) => onChange({ ...section, formatNo: e.target.value })} />
-        <input className={FIELD_CLS} placeholder="Rev No." value={section.revNo} onChange={(e) => onChange({ ...section, revNo: e.target.value })} />
-        <input className={FIELD_CLS} placeholder="Eff. Date" value={section.effDate} onChange={(e) => onChange({ ...section, effDate: e.target.value })} />
-      </div>
-      <div>
-        <label className="text-xs font-medium text-gray-600">Info fields (top-of-page label/value rows)</label>
-        <ListEditor
-          items={section.infoFields}
-          onChange={(infoFields) => onChange({ ...section, infoFields })}
-          addLabel="Add info row"
-          newRow={() => ({ leftLabel: '', leftKey: '', leftFormat: 'text', rightLabel: '', rightKey: '', rightFormat: 'text' })}
-          renderRow={(row, update) => (
-            <div className="grid grid-cols-6 gap-1 text-xs">
-              <input className={FIELD_CLS} placeholder="Left label" value={row.leftLabel} onChange={(e) => update({ ...row, leftLabel: e.target.value })} />
-              <input className={FIELD_CLS} placeholder="Left data key" value={row.leftKey} onChange={(e) => update({ ...row, leftKey: e.target.value })} />
-              <select className={FIELD_CLS} value={row.leftFormat} onChange={(e) => update({ ...row, leftFormat: e.target.value })}>
-                <option value="text">text</option><option value="date">date</option>
-              </select>
-              <input className={FIELD_CLS} placeholder="Right label" value={row.rightLabel} onChange={(e) => update({ ...row, rightLabel: e.target.value })} />
-              <input className={FIELD_CLS} placeholder="Right data key" value={row.rightKey} onChange={(e) => update({ ...row, rightKey: e.target.value })} />
-              <select className={FIELD_CLS} value={row.rightFormat} onChange={(e) => update({ ...row, rightFormat: e.target.value })}>
-                <option value="text">text</option><option value="date">date</option>
-              </select>
-            </div>
-          )}
-        />
-      </div>
-    </div>
-  );
-}
-
-function CellSourceEditor({ cell, onChange }) {
-  const source = cell?.source || 'row';
-  return (
-    <div className="flex gap-1 items-center">
-      <select className={FIELD_CLS} value={source} onChange={(e) => {
-        const s = e.target.value;
-        if (s === 'row') onChange({ source: 'row' });
-        else if (s === 'constant') onChange({ source: 'constant', value: '' });
-        else onChange({ source: 'sectionData', subfield: 'measured', default: 'GO' });
-      }}>
-        <option value="row">row field</option>
-        <option value="constant">constant</option>
-        <option value="sectionData">per-inspection value</option>
-      </select>
-      {source === 'constant' && (
-        <input className={FIELD_CLS} placeholder="Value" value={cell.value} onChange={(e) => onChange({ ...cell, value: e.target.value })} />
-      )}
-      {source === 'sectionData' && (
-        <>
-          <input className={FIELD_CLS} placeholder="Subfield" value={cell.subfield} onChange={(e) => onChange({ ...cell, subfield: e.target.value })} />
-          <input className={FIELD_CLS} placeholder="Default" value={cell.default} onChange={(e) => onChange({ ...cell, default: e.target.value })} />
-        </>
-      )}
-    </div>
-  );
-}
-
-function TableSectionEditor({ section, onChange }) {
-  return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-2 gap-2">
-        <input className={FIELD_CLS} placeholder="Title (optional caption above the table)" value={section.title || ''} onChange={(e) => onChange({ ...section, title: e.target.value })} />
-        <input className={FIELD_CLS} placeholder="Data key" value={section.dataKey} onChange={(e) => onChange({ ...section, dataKey: e.target.value })} />
-        <select className={FIELD_CLS} value={section.mode} onChange={(e) => onChange({ ...section, mode: e.target.value })}>
-          <option value="repeatable">repeatable (one row per item)</option>
-          <option value="fixed">fixed (template-defined rows)</option>
-        </select>
-        {section.mode === 'repeatable' && (
-          <input className={FIELD_CLS} placeholder="Filter key (row is skipped if this field is empty)" value={section.filterKey || ''} onChange={(e) => onChange({ ...section, filterKey: e.target.value })} />
-        )}
-        <input className={FIELD_CLS} type="number" placeholder="Header height" value={section.headerHeight} onChange={(e) => onChange({ ...section, headerHeight: Number(e.target.value) })} />
-        <input className={FIELD_CLS} type="number" placeholder="Row height" value={section.rowHeight} onChange={(e) => onChange({ ...section, rowHeight: Number(e.target.value) })} />
-      </div>
-      <div>
-        <label className="text-xs font-medium text-gray-600">Columns</label>
-        <ListEditor
-          items={section.columns}
-          onChange={(columns) => onChange({ ...section, columns })}
-          addLabel="Add column"
-          newRow={() => ({ key: '', label: '', w: null, align: 'left', group: '', cell: { source: 'row' } })}
-          renderRow={(col, update) => (
-            <div className="grid grid-cols-5 gap-1 text-xs items-center">
-              <input className={FIELD_CLS} placeholder="key" value={col.key} onChange={(e) => update({ ...col, key: e.target.value })} />
-              <input className={FIELD_CLS} placeholder="label" value={col.label} onChange={(e) => update({ ...col, label: e.target.value })} />
-              <input className={FIELD_CLS} type="number" placeholder="width (blank=flex)" value={col.w ?? ''} onChange={(e) => update({ ...col, w: e.target.value ? Number(e.target.value) : null })} />
-              <input className={FIELD_CLS} placeholder="group (optional)" value={col.group || ''} onChange={(e) => update({ ...col, group: e.target.value || undefined })} />
-              <CellSourceEditor cell={col.cell} onChange={(cell) => update({ ...col, cell })} />
-            </div>
-          )}
-        />
-      </div>
-      {section.mode === 'fixed' && (
-        <div>
-          <label className="text-xs font-medium text-gray-600">Fixed rows (one per checklist item — &quot;key&quot; links this row&apos;s per-inspection value)</label>
-          <ListEditor
-            items={section.fixedRows}
-            onChange={(fixedRows) => onChange({ ...section, fixedRows })}
-            addLabel="Add row"
-            newRow={() => ({ key: '' })}
-            renderRow={(row, update) => (
-              <div className="grid gap-1 text-xs" style={{ gridTemplateColumns: `repeat(${section.columns.length + 1}, 1fr)` }}>
-                <input className={FIELD_CLS} placeholder="row key" value={row.key || ''} onChange={(e) => update({ ...row, key: e.target.value })} />
-                {section.columns.filter((c) => !c.cell || c.cell.source === 'row').map((c) => (
-                  <input key={c.key} className={FIELD_CLS} placeholder={c.label || c.key} value={row[c.key] || ''} onChange={(e) => update({ ...row, [c.key]: e.target.value })} />
-                ))}
-              </div>
-            )}
-          />
+    <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[10px] font-medium text-gray-500 bg-gray-200 rounded px-1.5 py-0.5 shrink-0">{typeOption?.label || section.type}</span>
+          <span className="text-sm font-medium text-gray-800 truncate">{sectionCardTitle(section)}</span>
+        </div>
+        {expanded ? <ChevronUp size={16} className="text-gray-400 shrink-0" /> : <ChevronDown size={16} className="text-gray-400 shrink-0" />}
+      </button>
+      {expanded && (
+        <div className="p-3 border-t border-gray-200">
+          <SectionEditorFor section={section} onChange={onChange} definition={definition} />
         </div>
       )}
     </div>
   );
 }
 
-function PhotoSectionEditor({ section, onChange }) {
-  return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-2 gap-2">
-        <select className={FIELD_CLS} value={section.mode} onChange={(e) => onChange({ ...section, mode: e.target.value })}>
-          <option value="freeform">freeform (user adds photos)</option>
-          <option value="fixed-slots">fixed slots</option>
-        </select>
-        <input className={FIELD_CLS} placeholder="Data key" value={section.dataKey} onChange={(e) => onChange({ ...section, dataKey: e.target.value })} />
-      </div>
-      {section.mode === 'fixed-slots' && (
-        <ListEditor
-          items={section.slots}
-          onChange={(slots) => onChange({ ...section, slots })}
-          addLabel="Add slot"
-          newRow={() => ({ key: '', label: '' })}
-          renderRow={(slot, update) => (
-            <div className="grid grid-cols-2 gap-1 text-xs">
-              <input className={FIELD_CLS} placeholder="key" value={slot.key} onChange={(e) => update({ ...slot, key: e.target.value })} />
-              <input className={FIELD_CLS} placeholder="label" value={slot.label} onChange={(e) => update({ ...slot, label: e.target.value })} />
-            </div>
-          )}
-        />
-      )}
-    </div>
-  );
-}
-
-// Deliberately doesn't expose `width` (defaults to full content width via
-// the backend's `section.width || CW` fallback) — same rare-field reasoning
-// as HeaderSectionEditor's logoAsset/extraFormatLines above.
-function ImageSectionEditor({ section, onChange }) {
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      <input className={FIELD_CLS} placeholder="Data key" value={section.dataKey} onChange={(e) => onChange({ ...section, dataKey: e.target.value })} />
-      <input className={FIELD_CLS} placeholder="Title (optional)" value={section.title || ''} onChange={(e) => onChange({ ...section, title: e.target.value })} />
-      <input className={FIELD_CLS} type="number" placeholder="Height" value={section.height} onChange={(e) => onChange({ ...section, height: Number(e.target.value) })} />
-      <input
-        className={FIELD_CLS}
-        placeholder="Placeholder text (shown when no image supplied)"
-        value={section.placeholder?.text || ''}
-        onChange={(e) => onChange({ ...section, placeholder: e.target.value ? { text: e.target.value, annotations: section.placeholder?.annotations || [] } : null })}
-      />
-    </div>
-  );
-}
-
-function SignatureSectionEditor({ section, onChange }) {
-  return (
-    <ListEditor
-      items={section.roles}
-      onChange={(roles) => onChange({ ...section, roles })}
-      addLabel="Add signer"
-      newRow={() => ({ key: '', label: '' })}
-      renderRow={(role, update) => (
-        <div className="grid grid-cols-2 gap-1 text-xs">
-          <input className={FIELD_CLS} placeholder="key" value={role.key} onChange={(e) => update({ ...role, key: e.target.value })} />
-          <input className={FIELD_CLS} placeholder="label" value={role.label} onChange={(e) => update({ ...role, label: e.target.value })} />
-        </div>
-      )}
-    />
-  );
-}
-
-function TextSectionEditor({ section, onChange }) {
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      <input className={FIELD_CLS} placeholder="Label" value={section.label} onChange={(e) => onChange({ ...section, label: e.target.value })} />
-      <input className={FIELD_CLS} placeholder="Data key" value={section.dataKey} onChange={(e) => onChange({ ...section, dataKey: e.target.value })} />
-      <input className={FIELD_CLS} placeholder="Default text" value={section.default || ''} onChange={(e) => onChange({ ...section, default: e.target.value })} />
-    </div>
-  );
-}
-
-function SectionEditor({ section, onChange }) {
-  const Editor = {
-    header: HeaderSectionEditor, table: TableSectionEditor, photo: PhotoSectionEditor,
-    image: ImageSectionEditor, signature: SignatureSectionEditor, text: TextSectionEditor,
-  }[section.type];
-  return (
-    <div className="bg-gray-50 rounded p-3">
-      <div className="text-xs font-semibold text-gray-500 uppercase mb-2">{section.type} section</div>
-      <Editor section={section} onChange={onChange} />
-    </div>
-  );
-}
-
-function PageEditor({ page, onChange }) {
+function PageEditor({ page, onChange, onRemove, definition }) {
   return (
     <div className="space-y-3">
       <ListEditor
         items={page.sections}
         onChange={(sections) => onChange({ ...page, sections })}
-        addLabel="Add section"
-        newRow={() => emptySection('header')}
-        renderRow={(section, update) => (
-          <div className="space-y-2">
-            <select className={FIELD_CLS} value={section.type} onChange={(e) => update(emptySection(e.target.value))}>
-              {SECTION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <SectionEditor section={section} onChange={update} />
-          </div>
-        )}
+        hideAddButton
+        newRow={() => null}
+        renderRow={(section, update) => <SectionCard section={section} onChange={update} definition={definition} />}
       />
+      <AddSectionPicker onAdd={(newSection) => onChange({ ...page, sections: [...page.sections, newSection] })} />
+      <button type="button" onClick={onRemove} className="text-xs text-gray-400 hover:text-red-500">
+        Remove page
+      </button>
     </div>
   );
 }
@@ -355,50 +113,54 @@ function TemplateEditor({ template, onClose, onSaved }) {
     }
   };
 
-  const preview = async () => {
-    try {
-      const res = await fetch(`${BASE_URL}/api/pdi/admin/templates/${template.id}/preview`, {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify({ definition }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'Preview failed');
-      const blob = await res.blob();
-      window.open(URL.createObjectURL(blob), '_blank');
-    } catch (err) {
-      notifyError(err.message);
+  const removePage = (i) => {
+    const page = definition.pages[i];
+    if ((page.sections || []).length > 0) {
+      if (!window.confirm(`Remove this page and its ${page.sections.length} section(s)? This can't be undone.`)) return;
     }
+    setDefinition({ ...definition, pages: definition.pages.filter((_, idx) => idx !== i) });
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <input className={FIELD_CLS + ' text-lg font-semibold'} value={name} onChange={(e) => setName(e.target.value)} />
-        <span className="text-xs text-gray-400">id: {template.id}</span>
+    <div className="flex gap-4 items-start" style={{ minHeight: '70vh' }}>
+      <div className="flex-1 min-w-0 space-y-4">
+        <div className="flex items-center gap-3">
+          <input className={FIELD_CLS + ' text-lg font-semibold'} value={name} onChange={(e) => setName(e.target.value)} />
+          <span className="text-xs text-gray-400 shrink-0">id: {template.id}</span>
+        </div>
+        <div className="space-y-4">
+          {definition.pages.map((page, i) => (
+            <div key={i} className="border border-gray-300 rounded p-3">
+              <div className="text-sm font-semibold mb-2">Page {i + 1}</div>
+              <PageEditor
+                page={page}
+                definition={definition}
+                onChange={(p) => {
+                  const pages = [...definition.pages];
+                  pages[i] = p;
+                  setDefinition({ ...definition, pages });
+                }}
+                onRemove={() => removePage(i)}
+              />
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setDefinition({ ...definition, pages: [...definition.pages, { sections: [] }] })}
+            className="flex items-center gap-1 text-sm font-medium text-amber-700 border border-amber-300 rounded px-3 py-1.5 hover:bg-amber-50"
+          >
+            <Plus size={16} /> Add page
+          </button>
+        </div>
+        <div className="flex gap-2 pt-3 border-t border-gray-200">
+          <button type="button" disabled={saving} onClick={() => save(null)} className="px-3 py-2 border rounded text-sm">Save</button>
+          <button type="button" disabled={saving} onClick={() => save('publish')} className="flex items-center gap-1 px-3 py-2 bg-amber-500 text-white rounded text-sm"><Upload size={16} /> Save &amp; Publish</button>
+          <button type="button" disabled={saving} onClick={() => save('archive')} className="flex items-center gap-1 px-3 py-2 border rounded text-sm text-gray-600"><Archive size={16} /> Archive</button>
+          <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-gray-500">Close</button>
+        </div>
       </div>
-      <div className="space-y-4">
-        {definition.pages.map((page, i) => (
-          <div key={i} className="border border-gray-300 rounded p-3">
-            <div className="text-sm font-semibold mb-2">Page {i + 1}</div>
-            <PageEditor page={page} onChange={(p) => {
-              const pages = [...definition.pages];
-              pages[i] = p;
-              setDefinition({ ...definition, pages });
-            }} />
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => setDefinition({ ...definition, pages: [...definition.pages, { sections: [] }] })}
-          className="flex items-center gap-1 text-sm font-medium text-amber-700 border border-amber-300 rounded px-3 py-1.5 hover:bg-amber-50"
-        >
-          <Plus size={16} /> Add page
-        </button>
-      </div>
-      <div className="flex gap-2 pt-3 border-t border-gray-200">
-        <button type="button" onClick={preview} className="flex items-center gap-1 px-3 py-2 border rounded text-sm"><Eye size={16} /> Preview PDF</button>
-        <button type="button" disabled={saving} onClick={() => save(null)} className="px-3 py-2 border rounded text-sm">Save</button>
-        <button type="button" disabled={saving} onClick={() => save('publish')} className="flex items-center gap-1 px-3 py-2 bg-amber-500 text-white rounded text-sm"><Upload size={16} /> Save &amp; Publish</button>
-        <button type="button" disabled={saving} onClick={() => save('archive')} className="flex items-center gap-1 px-3 py-2 border rounded text-sm text-gray-600"><Archive size={16} /> Archive</button>
-        <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-gray-500">Close</button>
+      <div className="w-96 shrink-0 sticky top-4" style={{ height: '70vh' }}>
+        <PdiTemplatePreviewPane templateId={template.id} definition={definition} />
       </div>
     </div>
   );
@@ -407,8 +169,6 @@ function TemplateEditor({ template, onClose, onSaved }) {
 export default function PdiTemplatesAdminPage() {
   const [list, setList] = useState(null);
   const [editing, setEditing] = useState(null); // full template row being edited, or null
-  const [creatingId, setCreatingId] = useState('');
-  const [creatingName, setCreatingName] = useState('');
   const { notifyError, notifySuccess } = useNotify();
 
   const refresh = useCallback(async () => {
@@ -450,24 +210,54 @@ export default function PdiTemplatesAdminPage() {
     }
   };
 
+  const [creatingName, setCreatingName] = useState('');
+  const [creatingIdOverride, setCreatingIdOverride] = useState(null); // null = auto-generated; string once the admin edits it directly
+  const [showIdAdvanced, setShowIdAdvanced] = useState(false);
+  const [creating, setCreating] = useState(false);
+
   const createTemplate = async () => {
-    if (!creatingId.trim() || !creatingName.trim()) {
-      notifyError('Both an id and a name are required to create a template.');
+    const trimmedName = creatingName.trim();
+    if (!trimmedName) {
+      notifyError('A name is required to create a template.');
       return;
     }
+    setCreating(true);
     try {
-      const res = await fetch(`${BASE_URL}/api/pdi/admin/templates`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ id: creatingId.trim(), name: creatingName.trim(), definition: emptyDefinition() }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || 'Create failed');
+      const baseId = creatingIdOverride !== null ? creatingIdOverride.trim() : labelToKey(trimmedName, []);
+      const attempt = async (id) => {
+        const res = await fetch(`${BASE_URL}/api/pdi/admin/templates`, {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify({ id, name: trimmedName, definition: emptyDefinition() }),
+        });
+        const body = await res.json();
+        return { ok: res.ok, status: res.status, body };
+      };
+
+      let result = await attempt(baseId);
+      // A 409 (id already exists) on an auto-generated id gets one silent
+      // retry with a "-2" suffix — the admin never typed this id, so a
+      // collision isn't something to surface immediately. If a manually-
+      // entered id (creatingIdOverride set) 409s, don't auto-retry — go
+      // straight to showing the error so they can pick deliberately.
+      if (!result.ok && result.status === 409 && creatingIdOverride === null) {
+        result = await attempt(`${baseId}-2`);
+      }
+      if (!result.ok) {
+        if (result.status === 409) {
+          setShowIdAdvanced(true);
+          setCreatingIdOverride(baseId);
+        }
+        throw new Error(result.body.error || 'Create failed');
+      }
+
       notifySuccess('Template created.');
-      setCreatingId(''); setCreatingName('');
+      setCreatingName(''); setCreatingIdOverride(null); setShowIdAdvanced(false);
       await refresh();
-      setEditing(body);
+      setEditing(result.body);
     } catch (err) {
       notifyError(err.message);
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -497,14 +287,21 @@ export default function PdiTemplatesAdminPage() {
           <div className="text-sm font-semibold text-gray-700 mb-3">Create a new template</div>
           <div className="flex gap-2 items-end flex-wrap">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">New template id (slug)</label>
-              <input className={FIELD_CLS} value={creatingId} onChange={(e) => setCreatingId(e.target.value)} placeholder="e.g. acme-motor-pdi" />
-            </div>
-            <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
               <input className={FIELD_CLS} value={creatingName} onChange={(e) => setCreatingName(e.target.value)} placeholder="e.g. Acme Motor PDI" />
+              <button type="button" onClick={() => setShowIdAdvanced((s) => !s)} className="text-[11px] text-gray-400 hover:text-gray-600 mt-0.5">
+                {showIdAdvanced ? 'Hide id' : 'Advanced'}
+              </button>
+              {showIdAdvanced && (
+                <input
+                  className={FIELD_CLS + ' mt-1 text-xs text-gray-500'}
+                  placeholder="id (auto-generated from the name if left blank)"
+                  value={creatingIdOverride ?? labelToKey(creatingName.trim(), [])}
+                  onChange={(e) => setCreatingIdOverride(e.target.value)}
+                />
+              )}
             </div>
-            <button type="button" onClick={createTemplate} className="flex items-center gap-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded text-sm font-medium transition-colors">
+            <button type="button" disabled={creating} onClick={createTemplate} className="flex items-center gap-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50">
               <Plus size={16} /> New Template
             </button>
           </div>
