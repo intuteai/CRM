@@ -81,7 +81,15 @@ export function LabeledKeyField({ label, keyValue, usedKeysExcludingSelf, onChan
 // index-key/DOM-recycling jank that a live-reorder-during-drag approach
 // would risk (React reassigning the dragged browser element to a different
 // logical row mid-gesture).
-export function ListEditor({ items, onChange, renderRow, newRow, addLabel, hideAddButton }) {
+//
+// `getItemKey(item, i)` is optional and defaults to the plain index. Pass
+// it when `renderRow` renders something with meaningful per-row local state
+// of its own (e.g. an expand/collapse toggle) — with the default index key,
+// a drag-reorder keeps each DOM/component slot pinned to its position, so a
+// row's own local state (not its data) silently jumps onto whatever row
+// moved into that slot. Passing a stable identity (independent of array
+// position) avoids that.
+export function ListEditor({ items, onChange, renderRow, newRow, addLabel, hideAddButton, getItemKey }) {
   const [dragIndex, setDragIndex] = useState(null);
   const [overIndex, setOverIndex] = useState(null);
 
@@ -104,7 +112,7 @@ export function ListEditor({ items, onChange, renderRow, newRow, addLabel, hideA
     <div className="space-y-2">
       {items.map((item, i) => (
         <div
-          key={i}
+          key={getItemKey ? getItemKey(item, i) : i}
           draggable
           onDragStart={(e) => { setDragIndex(i); e.dataTransfer.effectAllowed = 'move'; }}
           onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== i) setOverIndex(i); }}

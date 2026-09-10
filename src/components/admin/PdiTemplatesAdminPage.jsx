@@ -1,5 +1,5 @@
 // CRM/src/components/admin/PdiTemplatesAdminPage.jsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Trash2, Upload, Archive, ChevronDown, ChevronUp } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 import { labelToKey } from '../../utils/pdiTemplateSlug';
@@ -18,6 +18,35 @@ function authHeaders() {
 
 function emptyDefinition() {
   return { pages: [{ sections: [] }] };
+}
+
+let uiKeySeq = 0;
+// A client-only, harmless-to-persist id (the backend has no schema
+// validation rejecting unknown section fields, and the PDF renderer/
+// fill-out form only ever read specific known keys) that survives a
+// drag-reorder AND an edit (since every editor writes back via `{...section,
+// field: value}`, which preserves this field along with everything else).
+// Used as ListEditor's React key for sections specifically, so a
+// SectionCard's own expand/collapse state stays pinned to the section it
+// belongs to rather than to its current array position.
+function newSectionUiKey() {
+  uiKeySeq += 1;
+  return `sec_${Date.now().toString(36)}_${uiKeySeq}`;
+}
+
+// Stamps every section in a freshly-loaded definition with a stable ui key,
+// once, so the ListEditor-in-PageEditor can key by it from the start. Only
+// called from TemplateEditor's useState lazy initializer (runs exactly once
+// per template opened) — never on every render, or every edit would count
+// as "no key yet" and get a fresh one, defeating the whole point.
+function withSectionUiKeys(definition) {
+  return {
+    ...definition,
+    pages: (definition.pages || []).map((page) => ({
+      ...page,
+      sections: (page.sections || []).map((section) => (section._uiKey ? section : { ...section, _uiKey: newSectionUiKey() })),
+    })),
+  };
 }
 
 const STATUS_STYLES = {
@@ -75,9 +104,10 @@ function PageEditor({ page, onChange, onRemove, definition }) {
         onChange={(sections) => onChange({ ...page, sections })}
         hideAddButton
         newRow={() => null}
+        getItemKey={(section, i) => section._uiKey ?? i}
         renderRow={(section, update) => <SectionCard section={section} onChange={update} definition={definition} />}
       />
-      <AddSectionPicker onAdd={(newSection) => onChange({ ...page, sections: [...page.sections, newSection] })} />
+      <AddSectionPicker onAdd={(newSection) => onChange({ ...page, sections: [...page.sections, { ...newSection, _uiKey: newSectionUiKey() }] })} />
       <button type="button" onClick={onRemove} className="text-xs text-gray-400 hover:text-red-500">
         Remove page
       </button>
@@ -87,7 +117,7 @@ function PageEditor({ page, onChange, onRemove, definition }) {
 
 function TemplateEditor({ template, onClose, onSaved }) {
   const [name, setName] = useState(template.name);
-  const [definition, setDefinition] = useState(template.definition);
+  const [definition, setDefinition] = useState(() => withSectionUiKeys(template.definition));
   const [saving, setSaving] = useState(false);
   const { notifySuccess, notifyError } = useNotify();
 
@@ -214,6 +244,20 @@ export default function PdiTemplatesAdminPage() {
   const [creatingIdOverride, setCreatingIdOverride] = useState(null); // null = auto-generated; string once the admin edits it directly
   const [showIdAdvanced, setShowIdAdvanced] = useState(false);
   const [creating, setCreating] = useState(false);
+  // The id that most recently 409'd, so a Name edit that follows can tell
+  // "admin hasn't touched the id since the failure" (resume auto-deriving
+  // from the new name) apart from "admin deliberately typed this id"
+  // (leave it alone). Without this, editing the name after a conflict would
+  // resubmit the exact same already-known-to-conflict id every time.
+  const lastConflictIdRef = useRef(null);
+
+  const handleNameChange = (value) => {
+    setCreatingName(value);
+    if (lastConflictIdRef.current !== null && creatingIdOverride === lastConflictIdRef.current) {
+      setCreatingIdOverride(null);
+      lastConflictIdRef.current = null;
+    }
+  };
 
   const createTemplate = async () => {
     const trimmedName = creatingName.trim();
@@ -246,11 +290,13 @@ export default function PdiTemplatesAdminPage() {
         if (result.status === 409) {
           setShowIdAdvanced(true);
           setCreatingIdOverride(baseId);
+          lastConflictIdRef.current = baseId;
         }
         throw new Error(result.body.error || 'Create failed');
       }
 
       notifySuccess('Template created.');
+      lastConflictIdRef.current = null;
       setCreatingName(''); setCreatingIdOverride(null); setShowIdAdvanced(false);
       await refresh();
       setEditing(result.body);
@@ -288,7 +334,7 @@ export default function PdiTemplatesAdminPage() {
           <div className="flex gap-2 items-end flex-wrap">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
-              <input className={FIELD_CLS} value={creatingName} onChange={(e) => setCreatingName(e.target.value)} placeholder="e.g. Acme Motor PDI" />
+              <input className={FIELD_CLS} value={creatingName} onChange={(e) => handleNameChange(e.target.value)} placeholder="e.g. Acme Motor PDI" />
               <button type="button" onClick={() => setShowIdAdvanced((s) => !s)} className="text-[11px] text-gray-400 hover:text-gray-600 mt-0.5">
                 {showIdAdvanced ? 'Hide id' : 'Advanced'}
               </button>
