@@ -310,7 +310,10 @@ export default function PdiTemplatesAdminPage() {
   if (editing) {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
-        <div className="max-w-4xl mx-auto bg-white rounded-xl shadow p-6">
+        {/* Wider than the list view's max-w-4xl — this view now hosts a
+            two-column layout (editor + a w-96 live preview pane beside it),
+            which max-w-4xl left too cramped for the editor column. */}
+        <div className="max-w-7xl mx-auto bg-white rounded-xl shadow p-6">
           <TemplateEditor
             template={editing}
             onClose={() => { setEditing(null); refresh(); }}

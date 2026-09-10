@@ -238,7 +238,19 @@ export function PhotoSectionEditor({ section, onChange, definition }) {
         <option value="freeform">Inspector adds their own photos</option>
         <option value="fixed-slots">Fixed photo slots (you name each one)</option>
       </select>
-      {section.mode === 'fixed-slots' ? (
+      {/* The section's own dataKey is required in BOTH modes — renderer.js
+          and GenericPdiSections.jsx both key the whole photo section's data
+          (the slot container in fixed-slots mode, or the freeform photo
+          array) off this one field. It must not live only inside the
+          freeform branch. */}
+      <LabeledKeyField
+        label={section.label || ''}
+        keyValue={section.dataKey}
+        usedKeysExcludingSelf={excludingThisSection}
+        placeholder="e.g. Inspection Photos"
+        onChange={({ label, key }) => onChange({ ...section, label, dataKey: key })}
+      />
+      {section.mode === 'fixed-slots' && (
         <ListEditor
           items={section.slots}
           onChange={(slots) => onChange({ ...section, slots })}
@@ -260,14 +272,6 @@ export function PhotoSectionEditor({ section, onChange, definition }) {
               />
             );
           }}
-        />
-      ) : (
-        <LabeledKeyField
-          label={section.label || ''}
-          keyValue={section.dataKey}
-          usedKeysExcludingSelf={excludingThisSection}
-          placeholder="e.g. Inspection Photos"
-          onChange={({ label, key }) => onChange({ ...section, label, dataKey: key })}
         />
       )}
     </div>
@@ -432,10 +436,22 @@ function FillInListColumnRow({ col, section, excludingThisCol, update, onSection
           // reference correct, not silently orphan it. If the rename clears
           // the key back to empty, clear filterKey too rather than pointing
           // it at the same collision-prone empty string.
-          if (col.key && section.filterKey === col.key) {
-            onSectionChange({ ...section, filterKey: key || undefined });
-          }
-          update({ ...col, label, key });
+          //
+          // This must be ONE combined write, not update() (routes through
+          // ListEditor -> FillInListSectionEditor's own onChange, which
+          // recomputes filterKey from `section.filterKey` before this
+          // column's rename has been applied) followed by a separate
+          // onSectionChange call — two writes derived from the same
+          // pre-update `section` snapshot race, and the second one
+          // (columns-based recompute) always won, silently clearing a
+          // filterKey that this rename was trying to preserve.
+          const wasFilterCol = Boolean(col.key) && section.filterKey === col.key;
+          const nextColumns = (section.columns || []).map((c) => (c === col ? { ...c, label, key } : c));
+          onSectionChange({
+            ...section,
+            columns: nextColumns,
+            filterKey: wasFilterCol ? (key || undefined) : section.filterKey,
+          });
         }}
       />
       <button type="button" onClick={() => setShowAdvanced((s) => !s)} className="text-[11px] text-gray-400 hover:text-gray-600">
