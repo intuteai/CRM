@@ -338,3 +338,242 @@ export function NotesSectionEditor({ section, onChange, definition }) {
     </div>
   );
 }
+
+// Produces { type: 'table', mode: 'fixed', ... }. The result column is
+// ALWAYS exactly GO/NG/NA — this is deliberately NOT configurable. Do not
+// add an "edit options" UI even though it looks like an obvious
+// enhancement: renderer.js and GenericPdiSections.jsx's FixedTableSection
+// both hard-code recognition of exactly ['GO','NG','NA'] (case-insensitive)
+// to decide whether to draw a 3-way toggle at all — a template with
+// different option labels would silently fall back to a plain text box
+// downstream with no toggle, which the editor gives no indication of.
+export function ChecklistSectionEditor({ section, onChange, definition }) {
+  const excludingThisSection = new Set(collectAllKeys(definition));
+  if (section.dataKey) excludingThisSection.delete(section.dataKey);
+  (section.fixedRows || []).forEach((r) => { if (r.key) excludingThisSection.delete(r.key); });
+
+  const columns = [
+    { key: 'item', label: 'Item', cell: { source: 'row' } },
+    { key: 'result', label: 'Result', cell: { source: 'sectionData', subfield: 'measured', default: 'GO' } },
+  ];
+
+  return (
+    <div className="space-y-2">
+      <LabeledKeyField
+        label={section.title || ''}
+        keyValue={section.dataKey}
+        usedKeysExcludingSelf={excludingThisSection}
+        placeholder="e.g. Winding & Bearing Checks"
+        onChange={({ label, key }) => onChange({ ...section, title: label, dataKey: key, columns })}
+      />
+      <p className="text-[11px] text-gray-400">Every item is marked GO / NG / NA by the inspector — this isn&apos;t customizable.</p>
+      <ListEditor
+        items={section.fixedRows || []}
+        onChange={(fixedRows) => onChange({ ...section, columns, fixedRows })}
+        addLabel="Add checklist item"
+        newRow={() => ({ key: '', item: '' })}
+        renderRow={(row, update) => {
+          // excludingThisSection already lacks every fixed row's own key
+          // (removed up front above). Re-add every OTHER row's key here so
+          // sibling checklist items can't collide with each other — the
+          // same pattern PhotoSectionEditor/SignatureSectionEditor use.
+          const excludingThisRow = new Set(excludingThisSection);
+          (section.fixedRows || []).forEach((r) => { if (r.key && r.key !== row.key) excludingThisRow.add(r.key); });
+          return (
+            <LabeledKeyField
+              label={row.item || ''}
+              keyValue={row.key}
+              usedKeysExcludingSelf={excludingThisRow}
+              placeholder="e.g. Winding Check"
+              onChange={({ label, key }) => update({ key, item: label })}
+            />
+          );
+        }}
+      />
+    </div>
+  );
+}
+
+function FillInListColumnRow({ col, section, excludingThisCol, update, onSectionChange }) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const isConstant = col.cell?.source === 'constant';
+  const isFilterCol = section.filterKey === col.key;
+  return (
+    <div className="space-y-1">
+      <LabeledKeyField
+        label={col.label}
+        keyValue={col.key}
+        usedKeysExcludingSelf={excludingThisCol}
+        placeholder="e.g. Motor Sr.No"
+        onChange={({ label, key }) => {
+          // Renaming the key this table's filterKey points at must keep the
+          // reference correct, not silently orphan it.
+          if (col.key && section.filterKey === col.key) {
+            onSectionChange({ ...section, filterKey: key });
+          }
+          update({ ...col, label, key });
+        }}
+      />
+      <button type="button" onClick={() => setShowAdvanced((s) => !s)} className="text-[11px] text-gray-400 hover:text-gray-600">
+        {showAdvanced ? 'Hide advanced' : 'Advanced'}
+      </button>
+      {showAdvanced && (
+        <div className="space-y-1 pl-2 border-l-2 border-gray-100">
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={isConstant}
+              onChange={(e) => update({ ...col, cell: e.target.checked ? { source: 'constant', value: '' } : { source: 'row' } })}
+            />
+            Always show this value
+          </label>
+          {isConstant && (
+            <input
+              className={FIELD_CLS}
+              placeholder="Value shown in every row"
+              value={col.cell.value}
+              onChange={(e) => update({ ...col, cell: { source: 'constant', value: e.target.value } })}
+            />
+          )}
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={isFilterCol}
+              onChange={(e) => onSectionChange({ ...section, filterKey: e.target.checked ? col.key : undefined })}
+            />
+            Skip empty rows in this column
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Produces { type: 'table', mode: 'repeatable', ... }. Every column defaults
+// to { source: 'row' } (the inspector types a value per row) — the rare
+// "always show this value" case is available per-column under Advanced.
+export function FillInListSectionEditor({ section, onChange, definition }) {
+  const excludingThisSection = new Set(collectAllKeys(definition));
+  if (section.dataKey) excludingThisSection.delete(section.dataKey);
+  (section.columns || []).forEach((c) => { if (c.key) excludingThisSection.delete(c.key); });
+
+  return (
+    <div className="space-y-2">
+      <LabeledKeyField
+        label={section.title || ''}
+        keyValue={section.dataKey}
+        usedKeysExcludingSelf={excludingThisSection}
+        placeholder="e.g. Motor Serial Numbers"
+        onChange={({ label, key }) => onChange({ ...section, title: label, dataKey: key })}
+      />
+      <ListEditor
+        items={section.columns || []}
+        onChange={(columns) => {
+          // If the column that was providing filterKey got removed, drop it too.
+          const stillHasFilterCol = columns.some((c) => c.key === section.filterKey);
+          onChange({ ...section, columns, filterKey: stillHasFilterCol ? section.filterKey : undefined });
+        }}
+        addLabel="Add column"
+        newRow={() => ({ key: '', label: '', cell: { source: 'row' } })}
+        renderRow={(col, update) => {
+          // Same sibling-collision pattern as ChecklistSectionEditor/
+          // PhotoSectionEditor: excludingThisSection already lacks every
+          // column's own key; re-add every OTHER column's key via .add().
+          const excludingThisCol = new Set(excludingThisSection);
+          (section.columns || []).forEach((c) => { if (c.key && c.key !== col.key) excludingThisCol.add(c.key); });
+          return (
+            <FillInListColumnRow
+              col={col}
+              section={section}
+              excludingThisCol={excludingThisCol}
+              update={update}
+              onSectionChange={onChange}
+            />
+          );
+        }}
+      />
+    </div>
+  );
+}
+
+// Replaces the old bare <select> of raw type names. Each option's `build`
+// creates a brand-new, empty section of that type — used only when adding a
+// NEW section; there is no in-place "change an existing section's type"
+// control anymore (switching types always discarded whatever was configured
+// anyway, so removing the illusion of an in-place change and requiring
+// delete-then-re-add isn't a capability loss).
+export const SECTION_TYPE_OPTIONS = [
+  { value: 'header', label: 'Header', description: 'Company details and top-of-page info like customer/date', build: () => ({ type: 'header', companyName: '', formatNo: '', revNo: '', effDate: '', extraFormatLines: [], logoAsset: null, infoFields: [] }) },
+  { value: 'checklist', label: 'Checklist', description: 'A fixed list of items the inspector marks GO/NG/NA', build: () => ({ type: 'table', mode: 'fixed', title: '', dataKey: '', columns: [], headerHeight: 20, rowHeight: 14, fixedRows: [] }) },
+  { value: 'fillInList', label: 'Fill-in list', description: 'A list the inspector adds rows to, like serial numbers', build: () => ({ type: 'table', mode: 'repeatable', title: '', dataKey: '', columns: [], headerHeight: 20, rowHeight: 14, filterKey: undefined }) },
+  { value: 'photo', label: 'Photos', description: 'Space for the inspector to attach photos', build: () => ({ type: 'photo', mode: 'freeform', dataKey: '', label: '', slots: [] }) },
+  { value: 'image', label: 'Image', description: 'A single fixed image, like a nameplate', build: () => ({ type: 'image', dataKey: '', width: null, height: 100, title: '', placeholder: null }) },
+  { value: 'signature', label: 'Signatures', description: 'Sign-off name fields', build: () => ({ type: 'signature', roles: [] }) },
+  { value: 'notes', label: 'Notes', description: 'A free-text remarks box', build: () => ({ type: 'text', label: '', dataKey: '', default: '' }) },
+];
+
+// A section's displayed type-badge/name in the picker and on its collapsed
+// card — distinguishes 'table'+'fixed' (Checklist) from 'table'+'repeatable'
+// (Fill-in list), which share one dialect `type` but are different editors.
+export function sectionTypeOption(section) {
+  if (section.type === 'table') {
+    return SECTION_TYPE_OPTIONS.find((o) => o.value === (section.mode === 'fixed' ? 'checklist' : 'fillInList'));
+  }
+  const byType = { header: 'header', photo: 'photo', image: 'image', signature: 'signature', text: 'notes' };
+  return SECTION_TYPE_OPTIONS.find((o) => o.value === byType[section.type]);
+}
+
+// A short, human name for a section's collapsed card — falls back to the
+// plain type name (via sectionTypeOption) when the section has no title/
+// label of its own yet (header/photo/signature never do; table/image/text
+// do once the admin has typed one).
+export function sectionCardTitle(section) {
+  return section.title || section.label || sectionTypeOption(section)?.label || 'Section';
+}
+
+export function AddSectionPicker({ onAdd }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full border-2 border-dashed border-gray-300 rounded-lg py-3 text-sm text-gray-400 hover:border-amber-300 hover:text-amber-600 transition-colors"
+      >
+        + Add section
+      </button>
+    );
+  }
+  return (
+    <div className="border border-gray-200 rounded-lg p-3 space-y-1">
+      {SECTION_TYPE_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => { onAdd(opt.build()); setOpen(false); }}
+          className="w-full text-left px-3 py-2 rounded hover:bg-amber-50 flex flex-col"
+        >
+          <span className="text-sm font-medium text-gray-800">{opt.label}</span>
+          <span className="text-xs text-gray-500">{opt.description}</span>
+        </button>
+      ))}
+      <button type="button" onClick={() => setOpen(false)} className="w-full text-center text-xs text-gray-400 pt-1">
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+// Dispatches a section to its editor by dialect shape (table further
+// dispatches by mode) — the single place that maps a section's data shape
+// to the component that edits it.
+export function SectionEditorFor({ section, onChange, definition }) {
+  if (section.type === 'header') return <HeaderSectionEditor section={section} onChange={onChange} definition={definition} />;
+  if (section.type === 'table' && section.mode === 'fixed') return <ChecklistSectionEditor section={section} onChange={onChange} definition={definition} />;
+  if (section.type === 'table') return <FillInListSectionEditor section={section} onChange={onChange} definition={definition} />;
+  if (section.type === 'photo') return <PhotoSectionEditor section={section} onChange={onChange} definition={definition} />;
+  if (section.type === 'image') return <ImageSectionEditor section={section} onChange={onChange} definition={definition} />;
+  if (section.type === 'signature') return <SignatureSectionEditor section={section} onChange={onChange} definition={definition} />;
+  if (section.type === 'text') return <NotesSectionEditor section={section} onChange={onChange} definition={definition} />;
+  return null;
+}
