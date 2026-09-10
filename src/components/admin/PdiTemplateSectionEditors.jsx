@@ -91,8 +91,11 @@ export function ListEditor({ items, onChange, renderRow, newRow, addLabel }) {
     if (dragIndex === null || dragIndex === dropIndex) { setDragIndex(null); return; }
     const reordered = [...items];
     const [moved] = reordered.splice(dragIndex, 1);
-    const insertAt = dragIndex < dropIndex ? dropIndex - 1 : dropIndex;
-    reordered.splice(insertAt, 0, moved);
+    // Reinserting at dropIndex (unadjusted) lands `moved` at exactly index
+    // dropIndex in the resulting array regardless of drag direction — no
+    // special-casing needed. An earlier version subtracted 1 for downward
+    // drags, which made dropping an item onto its very next sibling a no-op.
+    reordered.splice(dropIndex, 0, moved);
     onChange(reordered);
     setDragIndex(null);
   };
@@ -159,8 +162,22 @@ export function HeaderSectionEditor({ section, onChange, definition }) {
           addLabel="Add detail row"
           newRow={() => ({ leftLabel: '', leftKey: '', leftFormat: 'text', rightLabel: '', rightKey: '', rightFormat: 'text' })}
           renderRow={(row, update) => {
-            const excludingThisRow = new Set(otherKeys);
-            [row.leftKey, row.rightKey].forEach((k) => { if (k) excludingThisRow.delete(k); });
+            // otherKeys already lacks every info-field row's own left/right
+            // keys (removed up front above). Re-add every OTHER row's keys
+            // here so sibling rows in this same list can't collide with each
+            // other — a plain new Set(otherKeys) with no re-adding would
+            // silently allow two rows to share one generated key, since
+            // there'd be nothing left in the set to collide against.
+            const siblingKeys = new Set(otherKeys);
+            (section.infoFields || []).forEach((f) => {
+              if (f === row) return;
+              if (f.leftKey) siblingKeys.add(f.leftKey);
+              if (f.rightKey) siblingKeys.add(f.rightKey);
+            });
+            const excludingLeft = new Set(siblingKeys);
+            if (row.rightKey) excludingLeft.add(row.rightKey);
+            const excludingRight = new Set(siblingKeys);
+            if (row.leftKey) excludingRight.add(row.leftKey);
             return (
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="flex gap-1 items-start">
@@ -168,7 +185,7 @@ export function HeaderSectionEditor({ section, onChange, definition }) {
                     <LabeledKeyField
                       label={row.leftLabel}
                       keyValue={row.leftKey}
-                      usedKeysExcludingSelf={excludingThisRow}
+                      usedKeysExcludingSelf={excludingLeft}
                       placeholder="e.g. Customer Name"
                       onChange={({ label, key }) => update({ ...row, leftLabel: label, leftKey: key })}
                     />
@@ -182,7 +199,7 @@ export function HeaderSectionEditor({ section, onChange, definition }) {
                     <LabeledKeyField
                       label={row.rightLabel}
                       keyValue={row.rightKey}
-                      usedKeysExcludingSelf={excludingThisRow}
+                      usedKeysExcludingSelf={excludingRight}
                       placeholder="e.g. Date"
                       onChange={({ label, key }) => update({ ...row, rightLabel: label, rightKey: key })}
                     />
@@ -218,8 +235,11 @@ export function PhotoSectionEditor({ section, onChange, definition }) {
           addLabel="Add photo slot"
           newRow={() => ({ key: '', label: '' })}
           renderRow={(slot, update) => {
+            // excludingThisSection already lacks every slot's own key (they
+            // were all removed up front). Re-add every OTHER slot's key here
+            // so sibling slots in this list can't collide with each other.
             const excludingThisSlot = new Set(excludingThisSection);
-            (section.slots || []).forEach((s) => { if (s.key && s.key !== slot.key) excludingThisSlot.delete(s.key); });
+            (section.slots || []).forEach((s) => { if (s.key && s.key !== slot.key) excludingThisSlot.add(s.key); });
             return (
               <LabeledKeyField
                 label={slot.label}
@@ -282,8 +302,11 @@ export function SignatureSectionEditor({ section, onChange, definition }) {
       addLabel="Add signer"
       newRow={() => ({ key: '', label: '' })}
       renderRow={(role, update) => {
+        // excludingThisSection already lacks every role's own key (they were
+        // all removed up front). Re-add every OTHER role's key here so
+        // sibling roles in this list can't collide with each other.
         const excludingThisRole = new Set(excludingThisSection);
-        (section.roles || []).forEach((r) => { if (r.key && r.key !== role.key) excludingThisRole.delete(r.key); });
+        (section.roles || []).forEach((r) => { if (r.key && r.key !== role.key) excludingThisRole.add(r.key); });
         return (
           <LabeledKeyField
             label={role.label}
