@@ -339,6 +339,18 @@ export function NotesSectionEditor({ section, onChange, definition }) {
   );
 }
 
+// The Checklist editor's hard-coded, non-configurable column shape. Shared
+// between ChecklistSectionEditor (which rewrites it on every edit, below)
+// and SECTION_TYPE_OPTIONS' checklist build() (further down this file) so a
+// freshly-added, never-yet-edited Checklist section already has valid
+// columns from the moment it's created via the picker — not only after the
+// admin's first title/row edit. If these two ever used separately-written
+// copies of this shape, they could drift.
+const CHECKLIST_COLUMNS = [
+  { key: 'item', label: 'Item', cell: { source: 'row' } },
+  { key: 'result', label: 'Result', cell: { source: 'sectionData', subfield: 'measured', default: 'GO' } },
+];
+
 // Produces { type: 'table', mode: 'fixed', ... }. The result column is
 // ALWAYS exactly GO/NG/NA — this is deliberately NOT configurable. Do not
 // add an "edit options" UI even though it looks like an obvious
@@ -352,10 +364,7 @@ export function ChecklistSectionEditor({ section, onChange, definition }) {
   if (section.dataKey) excludingThisSection.delete(section.dataKey);
   (section.fixedRows || []).forEach((r) => { if (r.key) excludingThisSection.delete(r.key); });
 
-  const columns = [
-    { key: 'item', label: 'Item', cell: { source: 'row' } },
-    { key: 'result', label: 'Result', cell: { source: 'sectionData', subfield: 'measured', default: 'GO' } },
-  ];
+  const columns = CHECKLIST_COLUMNS;
 
   return (
     <div className="space-y-2">
@@ -397,7 +406,10 @@ export function ChecklistSectionEditor({ section, onChange, definition }) {
 function FillInListColumnRow({ col, section, excludingThisCol, update, onSectionChange }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const isConstant = col.cell?.source === 'constant';
-  const isFilterCol = section.filterKey === col.key;
+  // Every not-yet-named column shares the same empty-string key, so without
+  // the Boolean(col.key) guard, checking "skip empty rows" on ANY blank
+  // column would make every other blank column appear checked too.
+  const isFilterCol = Boolean(col.key) && section.filterKey === col.key;
   return (
     <div className="space-y-1">
       <LabeledKeyField
@@ -407,9 +419,11 @@ function FillInListColumnRow({ col, section, excludingThisCol, update, onSection
         placeholder="e.g. Motor Sr.No"
         onChange={({ label, key }) => {
           // Renaming the key this table's filterKey points at must keep the
-          // reference correct, not silently orphan it.
+          // reference correct, not silently orphan it. If the rename clears
+          // the key back to empty, clear filterKey too rather than pointing
+          // it at the same collision-prone empty string.
           if (col.key && section.filterKey === col.key) {
-            onSectionChange({ ...section, filterKey: key });
+            onSectionChange({ ...section, filterKey: key || undefined });
           }
           update({ ...col, label, key });
         }}
@@ -435,11 +449,15 @@ function FillInListColumnRow({ col, section, excludingThisCol, update, onSection
               onChange={(e) => update({ ...col, cell: { source: 'constant', value: e.target.value } })}
             />
           )}
-          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+          <label className={`flex items-center gap-1.5 text-xs ${col.key ? 'text-gray-600' : 'text-gray-300'}`} title={col.key ? undefined : 'Name this column first'}>
             <input
               type="checkbox"
               checked={isFilterCol}
-              onChange={(e) => onSectionChange({ ...section, filterKey: e.target.checked ? col.key : undefined })}
+              disabled={!col.key}
+              onChange={(e) => {
+                if (!col.key) return;
+                onSectionChange({ ...section, filterKey: e.target.checked ? col.key : undefined });
+              }}
             />
             Skip empty rows in this column
           </label>
@@ -504,7 +522,7 @@ export function FillInListSectionEditor({ section, onChange, definition }) {
 // delete-then-re-add isn't a capability loss).
 export const SECTION_TYPE_OPTIONS = [
   { value: 'header', label: 'Header', description: 'Company details and top-of-page info like customer/date', build: () => ({ type: 'header', companyName: '', formatNo: '', revNo: '', effDate: '', extraFormatLines: [], logoAsset: null, infoFields: [] }) },
-  { value: 'checklist', label: 'Checklist', description: 'A fixed list of items the inspector marks GO/NG/NA', build: () => ({ type: 'table', mode: 'fixed', title: '', dataKey: '', columns: [], headerHeight: 20, rowHeight: 14, fixedRows: [] }) },
+  { value: 'checklist', label: 'Checklist', description: 'A fixed list of items the inspector marks GO/NG/NA', build: () => ({ type: 'table', mode: 'fixed', title: '', dataKey: '', columns: CHECKLIST_COLUMNS, headerHeight: 20, rowHeight: 14, fixedRows: [] }) },
   { value: 'fillInList', label: 'Fill-in list', description: 'A list the inspector adds rows to, like serial numbers', build: () => ({ type: 'table', mode: 'repeatable', title: '', dataKey: '', columns: [], headerHeight: 20, rowHeight: 14, filterKey: undefined }) },
   { value: 'photo', label: 'Photos', description: 'Space for the inspector to attach photos', build: () => ({ type: 'photo', mode: 'freeform', dataKey: '', label: '', slots: [] }) },
   { value: 'image', label: 'Image', description: 'A single fixed image, like a nameplate', build: () => ({ type: 'image', dataKey: '', width: null, height: 100, title: '', placeholder: null }) },
