@@ -8,6 +8,19 @@ function authHeaders() {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
+// Backend validation errors are normally short human sentences (e.g.
+// "Section 2 is missing a data key"). Anything unusually long or shaped
+// like a stack trace/SQL fragment isn't something a non-technical admin
+// should see verbatim — fall back to a generic message instead.
+function friendlyError(rawMessage) {
+  if (!rawMessage || typeof rawMessage !== 'string') return 'Could not render a preview.';
+  const trimmed = rawMessage.trim();
+  if (trimmed.length > 160 || /\bat\s+\S+\s*\(|SELECT\s|INSERT\s|node_modules/i.test(trimmed)) {
+    return 'Could not render a preview — the template has an issue that needs fixing.';
+  }
+  return trimmed;
+}
+
 // Debounced live preview: POSTs the current definition to the EXISTING,
 // unmodified /preview endpoint (the same one today's "Preview PDF" button
 // already calls) and renders the returned PDF inline via an iframe pointed
@@ -25,12 +38,18 @@ export default function PdiTemplatePreviewPane({ templateId, definition }) {
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    // Aborting on cleanup (both when a newer definition supersedes this
+    // request before it even fires, and on unmount) prevents two things: a
+    // wasted server-side PDF render for a result nobody will see, and a
+    // late-resolving fetch calling setState/creating an un-revokable blob
+    // URL after the component is already gone.
+    const controller = new AbortController();
     debounceRef.current = setTimeout(async () => {
       const thisRequestId = ++requestIdRef.current;
       setLoading(true);
       try {
         const res = await fetch(`${BASE_URL}/api/pdi/admin/templates/${templateId}/preview`, {
-          method: 'POST', headers: authHeaders(), body: JSON.stringify({ definition }),
+          method: 'POST', headers: authHeaders(), body: JSON.stringify({ definition }), signal: controller.signal,
         });
         // A slower-than-expected earlier request landing after a newer one
         // must not clobber the newer result — only the most recent request
@@ -38,7 +57,7 @@ export default function PdiTemplatePreviewPane({ templateId, definition }) {
         if (thisRequestId !== requestIdRef.current) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          setError(body.error || 'Could not render a preview.');
+          setError(friendlyError(body.error));
           return;
         }
         const blob = await res.blob();
@@ -47,13 +66,19 @@ export default function PdiTemplatePreviewPane({ templateId, definition }) {
         currentUrlRef.current = url;
         setPdfUrl(url);
         setError(null);
-      } catch {
+      } catch (err) {
+        // A superseded or unmount-triggered abort is not a real failure —
+        // silently do nothing rather than flashing a false error.
+        if (err.name === 'AbortError') return;
         if (thisRequestId === requestIdRef.current) setError('Could not reach the server to render a preview.');
       } finally {
         if (thisRequestId === requestIdRef.current) setLoading(false);
       }
     }, 800);
-    return () => clearTimeout(debounceRef.current);
+    return () => {
+      clearTimeout(debounceRef.current);
+      controller.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(definition), templateId]);
 
