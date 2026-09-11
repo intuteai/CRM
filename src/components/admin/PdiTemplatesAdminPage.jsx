@@ -5,7 +5,7 @@ import { useNotify } from '../../hooks/useNotify';
 import { labelToKey } from '../../utils/pdiTemplateSlug';
 import {
   FIELD_CLS, ListEditor, AddSectionPicker, SectionEditorFor,
-  sectionTypeOption, sectionCardTitle, ShowKeysContext,
+  sectionTypeOption, sectionCardTitle, ShowKeysContext, sectionLooksFilledIn,
 } from './PdiTemplateSectionEditors';
 import PdiTemplatePreviewPane from './PdiTemplatePreviewPane';
 
@@ -93,6 +93,7 @@ function formatDate(value) {
 function SectionCard({ section, onChange, definition }) {
   const [expanded, setExpanded] = useState(false);
   const typeOption = sectionTypeOption(section);
+  const filledIn = sectionLooksFilledIn(section);
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
       <button
@@ -101,6 +102,10 @@ function SectionCard({ section, onChange, definition }) {
         className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left"
       >
         <div className="flex items-center gap-2 min-w-0">
+          <span
+            className={`w-1.5 h-1.5 rounded-full shrink-0 ${filledIn ? 'bg-green-500' : 'bg-gray-300'}`}
+            title={filledIn ? 'Has content' : 'Still empty'}
+          />
           <span className="text-[10px] font-medium text-gray-500 bg-gray-200 rounded px-1.5 py-0.5 shrink-0">{typeOption?.label || section.type}</span>
           <span className="text-sm font-medium text-gray-800 truncate">{sectionCardTitle(section)}</span>
         </div>

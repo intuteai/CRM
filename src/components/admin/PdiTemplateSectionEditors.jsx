@@ -719,6 +719,30 @@ export function sectionCardTitle(section) {
   return section.title || section.label || sectionTypeOption(section)?.label || 'Section';
 }
 
+// Whether a section looks like it has real authored content yet — distinct
+// from the fill-out form's own isSectionFilled check (which asks whether an
+// INSPECTOR has entered data at fill time); this asks whether the ADMIN has
+// put anything into the section while building the template.
+export function sectionLooksFilledIn(section) {
+  switch (section.type) {
+    case 'header':
+      return Boolean(section.companyName) || (section.infoFields || []).length > 0;
+    case 'table':
+      if (section.mode === 'fixed') return Boolean(section.title) && (section.fixedRows || []).length > 0;
+      return Boolean(section.title) && (section.columns || []).length > 0;
+    case 'photo':
+      return section.mode === 'fixed-slots' ? (section.slots || []).length > 0 : Boolean(section.dataKey);
+    case 'image':
+      return Boolean(section.dataKey);
+    case 'signature':
+      return (section.roles || []).length > 0;
+    case 'text':
+      return Boolean(section.dataKey);
+    default:
+      return false;
+  }
+}
+
 export function AddSectionPicker({ onAdd }) {
   const [open, setOpen] = useState(false);
   if (!open) {
