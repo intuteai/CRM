@@ -1,9 +1,17 @@
 // CRM/src/components/admin/PdiTemplateSectionEditors.jsx
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { Plus, Trash2, GripVertical } from 'lucide-react';
 import { labelToKey } from '../../utils/pdiTemplateSlug';
 
 export const FIELD_CLS = 'border border-gray-300 rounded px-2 py-1 text-sm w-full';
+
+// One template-wide toggle controls whether every field's technical key is
+// visible/editable, replacing what used to be a separate "Advanced" link
+// per field (dozens of them across one template). LabeledKeyField reads
+// this directly via Context rather than taking a prop, so none of the
+// section-editor functions between TemplateEditor and LabeledKeyField need
+// to know this setting exists or thread it through their own props.
+export const ShowKeysContext = createContext(false);
 
 // Walks a template definition and collects every dataKey/key currently in
 // use, across every page and section — dataKeys must be unique across the
@@ -43,7 +51,7 @@ export function collectAllKeys(definition) {
 // field would immediately "collide" with its own old key and get a
 // spurious _2 suffix. `onChange` is called with `{ label, key }`.
 export function LabeledKeyField({ label, keyValue, usedKeysExcludingSelf, onChange, placeholder }) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const showKeys = useContext(ShowKeysContext);
   return (
     <div>
       <input
@@ -55,14 +63,7 @@ export function LabeledKeyField({ label, keyValue, usedKeysExcludingSelf, onChan
           onChange({ label: newLabel, key: labelToKey(newLabel, usedKeysExcludingSelf) });
         }}
       />
-      <button
-        type="button"
-        onClick={() => setShowAdvanced((s) => !s)}
-        className="text-[11px] text-gray-400 hover:text-gray-600 mt-0.5"
-      >
-        {showAdvanced ? 'Hide key' : 'Advanced'}
-      </button>
-      {showAdvanced && (
+      {showKeys && (
         <input
           className={FIELD_CLS + ' mt-1 text-xs text-gray-500'}
           placeholder="key"

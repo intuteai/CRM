@@ -5,7 +5,7 @@ import { useNotify } from '../../hooks/useNotify';
 import { labelToKey } from '../../utils/pdiTemplateSlug';
 import {
   FIELD_CLS, ListEditor, AddSectionPicker, SectionEditorFor,
-  sectionTypeOption, sectionCardTitle,
+  sectionTypeOption, sectionCardTitle, ShowKeysContext,
 } from './PdiTemplateSectionEditors';
 import PdiTemplatePreviewPane from './PdiTemplatePreviewPane';
 
@@ -119,6 +119,7 @@ function TemplateEditor({ template, onClose, onSaved }) {
   const [name, setName] = useState(template.name);
   const [definition, setDefinition] = useState(() => withSectionUiKeys(template.definition));
   const [saving, setSaving] = useState(false);
+  const [showKeys, setShowKeys] = useState(false);
   const { notifySuccess, notifyError } = useNotify();
 
   const save = async (statusPath) => {
@@ -152,11 +153,16 @@ function TemplateEditor({ template, onClose, onSaved }) {
   };
 
   return (
+    <ShowKeysContext.Provider value={showKeys}>
     <div className="flex gap-4 items-start" style={{ minHeight: '70vh' }}>
       <div className="flex-1 min-w-0 space-y-4">
         <div className="flex items-center gap-3">
           <input className={FIELD_CLS + ' text-lg font-semibold'} value={name} onChange={(e) => setName(e.target.value)} />
           <span className="text-xs text-gray-400 shrink-0">id: {template.id}</span>
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0 ml-auto cursor-pointer">
+            <input type="checkbox" checked={showKeys} onChange={(e) => setShowKeys(e.target.checked)} />
+            Show technical keys
+          </label>
         </div>
         <div className="space-y-4">
           {definition.pages.map((page, i) => (
@@ -193,6 +199,7 @@ function TemplateEditor({ template, onClose, onSaved }) {
         <PdiTemplatePreviewPane templateId={template.id} definition={definition} />
       </div>
     </div>
+    </ShowKeysContext.Provider>
   );
 }
 
