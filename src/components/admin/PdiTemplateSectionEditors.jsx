@@ -1,6 +1,6 @@
 // CRM/src/components/admin/PdiTemplateSectionEditors.jsx
 import { createContext, useContext, useState } from 'react';
-import { Plus, Trash2, GripVertical } from 'lucide-react';
+import { Plus, Trash2, GripVertical, FileText, CheckSquare, Table, Camera, Image, PenLine, StickyNote } from 'lucide-react';
 import { labelToKey } from '../../utils/pdiTemplateSlug';
 
 export const FIELD_CLS = 'border border-gray-300 rounded px-2 py-1 text-sm w-full';
@@ -689,13 +689,13 @@ export function FillInListSectionEditor({ section, onChange, definition }) {
 // anyway, so removing the illusion of an in-place change and requiring
 // delete-then-re-add isn't a capability loss).
 export const SECTION_TYPE_OPTIONS = [
-  { value: 'header', label: 'Header', description: 'Company details and top-of-page info like customer/date', build: () => ({ type: 'header', companyName: '', formatNo: '', revNo: '', effDate: '', extraFormatLines: [], logoAsset: null, infoFields: [] }) },
-  { value: 'checklist', label: 'Checklist', description: 'A fixed list of items the inspector marks GO/NG/NA', build: () => ({ type: 'table', mode: 'fixed', title: '', dataKey: '', columns: [ITEM_COLUMN, RESULT_COLUMN], headerHeight: 20, rowHeight: 14, fixedRows: [] }) },
-  { value: 'fillInList', label: 'Fill-in list', description: 'A list the inspector adds rows to, like serial numbers', build: () => ({ type: 'table', mode: 'repeatable', title: '', dataKey: '', columns: [], headerHeight: 20, rowHeight: 14, filterKey: undefined }) },
-  { value: 'photo', label: 'Photos', description: 'Space for the inspector to attach photos', build: () => ({ type: 'photo', mode: 'freeform', dataKey: '', label: '', slots: [] }) },
-  { value: 'image', label: 'Image', description: 'A single fixed image, like a nameplate', build: () => ({ type: 'image', dataKey: '', width: null, height: 100, title: '', placeholder: null }) },
-  { value: 'signature', label: 'Signatures', description: 'Sign-off name fields', build: () => ({ type: 'signature', roles: [] }) },
-  { value: 'notes', label: 'Notes', description: 'A free-text remarks box', build: () => ({ type: 'text', label: '', dataKey: '', default: '' }) },
+  { value: 'header', label: 'Header', icon: FileText, example: 'e.g. company name, customer, date', build: () => ({ type: 'header', companyName: '', formatNo: '', revNo: '', effDate: '', extraFormatLines: [], logoAsset: null, infoFields: [] }) },
+  { value: 'checklist', label: 'Checklist', icon: CheckSquare, example: 'e.g. "Winding Check — GO/NG/NA"', build: () => ({ type: 'table', mode: 'fixed', title: '', dataKey: '', columns: [ITEM_COLUMN, RESULT_COLUMN], headerHeight: 20, rowHeight: 14, fixedRows: [] }) },
+  { value: 'fillInList', label: 'Fill-in list', icon: Table, example: 'e.g. a growing list of serial numbers', build: () => ({ type: 'table', mode: 'repeatable', title: '', dataKey: '', columns: [], headerHeight: 20, rowHeight: 14, filterKey: undefined }) },
+  { value: 'photo', label: 'Photos', icon: Camera, example: 'e.g. nameplate photo, damage photos', build: () => ({ type: 'photo', mode: 'freeform', dataKey: '', label: '', slots: [] }) },
+  { value: 'image', label: 'Image', icon: Image, example: 'e.g. a fixed reference image', build: () => ({ type: 'image', dataKey: '', width: null, height: 100, title: '', placeholder: null }) },
+  { value: 'signature', label: 'Signatures', icon: PenLine, example: 'e.g. "Inspected By ___________"', build: () => ({ type: 'signature', roles: [] }) },
+  { value: 'notes', label: 'Notes', icon: StickyNote, example: 'e.g. a free-text remarks box', build: () => ({ type: 'text', label: '', dataKey: '', default: '' }) },
 ];
 
 // A section's displayed type-badge/name in the picker and on its collapsed
@@ -732,17 +732,25 @@ export function AddSectionPicker({ onAdd }) {
   }
   return (
     <div className="border border-gray-200 rounded-lg p-3 space-y-1">
-      {SECTION_TYPE_OPTIONS.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => { onAdd(opt.build()); setOpen(false); }}
-          className="w-full text-left px-3 py-2 rounded hover:bg-amber-50 flex flex-col"
-        >
-          <span className="text-sm font-medium text-gray-800">{opt.label}</span>
-          <span className="text-xs text-gray-500">{opt.description}</span>
-        </button>
-      ))}
+      {SECTION_TYPE_OPTIONS.map((opt) => {
+        const Icon = opt.icon;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => { onAdd(opt.build()); setOpen(false); }}
+            className="w-full text-left px-3 py-2 rounded hover:bg-amber-50 flex items-center gap-3"
+          >
+            <span className="shrink-0 w-8 h-8 rounded bg-amber-100 text-amber-700 flex items-center justify-center">
+              <Icon size={16} />
+            </span>
+            <span className="flex flex-col">
+              <span className="text-sm font-medium text-gray-800">{opt.label}</span>
+              <span className="text-xs text-gray-500">{opt.example}</span>
+            </span>
+          </button>
+        );
+      })}
       <button type="button" onClick={() => setOpen(false)} className="w-full text-center text-xs text-gray-400 pt-1">
         Cancel
       </button>
