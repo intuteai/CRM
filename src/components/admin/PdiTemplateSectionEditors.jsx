@@ -170,9 +170,9 @@ export function HeaderSectionEditor({ section, onChange, definition }) {
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
         <input className={FIELD_CLS} placeholder="Company name" value={section.companyName} onChange={(e) => onChange({ ...section, companyName: e.target.value })} />
-        <input className={FIELD_CLS} placeholder="Format No." value={section.formatNo} onChange={(e) => onChange({ ...section, formatNo: e.target.value })} />
-        <input className={FIELD_CLS} placeholder="Rev No." value={section.revNo} onChange={(e) => onChange({ ...section, revNo: e.target.value })} />
-        <input className={FIELD_CLS} placeholder="Eff. Date" value={section.effDate} onChange={(e) => onChange({ ...section, effDate: e.target.value })} />
+        <input className={FIELD_CLS} placeholder="Document Number (e.g. FMT-QA-01)" value={section.formatNo} onChange={(e) => onChange({ ...section, formatNo: e.target.value })} />
+        <input className={FIELD_CLS} placeholder="Revision Number (e.g. 1)" value={section.revNo} onChange={(e) => onChange({ ...section, revNo: e.target.value })} />
+        <input className={FIELD_CLS} placeholder="Effective Date (e.g. 09-Sep-2026)" value={section.effDate} onChange={(e) => onChange({ ...section, effDate: e.target.value })} />
       </div>
       <div>
         <label className="text-xs font-medium text-gray-600">Detail rows (shown at the top of the page, e.g. Customer / Date)</label>
