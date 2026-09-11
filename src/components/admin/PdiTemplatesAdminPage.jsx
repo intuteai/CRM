@@ -134,6 +134,20 @@ function PageEditor({ page, onChange, onRemove, definition }) {
   );
 }
 
+// A soft, non-blocking nudge -- never blocks Save or Publish, and
+// disappears on its own once the condition it names is no longer true (no
+// dismiss state to track). Checked across the WHOLE template (every page),
+// not per-page, since a real PDI report's typical pieces (a header, at
+// least one checklist, a signature) don't need to all live on one page.
+function missingTypicalSections(definition) {
+  const allSections = (definition.pages || []).flatMap((p) => p.sections || []);
+  const missing = [];
+  if (!allSections.some((s) => s.type === 'header')) missing.push('a Header');
+  if (!allSections.some((s) => s.type === 'table' && s.mode === 'fixed')) missing.push('at least one Checklist');
+  if (!allSections.some((s) => s.type === 'signature')) missing.push('Signatures');
+  return missing;
+}
+
 function TemplateEditor({ template, onClose, onSaved }) {
   const [name, setName] = useState(template.name);
   const [definition, setDefinition] = useState(() => withSectionUiKeys(template.definition));
@@ -183,6 +197,9 @@ function TemplateEditor({ template, onClose, onSaved }) {
             Show technical keys
           </label>
         </div>
+        <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2">
+          Add sections to match your paper form. Changes save automatically and the preview updates on the right.
+        </p>
         <div className="space-y-4">
           {definition.pages.map((page, i) => (
             <div key={i} className="border border-gray-300 rounded p-3">
@@ -199,6 +216,11 @@ function TemplateEditor({ template, onClose, onSaved }) {
               />
             </div>
           ))}
+          {missingTypicalSections(definition).length > 0 && (
+            <p className="text-xs text-gray-400">
+              Most PDI templates include {missingTypicalSections(definition).join(', ')}.
+            </p>
+          )}
           <button
             type="button"
             onClick={() => setDefinition({ ...definition, pages: [...definition.pages, { sections: [] }] })}
