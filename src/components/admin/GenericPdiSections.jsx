@@ -65,6 +65,37 @@ export function makeEmptyRow(columns) {
   return row;
 }
 
+// Renders a text/number/dropdown input for one editable (non-constant,
+// non-GO/NG/NA) table cell — shared between FixedTableSection and
+// RepeatableTableSection so a fix here covers both call sites at once.
+// Handles two data-quality cases the authoring editors don't prevent:
+// an admin can delete every dropdown option down to zero, and can edit a
+// column's options after inspectors have already saved values that are no
+// longer in that list. Neither case should silently corrupt or hide data.
+function EditableCellInput({ value, format, options, onChange }) {
+  if (format === 'dropdown') {
+    // A blank-string option is never meaningfully different from "nothing
+    // selected" — the placeholder already covers that — so filter it out.
+    // Without this, a freshly-created dropdown column (which starts with
+    // one blank option) would render a second, selectable option visually
+    // identical to the disabled placeholder.
+    const cleanOptions = (options || []).filter((opt) => opt !== '');
+    // If the currently-saved value isn't in the (cleaned) options list —
+    // the admin edited/removed it after this value was already saved —
+    // keep it visible and selected rather than silently blanking the
+    // select out from under the inspector's already-entered answer.
+    const effectiveOptions = value && !cleanOptions.includes(value) ? [...cleanOptions, value] : cleanOptions;
+    const hasOptions = effectiveOptions.length > 0;
+    return (
+      <select className={INPUT_CLS} value={value} onChange={onChange} disabled={!hasOptions}>
+        <option value="" disabled>{hasOptions ? 'Select…' : 'No options configured'}</option>
+        {effectiveOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+      </select>
+    );
+  }
+  return <input type={format === 'number' ? 'number' : 'text'} className={INPUT_CLS} value={value} onChange={onChange} />;
+}
+
 /* ── Section renderers — one per type, mirroring CRM_BACKEND's renderer.js drawers ── */
 
 function HeaderSection({ section, form, setField }) {
@@ -131,19 +162,12 @@ function RepeatableTableSection({ section, form, addRow, removeRow, setCell }) {
                   if (!c.cell || c.cell.source === 'row') {
                     return (
                       <td key={c.key} className="py-2 px-2 border border-gray-100">
-                        {c.format === 'dropdown' ? (
-                          <select className={INPUT_CLS} value={row[c.key] || ''} onChange={(e) => setCell(section.dataKey, idx, c.key, e.target.value)}>
-                            <option value="" disabled>Select…</option>
-                            {(c.options || []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                          </select>
-                        ) : (
-                          <input
-                            type={c.format === 'number' ? 'number' : 'text'}
-                            className={INPUT_CLS}
-                            value={row[c.key] || ''}
-                            onChange={(e) => setCell(section.dataKey, idx, c.key, e.target.value)}
-                          />
-                        )}
+                        <EditableCellInput
+                          value={row[c.key] || ''}
+                          format={c.format}
+                          options={c.options}
+                          onChange={(e) => setCell(section.dataKey, idx, c.key, e.target.value)}
+                        />
                       </td>
                     );
                   }
@@ -214,16 +238,11 @@ function FixedTableSection({ section, form, setCell }) {
                             );
                           })}
                         </div>
-                      ) : c.format === 'dropdown' ? (
-                        <select className={INPUT_CLS} value={value} onChange={(e) => setCell(section.dataKey, row.key, c.cell.subfield, e.target.value)}>
-                          <option value="" disabled>Select…</option>
-                          {(c.options || []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
                       ) : (
-                        <input
-                          type={c.format === 'number' ? 'number' : 'text'}
-                          className={INPUT_CLS}
+                        <EditableCellInput
                           value={value}
+                          format={c.format}
+                          options={c.options}
                           onChange={(e) => setCell(section.dataKey, row.key, c.cell.subfield, e.target.value)}
                         />
                       )}

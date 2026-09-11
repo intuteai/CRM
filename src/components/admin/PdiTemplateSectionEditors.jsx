@@ -416,7 +416,10 @@ function ColumnFormatFields({ col, editableSource, onUpdateCol }) {
           if (next === 'fixed') {
             onUpdateCol({ ...col, cell: { source: 'constant', value: col.cell?.source === 'constant' ? col.cell.value : '' }, format: undefined, options: undefined });
           } else if (next === 'dropdown') {
-            onUpdateCol({ ...col, cell: editableSource(col), format: 'dropdown', options: col.options && col.options.length ? col.options : [''] });
+            // Seed with a real, non-blank option rather than [''] -- a blank
+            // seed rendered in the fill-out form as a second, selectable
+            // option visually identical to the "Select…" placeholder.
+            onUpdateCol({ ...col, cell: editableSource(col), format: 'dropdown', options: col.options && col.options.length ? col.options : ['Option 1'] });
           } else if (next === 'number') {
             onUpdateCol({ ...col, cell: editableSource(col), format: 'number', options: undefined });
           } else {
