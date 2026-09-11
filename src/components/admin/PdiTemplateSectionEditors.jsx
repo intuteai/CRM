@@ -456,10 +456,9 @@ function ColumnFormatFields({ col, editableSource, onUpdateCol }) {
 // repositioned relative to Item/Result (matching real forms like the
 // hand-coded "General" template, where a constant "Specified" column sits
 // between the two) — they just can't be deleted. Shared with
-// SECTION_TYPE_OPTIONS' checklist build() (Task 5, later — not this task)
-// so a freshly-added, never-yet-edited Checklist section already has valid
-// columns from the moment it's created — not only after the admin's first
-// edit.
+// SECTION_TYPE_OPTIONS' checklist build() below so a freshly-added,
+// never-yet-edited Checklist section already has valid columns from the
+// moment it's created — not only after the admin's first edit.
 const ITEM_COLUMN = { key: 'item', label: 'Item', cell: { source: 'row' } };
 const RESULT_COLUMN = { key: 'result', label: 'Result', cell: { source: 'sectionData', subfield: 'measured', default: 'GO' } };
 
