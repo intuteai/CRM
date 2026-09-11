@@ -49,6 +49,25 @@ function withSectionUiKeys(definition) {
   };
 }
 
+// Strips _uiKey before a definition is copied into a NEW template row (via
+// Duplicate). Without this, a clone inherits the source's exact _uiKey
+// strings verbatim -- withSectionUiKeys's own "section._uiKey ? section : "
+// check then treats them as already-stamped and never mints fresh ones,
+// silently defeating the "every section gets a stable id of its own"
+// guarantee the moment two DIFFERENT template rows share identical section
+// identity tokens. Harmless today (React keys are scoped per open editor
+// instance), but a leaky, easy-to-forget invariant to leave unstripped.
+function stripUiKeys(definition) {
+  return {
+    ...definition,
+    pages: (definition.pages || []).map((page) => ({
+      ...page,
+      // eslint-disable-next-line no-unused-vars
+      sections: (page.sections || []).map(({ _uiKey, ...section }) => section),
+    })),
+  };
+}
+
 const STATUS_STYLES = {
   draft: 'bg-gray-100 text-gray-600',
   active: 'bg-green-100 text-green-700',
@@ -254,23 +273,39 @@ export default function PdiTemplatesAdminPage() {
       const source = await res.json();
       const baseName = `${source.name} (copy)`;
       const baseId = labelToKey(baseName, []);
+      // Strip _uiKey before cloning -- otherwise the copy inherits the
+      // source's exact section-identity tokens, and withSectionUiKeys'
+      // "already stamped, leave it" check never mints fresh ones for what
+      // is now a different template row.
+      const definition = stripUiKeys(source.definition);
       const attempt = async (id) => {
         const createRes = await fetch(`${BASE_URL}/api/pdi/admin/templates`, {
           method: 'POST', headers: authHeaders(),
-          body: JSON.stringify({ id, name: baseName, definition: source.definition }),
+          body: JSON.stringify({ id, name: baseName, definition }),
         });
         const body = await createRes.json();
         return { ok: createRes.ok, status: createRes.status, body };
       };
+
       let result = await attempt(baseId);
-      // Duplicating the exact same template twice in a row would otherwise
-      // 409 every time (both attempts derive the identical "(copy)" name/id)
-      // -- one silent retry with a "-2" suffix covers that without bothering
-      // the admin, matching the same pattern createTemplate already uses.
-      if (!result.ok && result.status === 409) {
-        result = await attempt(`${baseId}-2`);
+      // Every duplicate of the SAME source derives the identical "(copy)"
+      // name/id, so a second, third, fourth... duplicate all collide with
+      // the ones before it. Keep incrementing the suffix until a free id is
+      // found (capped well above any realistic number of copies of one
+      // template) instead of only covering the first collision and then
+      // surfacing a confusing raw "id already exists" error on the third.
+      let suffix = 2;
+      while (!result.ok && result.status === 409 && suffix <= 20) {
+        result = await attempt(`${baseId}-${suffix}`);
+        suffix += 1;
       }
-      if (!result.ok) throw new Error(result.body.error || 'Duplicate failed');
+      if (!result.ok) {
+        throw new Error(
+          result.status === 409
+            ? 'Could not duplicate — too many copies of this template already exist. Rename or delete one first.'
+            : (result.body.error || 'Duplicate failed'),
+        );
+      }
       notifySuccess('Template duplicated.');
       await refresh();
       setEditing(result.body);
