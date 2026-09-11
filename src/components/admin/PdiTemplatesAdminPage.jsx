@@ -1,6 +1,6 @@
 // CRM/src/components/admin/PdiTemplatesAdminPage.jsx
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Trash2, Upload, Archive, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Upload, Archive, ChevronDown, ChevronUp, Copy } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 import { labelToKey } from '../../utils/pdiTemplateSlug';
 import {
@@ -247,10 +247,43 @@ export default function PdiTemplatesAdminPage() {
     }
   };
 
+  const duplicateTemplate = async (t) => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/pdi/admin/templates/${t.id}`, { headers: authHeaders() });
+      if (!res.ok) throw new Error('Could not load template to duplicate');
+      const source = await res.json();
+      const baseName = `${source.name} (copy)`;
+      const baseId = labelToKey(baseName, []);
+      const attempt = async (id) => {
+        const createRes = await fetch(`${BASE_URL}/api/pdi/admin/templates`, {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify({ id, name: baseName, definition: source.definition }),
+        });
+        const body = await createRes.json();
+        return { ok: createRes.ok, status: createRes.status, body };
+      };
+      let result = await attempt(baseId);
+      // Duplicating the exact same template twice in a row would otherwise
+      // 409 every time (both attempts derive the identical "(copy)" name/id)
+      // -- one silent retry with a "-2" suffix covers that without bothering
+      // the admin, matching the same pattern createTemplate already uses.
+      if (!result.ok && result.status === 409) {
+        result = await attempt(`${baseId}-2`);
+      }
+      if (!result.ok) throw new Error(result.body.error || 'Duplicate failed');
+      notifySuccess('Template duplicated.');
+      await refresh();
+      setEditing(result.body);
+    } catch (err) {
+      notifyError(err.message);
+    }
+  };
+
   const [creatingName, setCreatingName] = useState('');
   const [creatingIdOverride, setCreatingIdOverride] = useState(null); // null = auto-generated; string once the admin edits it directly
   const [showIdAdvanced, setShowIdAdvanced] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [showBlankCreate, setShowBlankCreate] = useState(false);
   // The id that most recently 409'd, so a Name edit that follows can tell
   // "admin hasn't touched the id since the failure" (resume auto-deriving
   // from the new name) apart from "admin deliberately typed this id"
@@ -339,29 +372,40 @@ export default function PdiTemplatesAdminPage() {
           <p className="text-sm text-gray-500 mt-1">Author, publish, and manage the PDI templates end users can fill out and generate.</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow p-4 mb-6">
-          <div className="text-sm font-semibold text-gray-700 mb-3">Create a new template</div>
-          <div className="flex gap-2 items-end flex-wrap">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
-              <input className={FIELD_CLS} value={creatingName} onChange={(e) => handleNameChange(e.target.value)} placeholder="e.g. Acme Motor PDI" />
-              <button type="button" onClick={() => setShowIdAdvanced((s) => !s)} className="text-[11px] text-gray-400 hover:text-gray-600 mt-0.5">
-                {showIdAdvanced ? 'Hide id' : 'Advanced'}
+        {!showBlankCreate ? (
+          <button
+            type="button"
+            onClick={() => setShowBlankCreate(true)}
+            className="text-sm text-gray-400 hover:text-gray-600 mb-6"
+          >
+            + Start a blank template from scratch
+          </button>
+        ) : (
+          <div className="bg-white rounded-xl shadow p-4 mb-6">
+            <div className="text-sm font-semibold text-gray-700 mb-3">Create a blank template</div>
+            <div className="flex gap-2 items-end flex-wrap">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+                <input className={FIELD_CLS} value={creatingName} onChange={(e) => handleNameChange(e.target.value)} placeholder="e.g. Acme Motor PDI" />
+                <button type="button" onClick={() => setShowIdAdvanced((s) => !s)} className="text-[11px] text-gray-400 hover:text-gray-600 mt-0.5">
+                  {showIdAdvanced ? 'Hide id' : 'Advanced'}
+                </button>
+                {showIdAdvanced && (
+                  <input
+                    className={FIELD_CLS + ' mt-1 text-xs text-gray-500'}
+                    placeholder="id (auto-generated from the name if left blank)"
+                    value={creatingIdOverride ?? labelToKey(creatingName.trim(), [])}
+                    onChange={(e) => setCreatingIdOverride(e.target.value)}
+                  />
+                )}
+              </div>
+              <button type="button" disabled={creating} onClick={createTemplate} className="flex items-center gap-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50">
+                <Plus size={16} /> Create
               </button>
-              {showIdAdvanced && (
-                <input
-                  className={FIELD_CLS + ' mt-1 text-xs text-gray-500'}
-                  placeholder="id (auto-generated from the name if left blank)"
-                  value={creatingIdOverride ?? labelToKey(creatingName.trim(), [])}
-                  onChange={(e) => setCreatingIdOverride(e.target.value)}
-                />
-              )}
+              <button type="button" onClick={() => setShowBlankCreate(false)} className="text-sm text-gray-400 px-2 py-2">Cancel</button>
             </div>
-            <button type="button" disabled={creating} onClick={createTemplate} className="flex items-center gap-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50">
-              <Plus size={16} /> New Template
-            </button>
           </div>
-        </div>
+        )}
 
         <div className="bg-white rounded-xl shadow divide-y">
           {!list && <div className="p-6 text-gray-400 text-sm">Loading...</div>}
@@ -378,7 +422,14 @@ export default function PdiTemplatesAdminPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3 shrink-0 ml-4">
-                <button type="button" onClick={() => openEditor(t.id)} className="text-sm text-amber-700 font-medium hover:text-amber-800">Edit</button>
+                <button
+                  type="button"
+                  onClick={() => duplicateTemplate(t)}
+                  className="flex items-center gap-1 text-sm font-medium text-amber-700 border border-amber-300 rounded px-2.5 py-1 hover:bg-amber-50"
+                >
+                  <Copy size={14} /> Duplicate
+                </button>
+                <button type="button" onClick={() => openEditor(t.id)} className="text-sm text-gray-500 hover:text-gray-700">Edit</button>
                 <button
                   type="button"
                   onClick={() => deleteTemplate(t)}
