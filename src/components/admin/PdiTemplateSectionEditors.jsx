@@ -1,6 +1,6 @@
 // CRM/src/components/admin/PdiTemplateSectionEditors.jsx
 import { createContext, useContext, useState } from 'react';
-import { Plus, Trash2, GripVertical, FileText, CheckSquare, Table, Camera, Image, PenLine, StickyNote } from 'lucide-react';
+import { Plus, Trash2, GripVertical, FileText, CheckSquare, Table, Camera, Image as ImageIcon, PenLine, StickyNote } from 'lucide-react';
 import { labelToKey } from '../../utils/pdiTemplateSlug';
 
 export const FIELD_CLS = 'border border-gray-300 rounded px-2 py-1 text-sm w-full';
@@ -692,7 +692,7 @@ export const SECTION_TYPE_OPTIONS = [
   { value: 'checklist', label: 'Checklist', icon: CheckSquare, example: 'e.g. "Winding Check — GO/NG/NA"', build: () => ({ type: 'table', mode: 'fixed', title: '', dataKey: '', columns: [ITEM_COLUMN, RESULT_COLUMN], headerHeight: 20, rowHeight: 14, fixedRows: [] }) },
   { value: 'fillInList', label: 'Fill-in list', icon: Table, example: 'e.g. a growing list of serial numbers', build: () => ({ type: 'table', mode: 'repeatable', title: '', dataKey: '', columns: [], headerHeight: 20, rowHeight: 14, filterKey: undefined }) },
   { value: 'photo', label: 'Photos', icon: Camera, example: 'e.g. nameplate photo, damage photos', build: () => ({ type: 'photo', mode: 'freeform', dataKey: '', label: '', slots: [] }) },
-  { value: 'image', label: 'Image', icon: Image, example: 'e.g. a fixed reference image', build: () => ({ type: 'image', dataKey: '', width: null, height: 100, title: '', placeholder: null }) },
+  { value: 'image', label: 'Image', icon: ImageIcon, example: 'e.g. a fixed reference image', build: () => ({ type: 'image', dataKey: '', width: null, height: 100, title: '', placeholder: null }) },
   { value: 'signature', label: 'Signatures', icon: PenLine, example: 'e.g. "Inspected By ___________"', build: () => ({ type: 'signature', roles: [] }) },
   { value: 'notes', label: 'Notes', icon: StickyNote, example: 'e.g. a free-text remarks box', build: () => ({ type: 'text', label: '', dataKey: '', default: '' }) },
 ];
