@@ -728,10 +728,21 @@ export function sectionLooksFilledIn(section) {
     case 'header':
       return Boolean(section.companyName) || (section.infoFields || []).length > 0;
     case 'table':
-      if (section.mode === 'fixed') return Boolean(section.title) && (section.fixedRows || []).length > 0;
+      if (section.mode === 'fixed') {
+        // A Checklist always has its two locked anchor columns (Item,
+        // Result) even freshly-built — real authoring work is adding a
+        // checklist item OR adding an extra column beyond those two, not
+        // just having columns.length > 0 at all (that's true from creation).
+        return Boolean(section.title) && ((section.fixedRows || []).length > 0 || (section.columns || []).length > 2);
+      }
       return Boolean(section.title) && (section.columns || []).length > 0;
     case 'photo':
-      return section.mode === 'fixed-slots' ? (section.slots || []).length > 0 : Boolean(section.dataKey);
+      // dataKey is required in BOTH photo modes (see PhotoSectionEditor's own
+      // comment) — a fixed-slots section with named slots but no dataKey yet
+      // isn't meaningfully further along than an empty one.
+      return section.mode === 'fixed-slots'
+        ? Boolean(section.dataKey) && (section.slots || []).length > 0
+        : Boolean(section.dataKey);
     case 'image':
       return Boolean(section.dataKey);
     case 'signature':
