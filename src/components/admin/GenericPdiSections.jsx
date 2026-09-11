@@ -131,7 +131,19 @@ function RepeatableTableSection({ section, form, addRow, removeRow, setCell }) {
                   if (!c.cell || c.cell.source === 'row') {
                     return (
                       <td key={c.key} className="py-2 px-2 border border-gray-100">
-                        <input className={INPUT_CLS} value={row[c.key] || ''} onChange={(e) => setCell(section.dataKey, idx, c.key, e.target.value)} />
+                        {c.format === 'dropdown' ? (
+                          <select className={INPUT_CLS} value={row[c.key] || ''} onChange={(e) => setCell(section.dataKey, idx, c.key, e.target.value)}>
+                            <option value="" disabled>Select…</option>
+                            {(c.options || []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                          </select>
+                        ) : (
+                          <input
+                            type={c.format === 'number' ? 'number' : 'text'}
+                            className={INPUT_CLS}
+                            value={row[c.key] || ''}
+                            onChange={(e) => setCell(section.dataKey, idx, c.key, e.target.value)}
+                          />
+                        )}
                       </td>
                     );
                   }
@@ -202,8 +214,18 @@ function FixedTableSection({ section, form, setCell }) {
                             );
                           })}
                         </div>
+                      ) : c.format === 'dropdown' ? (
+                        <select className={INPUT_CLS} value={value} onChange={(e) => setCell(section.dataKey, row.key, c.cell.subfield, e.target.value)}>
+                          <option value="" disabled>Select…</option>
+                          {(c.options || []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
                       ) : (
-                        <input className={INPUT_CLS} value={value} onChange={(e) => setCell(section.dataKey, row.key, c.cell.subfield, e.target.value)} />
+                        <input
+                          type={c.format === 'number' ? 'number' : 'text'}
+                          className={INPUT_CLS}
+                          value={value}
+                          onChange={(e) => setCell(section.dataKey, row.key, c.cell.subfield, e.target.value)}
+                        />
                       )}
                     </td>
                   );
