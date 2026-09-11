@@ -148,6 +148,14 @@ function missingTypicalSections(definition) {
   return missing;
 }
 
+// Plain `.join(', ')` reads as a list trailing off with no "and" before the
+// last item ("a Header, at least one Checklist, Signatures.") -- this joins
+// the same way a person would write the sentence out loud.
+function joinWithAnd(items) {
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
 function TemplateEditor({ template, onClose, onSaved }) {
   const [name, setName] = useState(template.name);
   const [definition, setDefinition] = useState(() => withSectionUiKeys(template.definition));
@@ -185,6 +193,8 @@ function TemplateEditor({ template, onClose, onSaved }) {
     setDefinition({ ...definition, pages: definition.pages.filter((_, idx) => idx !== i) });
   };
 
+  const missingSections = missingTypicalSections(definition);
+
   return (
     <ShowKeysContext.Provider value={showKeys}>
     <div className="flex gap-4 items-start" style={{ minHeight: '70vh' }}>
@@ -216,9 +226,9 @@ function TemplateEditor({ template, onClose, onSaved }) {
               />
             </div>
           ))}
-          {missingTypicalSections(definition).length > 0 && (
+          {missingSections.length > 0 && (
             <p className="text-xs text-gray-400">
-              Most PDI templates include {missingTypicalSections(definition).join(', ')}.
+              Most PDI templates include {joinWithAnd(missingSections)}.
             </p>
           )}
           <button
