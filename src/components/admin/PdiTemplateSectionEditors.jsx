@@ -573,7 +573,6 @@ export function ChecklistSectionEditor({ section, onChange, definition }) {
 
 function FillInListColumnRow({ col, section, excludingThisCol, update, onSectionChange }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const isConstant = col.cell?.source === 'constant';
   // Every not-yet-named column shares the same empty-string key, so without
   // the Boolean(col.key) guard, checking "skip empty rows" on ANY blank
   // column would make every other blank column appear checked too.
@@ -612,23 +611,12 @@ function FillInListColumnRow({ col, section, excludingThisCol, update, onSection
         {showAdvanced ? 'Hide advanced' : 'Advanced'}
       </button>
       {showAdvanced && (
-        <div className="space-y-1 pl-2 border-l-2 border-gray-100">
-          <label className="flex items-center gap-1.5 text-xs text-gray-600">
-            <input
-              type="checkbox"
-              checked={isConstant}
-              onChange={(e) => update({ ...col, cell: e.target.checked ? { source: 'constant', value: '' } : { source: 'row' } })}
-            />
-            Always show this value
-          </label>
-          {isConstant && (
-            <input
-              className={FIELD_CLS}
-              placeholder="Value shown in every row"
-              value={col.cell.value}
-              onChange={(e) => update({ ...col, cell: { source: 'constant', value: e.target.value } })}
-            />
-          )}
+        <div className="space-y-1.5 pl-2 border-l-2 border-gray-100">
+          <ColumnFormatFields
+            col={col}
+            editableSource={() => ({ source: 'row' })}
+            onUpdateCol={update}
+          />
           <label className={`flex items-center gap-1.5 text-xs ${col.key ? 'text-gray-600' : 'text-gray-300'}`} title={col.key ? undefined : 'Name this column first'}>
             <input
               type="checkbox"
@@ -639,7 +627,7 @@ function FillInListColumnRow({ col, section, excludingThisCol, update, onSection
                 onSectionChange({ ...section, filterKey: e.target.checked ? col.key : undefined });
               }}
             />
-            Skip empty rows in this column
+            Only print this row once it has a value
           </label>
         </div>
       )}
