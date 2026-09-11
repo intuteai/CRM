@@ -407,6 +407,7 @@ function ColumnFormatFields({ col, editableSource, onUpdateCol }) {
   const format = columnFormat(col);
   return (
     <div className="space-y-1.5">
+      <label className="text-[10px] font-medium text-gray-500 block">Column type</label>
       <select
         className={FIELD_CLS}
         value={format}
