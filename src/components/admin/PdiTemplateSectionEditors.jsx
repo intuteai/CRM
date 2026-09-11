@@ -663,6 +663,14 @@ export function FillInListSectionEditor({ section, onChange, definition }) {
         }}
         addLabel="Add column"
         newRow={() => ({ key: '', label: '', cell: { source: 'row' } })}
+        // FillInListColumnRow holds local per-column state (showAdvanced) --
+        // without a stable identity, dragging a column to a new array
+        // position leaves that state behind on whichever column now
+        // occupies its old slot instead of following it. A column's key is
+        // stable once named, which covers the case that actually matters
+        // (a column an admin is actively naming/expanding); only
+        // still-unnamed columns share the index fallback, same as before.
+        getItemKey={(col, i) => col.key || i}
         renderRow={(col, update) => {
           // Same sibling-collision pattern as ChecklistSectionEditor/
           // PhotoSectionEditor: excludingThisSection already lacks every
