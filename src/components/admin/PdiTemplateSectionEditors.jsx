@@ -90,7 +90,7 @@ export function LabeledKeyField({ label, keyValue, usedKeysExcludingSelf, onChan
 // row's own local state (not its data) silently jumps onto whatever row
 // moved into that slot. Passing a stable identity (independent of array
 // position) avoids that.
-export function ListEditor({ items, onChange, renderRow, newRow, addLabel, hideAddButton, getItemKey }) {
+export function ListEditor({ items, onChange, renderRow, newRow, addLabel, hideAddButton, getItemKey, canRemove }) {
   const [dragIndex, setDragIndex] = useState(null);
   const [overIndex, setOverIndex] = useState(null);
 
@@ -111,28 +111,37 @@ export function ListEditor({ items, onChange, renderRow, newRow, addLabel, hideA
 
   return (
     <div className="space-y-2">
-      {items.map((item, i) => (
-        <div
-          key={getItemKey ? getItemKey(item, i) : i}
-          draggable
-          onDragStart={(e) => { setDragIndex(i); e.dataTransfer.effectAllowed = 'move'; }}
-          onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== i) setOverIndex(i); }}
-          onDragLeave={() => setOverIndex((cur) => (cur === i ? null : cur))}
-          onDrop={handleDrop(i)}
-          onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
-          className={`flex items-center gap-2 border rounded p-2 transition-colors ${
-            overIndex === i ? 'border-amber-400 bg-amber-50' : 'border-gray-200'
-          } ${dragIndex === i ? 'opacity-40' : ''}`}
-        >
-          <span className="text-gray-300 cursor-grab shrink-0" title="Drag to reorder">
-            <GripVertical size={14} />
-          </span>
-          <div className="flex-1">{renderRow(item, (updated) => onChange(items.map((it, idx) => (idx === i ? updated : it))))}</div>
-          <button type="button" onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-700 shrink-0">
-            <Trash2 size={16} />
-          </button>
-        </div>
-      ))}
+      {items.map((item, i) => {
+        // Optional: some lists have "anchor" rows that can be reordered but
+        // never deleted (e.g. Checklist's Item/Result columns). Defaults to
+        // always-removable so every pre-existing ListEditor call site (none
+        // of which pass canRemove) behaves exactly as before.
+        const removable = canRemove ? canRemove(item, i) : true;
+        return (
+          <div
+            key={getItemKey ? getItemKey(item, i) : i}
+            draggable
+            onDragStart={(e) => { setDragIndex(i); e.dataTransfer.effectAllowed = 'move'; }}
+            onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== i) setOverIndex(i); }}
+            onDragLeave={() => setOverIndex((cur) => (cur === i ? null : cur))}
+            onDrop={handleDrop(i)}
+            onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
+            className={`flex items-center gap-2 border rounded p-2 transition-colors ${
+              overIndex === i ? 'border-amber-400 bg-amber-50' : 'border-gray-200'
+            } ${dragIndex === i ? 'opacity-40' : ''}`}
+          >
+            <span className="text-gray-300 cursor-grab shrink-0" title="Drag to reorder">
+              <GripVertical size={14} />
+            </span>
+            <div className="flex-1">{renderRow(item, (updated) => onChange(items.map((it, idx) => (idx === i ? updated : it))))}</div>
+            {removable && (
+              <button type="button" onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-700 shrink-0">
+                <Trash2 size={16} />
+              </button>
+            )}
+          </div>
+        );
+      })}
       {!hideAddButton && (
         <button
           type="button"
@@ -362,32 +371,114 @@ export function NotesSectionEditor({ section, onChange, definition }) {
   );
 }
 
-// The Checklist editor's hard-coded, non-configurable column shape. Shared
-// between ChecklistSectionEditor (which rewrites it on every edit, below)
-// and SECTION_TYPE_OPTIONS' checklist build() (further down this file) so a
-// freshly-added, never-yet-edited Checklist section already has valid
-// columns from the moment it's created via the picker — not only after the
-// admin's first title/row edit. If these two ever used separately-written
-// copies of this shape, they could drift.
-const CHECKLIST_COLUMNS = [
-  { key: 'item', label: 'Item', cell: { source: 'row' } },
-  { key: 'result', label: 'Result', cell: { source: 'sectionData', subfield: 'measured', default: 'GO' } },
+// The four column "types" an admin can choose for an editable (non-fixed)
+// column, shared between Checklist's extra columns and every Fill-in list
+// column. "Fixed value" isn't really a distinct dialect concept — it's just
+// cell.source === 'constant' — but presenting it as a 4th type alongside
+// Text/Number/Dropdown reads far more plainly than a separate checkbox next
+// to a 3-way type picker would.
+const COLUMN_FORMATS = [
+  { value: 'text', label: 'Text (inspector types it per row)' },
+  { value: 'fixed', label: 'Fixed value (same on every row)' },
+  { value: 'number', label: 'Number (inspector types it per row)' },
+  { value: 'dropdown', label: 'Dropdown (inspector picks from your list)' },
 ];
 
-// Produces { type: 'table', mode: 'fixed', ... }. The result column is
-// ALWAYS exactly GO/NG/NA — this is deliberately NOT configurable. Do not
-// add an "edit options" UI even though it looks like an obvious
-// enhancement: renderer.js and GenericPdiSections.jsx's FixedTableSection
-// both hard-code recognition of exactly ['GO','NG','NA'] (case-insensitive)
-// to decide whether to draw a 3-way toggle at all — a template with
-// different option labels would silently fall back to a plain text box
-// downstream with no toggle, which the editor gives no indication of.
+// Derives which of the four format choices a column is currently in.
+// 'fixed' is detected from cell.source alone (a constant column's format
+// hint, if any, is meaningless — it's never edited by the inspector at
+// authoring-fill time, so number/dropdown validation doesn't apply to it).
+function columnFormat(col) {
+  if (col.cell?.source === 'constant') return 'fixed';
+  if (col.format === 'number') return 'number';
+  if (col.format === 'dropdown') return 'dropdown';
+  return 'text';
+}
+
+// Shared column-type controls used by both ChecklistSectionEditor's extra
+// columns and FillInListColumnRow (Task 4). `editableSource(col)` supplies
+// the correct cell shape for a non-fixed column in the CALLER's context —
+// Checklist's rows are template-fixed, so its editable columns must read
+// from `sectionData[fixedRow.key][columnKey]` (matching the existing,
+// locked Result column's own shape); Fill-in list's rows are
+// inspector-added, so its columns read from `row[columnKey]` directly.
+// This component never assumes either shape itself.
+function ColumnFormatFields({ col, editableSource, onUpdateCol }) {
+  const format = columnFormat(col);
+  return (
+    <div className="space-y-1.5">
+      <select
+        className={FIELD_CLS}
+        value={format}
+        onChange={(e) => {
+          const next = e.target.value;
+          if (next === 'fixed') {
+            onUpdateCol({ ...col, cell: { source: 'constant', value: col.cell?.source === 'constant' ? col.cell.value : '' }, format: undefined, options: undefined });
+          } else if (next === 'dropdown') {
+            onUpdateCol({ ...col, cell: editableSource(col), format: 'dropdown', options: col.options && col.options.length ? col.options : [''] });
+          } else if (next === 'number') {
+            onUpdateCol({ ...col, cell: editableSource(col), format: 'number', options: undefined });
+          } else {
+            onUpdateCol({ ...col, cell: editableSource(col), format: undefined, options: undefined });
+          }
+        }}
+      >
+        {COLUMN_FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+      </select>
+      {format === 'fixed' && (
+        <input
+          className={FIELD_CLS}
+          placeholder="Value shown in every row"
+          value={col.cell.value}
+          onChange={(e) => onUpdateCol({ ...col, cell: { source: 'constant', value: e.target.value } })}
+        />
+      )}
+      {format === 'dropdown' && (
+        <ListEditor
+          items={col.options || []}
+          onChange={(options) => onUpdateCol({ ...col, options })}
+          addLabel="Add option"
+          newRow={() => ''}
+          renderRow={(opt, updateOpt) => (
+            <input className={FIELD_CLS} placeholder="Option text" value={opt} onChange={(e) => updateOpt(e.target.value)} />
+          )}
+        />
+      )}
+    </div>
+  );
+}
+
+// Item and Result are the two mandatory anchor columns every Checklist
+// has. Item always reads the row's own label (cell:{source:'row'} ->
+// row.item); Result is permanently locked to the GO/NG/NA subfield. Extra
+// columns the admin adds live alongside them in the same list and CAN be
+// repositioned relative to Item/Result (matching real forms like the
+// hand-coded "General" template, where a constant "Specified" column sits
+// between the two) — they just can't be deleted. Shared with
+// SECTION_TYPE_OPTIONS' checklist build() (Task 5, later — not this task)
+// so a freshly-added, never-yet-edited Checklist section already has valid
+// columns from the moment it's created — not only after the admin's first
+// edit.
+const ITEM_COLUMN = { key: 'item', label: 'Item', cell: { source: 'row' } };
+const RESULT_COLUMN = { key: 'result', label: 'Result', cell: { source: 'sectionData', subfield: 'measured', default: 'GO' } };
+
+// Produces { type: 'table', mode: 'fixed', ... }. The result column's
+// OPTIONS are ALWAYS exactly GO/NG/NA — this is deliberately NOT
+// configurable. Do not add a way to change what the three options ARE,
+// even though it looks like an obvious enhancement: renderer.js and
+// GenericPdiSections.jsx's FixedTableSection both hard-code recognition of
+// exactly ['GO','NG','NA'] (case-insensitive) to decide whether to draw a
+// 3-way toggle at all — a template with different option labels would
+// silently fall back to a plain text box downstream with no toggle, which
+// the editor gives no indication of. What IS configurable: extra columns
+// around Item/Result (their position, and whether they're fixed/text/
+// number/dropdown) — see the "Columns" list below.
 export function ChecklistSectionEditor({ section, onChange, definition }) {
   const excludingThisSection = new Set(collectAllKeys(definition));
   if (section.dataKey) excludingThisSection.delete(section.dataKey);
   (section.fixedRows || []).forEach((r) => { if (r.key) excludingThisSection.delete(r.key); });
-
-  const columns = CHECKLIST_COLUMNS;
+  const columns = section.columns && section.columns.length ? section.columns : [ITEM_COLUMN, RESULT_COLUMN];
+  columns.forEach((c) => { if (c.key && c.key !== 'item' && c.key !== 'result') excludingThisSection.delete(c.key); });
 
   return (
     <div className="space-y-2">
@@ -399,29 +490,82 @@ export function ChecklistSectionEditor({ section, onChange, definition }) {
         onChange={({ label, key }) => onChange({ ...section, title: label, dataKey: key, columns })}
       />
       <p className="text-[11px] text-gray-400">Every item is marked GO / NG / NA by the inspector — this isn&apos;t customizable.</p>
-      <ListEditor
-        items={section.fixedRows || []}
-        onChange={(fixedRows) => onChange({ ...section, columns, fixedRows })}
-        addLabel="Add checklist item"
-        newRow={() => ({ key: '', item: '' })}
-        renderRow={(row, update) => {
-          // excludingThisSection already lacks every fixed row's own key
-          // (removed up front above). Re-add every OTHER row's key here so
-          // sibling checklist items can't collide with each other — the
-          // same pattern PhotoSectionEditor/SignatureSectionEditor use.
-          const excludingThisRow = new Set(excludingThisSection);
-          (section.fixedRows || []).forEach((r) => { if (r.key && r.key !== row.key) excludingThisRow.add(r.key); });
-          return (
-            <LabeledKeyField
-              label={row.item || ''}
-              keyValue={row.key}
-              usedKeysExcludingSelf={excludingThisRow}
-              placeholder="e.g. Winding Check"
-              onChange={({ label, key }) => update({ key, item: label })}
-            />
-          );
-        }}
-      />
+
+      <div>
+        <label className="text-xs font-medium text-gray-600">Columns</label>
+        <ListEditor
+          items={columns}
+          onChange={(nextColumns) => onChange({ ...section, columns: nextColumns })}
+          addLabel="Add column"
+          newRow={() => ({ key: '', label: '', cell: { source: 'sectionData', subfield: '', default: '' } })}
+          canRemove={(c) => c.key !== 'item' && c.key !== 'result'}
+          renderRow={(col, update) => {
+            if (col.key === 'item') {
+              return (
+                <div className="text-sm text-gray-700 py-1">
+                  Item <span className="text-[10px] text-gray-400 ml-1">always the item name &middot; can&apos;t remove</span>
+                </div>
+              );
+            }
+            if (col.key === 'result') {
+              return (
+                <div className="text-sm text-gray-700 py-1">
+                  Result (GO / NG / NA) <span className="text-[10px] text-gray-400 ml-1">fixed options &middot; can&apos;t remove</span>
+                </div>
+              );
+            }
+            const excludingThisCol = new Set(excludingThisSection);
+            columns.forEach((c) => { if (c.key && c.key !== col.key && c.key !== 'item' && c.key !== 'result') excludingThisCol.add(c.key); });
+            return (
+              <div className="space-y-1">
+                <LabeledKeyField
+                  label={col.label}
+                  keyValue={col.key}
+                  usedKeysExcludingSelf={excludingThisCol}
+                  placeholder="e.g. Remarks"
+                  onChange={({ label, key }) => update({
+                    ...col,
+                    label,
+                    key,
+                    cell: col.cell?.source === 'constant' ? col.cell : { ...col.cell, subfield: key },
+                  })}
+                />
+                <ColumnFormatFields
+                  col={col}
+                  editableSource={(c) => ({ source: 'sectionData', subfield: c.key, default: '' })}
+                  onUpdateCol={update}
+                />
+              </div>
+            );
+          }}
+        />
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-gray-600">Items</label>
+        <ListEditor
+          items={section.fixedRows || []}
+          onChange={(fixedRows) => onChange({ ...section, fixedRows })}
+          addLabel="Add checklist item"
+          newRow={() => ({ key: '', item: '' })}
+          renderRow={(row, update) => {
+            // excludingThisSection already lacks every fixed row's own key
+            // (removed up front above). Re-add every OTHER row's key here
+            // so sibling checklist items can't collide with each other.
+            const excludingThisRow = new Set(excludingThisSection);
+            (section.fixedRows || []).forEach((r) => { if (r.key && r.key !== row.key) excludingThisRow.add(r.key); });
+            return (
+              <LabeledKeyField
+                label={row.item || ''}
+                keyValue={row.key}
+                usedKeysExcludingSelf={excludingThisRow}
+                placeholder="e.g. Winding Check"
+                onChange={({ label, key }) => update({ key, item: label })}
+              />
+            );
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -557,7 +701,7 @@ export function FillInListSectionEditor({ section, onChange, definition }) {
 // delete-then-re-add isn't a capability loss).
 export const SECTION_TYPE_OPTIONS = [
   { value: 'header', label: 'Header', description: 'Company details and top-of-page info like customer/date', build: () => ({ type: 'header', companyName: '', formatNo: '', revNo: '', effDate: '', extraFormatLines: [], logoAsset: null, infoFields: [] }) },
-  { value: 'checklist', label: 'Checklist', description: 'A fixed list of items the inspector marks GO/NG/NA', build: () => ({ type: 'table', mode: 'fixed', title: '', dataKey: '', columns: CHECKLIST_COLUMNS, headerHeight: 20, rowHeight: 14, fixedRows: [] }) },
+  { value: 'checklist', label: 'Checklist', description: 'A fixed list of items the inspector marks GO/NG/NA', build: () => ({ type: 'table', mode: 'fixed', title: '', dataKey: '', columns: [ITEM_COLUMN, RESULT_COLUMN], headerHeight: 20, rowHeight: 14, fixedRows: [] }) },
   { value: 'fillInList', label: 'Fill-in list', description: 'A list the inspector adds rows to, like serial numbers', build: () => ({ type: 'table', mode: 'repeatable', title: '', dataKey: '', columns: [], headerHeight: 20, rowHeight: 14, filterKey: undefined }) },
   { value: 'photo', label: 'Photos', description: 'Space for the inspector to attach photos', build: () => ({ type: 'photo', mode: 'freeform', dataKey: '', label: '', slots: [] }) },
   { value: 'image', label: 'Image', description: 'A single fixed image, like a nameplate', build: () => ({ type: 'image', dataKey: '', width: null, height: 100, title: '', placeholder: null }) },
