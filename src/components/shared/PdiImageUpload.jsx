@@ -8,25 +8,42 @@ import { CROP_ASPECT, cropAndCompress } from '../../utils/pdiImageUpload';
 
 Modal.setAppElement('#root');
 
-export function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h-40' }) {
+// `images` is an array of data-URI strings (possibly empty). `onFilesSelected`
+// receives the selected files (an array-like — a File[] this component has
+// already clamped to however many `maxImages` slots remain, so a batch can
+// never hand a caller more files than the limit allows) from the camera
+// input, the file input, or a drag-drop — the caller is responsible for
+// queuing each file through crop+compress and appending the result.
+// `onRemove(index)` removes one image from the array.
+export function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, heightCls = 'h-40', maxImages = 10 }) {
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const [dragActive, setDragActive] = useState(false);
+  const atLimit = images.length >= maxImages;
 
   const handleDragOver = (e) => {
     e.preventDefault();
-    if (!value) setDragActive(true);
+    if (!atLimit) setDragActive(true);
   };
   const handleDragLeave = (e) => {
     e.preventDefault();
     setDragActive(false);
   };
+  // Clamps a batch to however many slots are actually left — a caller could
+  // otherwise be handed a batch that overshoots maxImages (e.g. selecting 15
+  // files with only 3 slots remaining), breaking the limit this component
+  // itself displays and enforces everywhere else.
+  const selectFiles = (fileList) => {
+    if (!fileList?.length) return;
+    const remaining = maxImages - images.length;
+    if (remaining <= 0) return;
+    onFilesSelected(Array.from(fileList).slice(0, remaining));
+  };
   const handleDrop = (e) => {
     e.preventDefault();
     setDragActive(false);
-    if (value) return; // don't accept a drop on an already-filled slot — clear it first
-    const file = e.dataTransfer.files?.[0];
-    if (file) onSelect(file, null);
+    if (atLimit) return;
+    selectFiles(e.dataTransfer.files);
   };
 
   return (
@@ -37,24 +54,40 @@ export function ImageUploadCard({ label, hint, value, onSelect, onClear, heightC
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} flex items-center justify-center overflow-hidden ${
-          dragActive ? 'border-amber-400 bg-amber-50' : value ? 'border-gray-200' : 'border-gray-300'
+        className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} overflow-hidden ${
+          dragActive ? 'border-amber-400 bg-amber-50' : images.length ? 'border-gray-200' : 'border-gray-300'
         }`}
       >
-        {value ? (
-          <>
-            <img src={value} alt={label || 'Uploaded'} className="max-h-full max-w-full object-contain" />
-            <button
-              type="button"
-              onClick={onClear}
-              className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow hover:bg-white text-gray-600 hover:text-red-500"
-              title="Remove image"
-            >
-              <X size={14} />
-            </button>
-          </>
+        {images.length > 0 ? (
+          <div className="h-full w-full overflow-y-auto p-1.5 grid grid-cols-3 gap-1.5">
+            {images.map((src, i) => (
+              <div key={i} className="relative aspect-square bg-white rounded overflow-hidden border border-gray-200">
+                <img src={src} alt={`${label || 'Photo'} ${i + 1}`} className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => onRemove(i)}
+                  className="absolute top-0.5 right-0.5 p-0.5 bg-white/90 rounded-full shadow hover:bg-white text-gray-600 hover:text-red-500"
+                  title="Remove image"
+                  aria-label={`Remove ${label || 'photo'} ${i + 1}`}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+            {!atLimit && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="aspect-square rounded border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:text-amber-500 hover:border-amber-300"
+                title="Add more photos"
+                aria-label="Add more photos"
+              >
+                <ImageIcon size={20} />
+              </button>
+            )}
+          </div>
         ) : (
-          <div className="flex flex-col items-center gap-2 text-gray-400">
+          <div className="h-full flex flex-col items-center justify-center gap-2 text-gray-400">
             <div className="flex items-center gap-5">
               <button
                 type="button"
@@ -71,30 +104,29 @@ export function ImageUploadCard({ label, hint, value, onSelect, onClear, heightC
                 className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
               >
                 <ImageIcon size={26} />
-                <span className="text-xs font-medium">Choose File</span>
+                <span className="text-xs font-medium">Choose Files</span>
               </button>
             </div>
-            <span className="text-[11px] text-gray-300">or drag a photo here</span>
+            <span className="text-[11px] text-gray-300">or drag photos here — pick several at once</span>
           </div>
         )}
       </div>
-      {/* capture="environment" opens the device camera directly — needed because
-          Android's system Photo Picker (the default gallery chooser) has no camera
-          shortcut of its own, by design (it's a privacy-scoped media picker). */}
       <input
         ref={cameraInputRef}
         type="file"
         accept="image/*"
         capture="environment"
+        multiple
         className="hidden"
-        onChange={(e) => onSelect(e.target.files?.[0], e.target)}
+        onChange={(e) => { selectFiles(e.target.files); e.target.value = ''; }}
       />
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
-        onChange={(e) => onSelect(e.target.files?.[0], e.target)}
+        onChange={(e) => { selectFiles(e.target.files); e.target.value = ''; }}
       />
     </div>
   );

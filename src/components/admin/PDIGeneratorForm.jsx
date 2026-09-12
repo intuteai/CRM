@@ -96,12 +96,13 @@ const mechanicalCheckLabel = (check, form) => {
 const makeRow = (sno) => ({
   sno,
   motor_sr_no: '',
-  // Electrical — a motor is tested running in one direction at a time
+  // Electrical — one row per motor. current_measured/rpm_measured hold raw
+  // text like "2/4" (forward/reverse), "2" (one direction), parsed on the fly
+  // via parseForwardReverse for display/validation and re-serialized the same
+  // way on save — no separate forward/reverse React state, the raw string IS
+  // the source of truth, matching how every other free-text cell works here.
   voltage: '',
-  direction: 'F',
-  current_standard: '',
   current_measured: '',
-  rpm_specified: '',
   rpm_measured: '',
   electrical_remarks: '',
   // Mechanical
@@ -110,7 +111,7 @@ const makeRow = (sno) => ({
   mounting_pcd: '',
   mtg: '',
   key_dim_result: 'GO',
-  locating_dia_result: 'GO',
+  locating_dia_result: '',
   mechanical_remarks: '',
 });
 
@@ -119,6 +120,43 @@ const todayIST = () =>
     timeZone: 'Asia/Kolkata',
     year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date());
+
+// Returns { outOfRange: boolean } for a single numeric reading against a
+// nominal + tolerance. Tolerance mode is '±' (absolute) or '%' (percent of
+// nominal). Any missing/non-numeric input is treated as in-range (nothing to
+// flag) — flagging only fires once there's a real number to compare.
+// Mirrored server-side in CRM_BACKEND/models/operations/pdi/tolerance.js so
+// the generated PDF flags the same cells this form does — keep both in sync.
+function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountStr) {
+  const measured = parseFloat(measuredStr);
+  const nominal = parseFloat(nominalStr);
+  const toleranceAmount = parseFloat(toleranceAmountStr);
+  if (!Number.isFinite(measured) || !Number.isFinite(nominal) || !Number.isFinite(toleranceAmount)) {
+    return { outOfRange: false };
+  }
+  // Math.abs on the tolerance amount itself — a negative value typed by
+  // mistake would otherwise invert the range (nominal - delta > nominal +
+  // delta) and flag nearly every row at once.
+  const amount = Math.abs(toleranceAmount);
+  const delta = toleranceMode === '%' ? Math.abs(nominal) * (amount / 100) : amount;
+  const outOfRange = measured < nominal - delta || measured > nominal + delta;
+  return { outOfRange };
+}
+
+// Parses a Current/RPM Measured cell's raw text into { forward, reverse }.
+// "2/4" -> forward=2, reverse=4. A bare number with no "/" is stored as
+// forward by convention (documented here, not configurable) — a
+// single-direction test defaults to Forward unless the column is the R-only
+// variant, which this template doesn't currently have.
+function parseForwardReverse(raw) {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return { forward: '', reverse: '' };
+  if (trimmed.includes('/')) {
+    const [f, r] = trimmed.split('/');
+    return { forward: (f || '').trim(), reverse: (r || '').trim() };
+  }
+  return { forward: trimmed, reverse: '' };
+}
 
 const initGeneralChecks = (checks, defaultMeasured = 'GO') =>
   Object.fromEntries(
@@ -131,6 +169,14 @@ const defaultForm = () => ({
   product_id: '',
   drawing_no: '',
   product_specifications: '',
+  // Electrical table's spec row — one nominal + tolerance for Current and
+  // RPM, shared across every motor row in this PDI (not re-typed per row).
+  spec_current_standard: '',
+  spec_current_tol_mode: '±',
+  spec_current_tol: '',
+  spec_rpm_specified: '',
+  spec_rpm_tol_mode: '±',
+  spec_rpm_tol: '',
   pdi_no: '',
   prepared_by: '',
   approved_by: '',
@@ -138,17 +184,30 @@ const defaultForm = () => ({
   mechanical_remarks: 'ALL MOTORS OK, PASSED.',
   power_cable_length: '1250±50mm',
   sensor_cable_length: '1250±50mm',
-  // Mechanical table's "Specification" row — manual entry, varies by product
+  // Mechanical table's "Specification" row — manual entry, varies by product.
+  // Motor Length, Shaft O/P D/Length, Mounting PCD, and Locating Dia. are real
+  // numeric specs and get a tolerance mode + amount alongside the nominal.
+  // MTG stays a free-text compound description (two sub-specs in one string,
+  // e.g. "1.M6 / 2.Ø8.0") — informational only, no tolerance math. Key Dim.
+  // stays a GO/NG pass/fail check, also no tolerance math.
   spec_motor_length: '',
+  spec_motor_length_tol_mode: '±',
+  spec_motor_length_tol: '',
   spec_shaft_length: '',
-  spec_mounting_pcd: '153',
-  spec_mtg: '1.M6 / 2.Ø8.0',
+  spec_shaft_length_tol_mode: '±',
+  spec_shaft_length_tol: '',
+  spec_mounting_pcd: '',
+  spec_mounting_pcd_tol_mode: '±',
+  spec_mounting_pcd_tol: '',
+  spec_mtg: '',
   spec_key_dim: 'Go/NG',
-  spec_locating_dia: '50.0 mm',
+  spec_locating_dia: '',
+  spec_locating_dia_tol_mode: '±',
+  spec_locating_dia_tol: '',
   drawing_image: null,
   photos: [
-    { id: makePhotoId(), label: 'Overall Motor', image: null },
-    { id: makePhotoId(), label: 'Name Plate', image: null },
+    { id: makePhotoId(), label: 'Overall Motor', images: [] },
+    { id: makePhotoId(), label: 'Name Plate', images: [] },
   ],
   rows: Array.from({ length: 20 }, (_, i) => makeRow(i + 1)),
   general_electrical: {
@@ -169,45 +228,97 @@ const SELECT_CLS =
 const TH_CLS = 'py-2 px-2 text-xs font-semibold text-gray-700 bg-amber-100 border border-gray-200 whitespace-nowrap';
 const TD_CLS = 'py-1 px-1 border border-gray-100 text-sm text-gray-500 text-center';
 
-function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h-40' }) {
+function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, heightCls = 'h-40', maxImages = 10 }) {
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const [dragActive, setDragActive] = useState(false);
+  const atLimit = images.length >= maxImages;
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (!atLimit) setDragActive(true);
+  };
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+  };
+  // Clamps a batch to however many slots are actually left — a caller could
+  // otherwise be handed a batch that overshoots maxImages.
+  const selectFiles = (fileList) => {
+    if (!fileList?.length) return;
+    const remaining = maxImages - images.length;
+    if (remaining <= 0) return;
+    onFilesSelected(Array.from(fileList).slice(0, remaining));
+  };
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (atLimit) return;
+    selectFiles(e.dataTransfer.files);
+  };
+
   return (
     <div>
       {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
       {hint && <p className="text-xs text-gray-400 mb-1.5">{hint}</p>}
-      <div className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} flex items-center justify-center overflow-hidden ${value ? 'border-gray-200' : 'border-gray-300'}`}>
-        {value ? (
-          <>
-            <img src={value} alt={label || 'Uploaded'} className="max-h-full max-w-full object-contain" />
-            <button
-              type="button"
-              onClick={onClear}
-              className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow hover:bg-white text-gray-600 hover:text-red-500"
-              title="Remove image"
-            >
-              <X size={14} />
-            </button>
-          </>
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} overflow-hidden ${
+          dragActive ? 'border-amber-400 bg-amber-50' : images.length ? 'border-gray-200' : 'border-gray-300'
+        }`}
+      >
+        {images.length > 0 ? (
+          <div className="h-full w-full overflow-y-auto p-1.5 grid grid-cols-3 gap-1.5">
+            {images.map((src, i) => (
+              <div key={i} className="relative aspect-square bg-white rounded overflow-hidden border border-gray-200">
+                <img src={src} alt={`${label || 'Photo'} ${i + 1}`} className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => onRemove(i)}
+                  className="absolute top-0.5 right-0.5 p-0.5 bg-white/90 rounded-full shadow hover:bg-white text-gray-600 hover:text-red-500"
+                  title="Remove image"
+                  aria-label={`Remove ${label || 'photo'} ${i + 1}`}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+            {!atLimit && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="aspect-square rounded border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:text-amber-500 hover:border-amber-300"
+                title="Add more photos"
+                aria-label="Add more photos"
+              >
+                <ImageIcon size={20} />
+              </button>
+            )}
+          </div>
         ) : (
-          <div className="flex items-center gap-5 text-gray-400">
-            <button
-              type="button"
-              onClick={() => cameraInputRef.current?.click()}
-              className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
-            >
-              <Camera size={26} />
-              <span className="text-xs font-medium">Take Photo</span>
-            </button>
-            <div className="w-px h-9 bg-gray-200" />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
-            >
-              <ImageIcon size={26} />
-              <span className="text-xs font-medium">Choose File</span>
-            </button>
+          <div className="h-full flex flex-col items-center justify-center gap-2 text-gray-400">
+            <div className="flex items-center gap-5">
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+              >
+                <Camera size={26} />
+                <span className="text-xs font-medium">Take Photo</span>
+              </button>
+              <div className="w-px h-9 bg-gray-200" />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+              >
+                <ImageIcon size={26} />
+                <span className="text-xs font-medium">Choose Files</span>
+              </button>
+            </div>
+            <span className="text-[11px] text-gray-300">or drag photos here — pick several at once</span>
           </div>
         )}
       </div>
@@ -219,15 +330,17 @@ function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h
         type="file"
         accept="image/*"
         capture="environment"
+        multiple
         className="hidden"
-        onChange={(e) => onSelect(e.target.files?.[0], e.target)}
+        onChange={(e) => { selectFiles(e.target.files); e.target.value = ''; }}
       />
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
-        onChange={(e) => onSelect(e.target.files?.[0], e.target)}
+        onChange={(e) => { selectFiles(e.target.files); e.target.value = ''; }}
       />
     </div>
   );
@@ -417,6 +530,67 @@ export default function PDIGeneratorForm() {
     }
   }, [notifyError]);
 
+  // Photo entries are addressed by their stable `id` (assigned once via
+  // makePhotoId(), never by array index), so removing/reordering an unrelated
+  // entry — even while a crop for a different entry is still queued — can't
+  // make an in-flight add land on the wrong photo.
+  // Declared above applyCroppedImage/handleFilesChosen (below) because both
+  // reference it — declaring it later would be a temporal-dead-zone
+  // ReferenceError on every render (it's a `const`, not hoisted like a
+  // function declaration).
+  const addPhotoImage = useCallback((id, dataUri) => {
+    setForm((prev) => ({
+      ...prev,
+      photos: prev.photos.map((p) => (p.id === id ? { ...p, images: [...(p.images || []), dataUri].slice(0, 10) } : p)),
+    }));
+  }, []);
+
+  const removePhotoImage = useCallback((id, imgIdx) => {
+    setForm((prev) => ({
+      ...prev,
+      photos: prev.photos.map((p) => (p.id === id ? { ...p, images: (p.images || []).filter((_, i) => i !== imgIdx) } : p)),
+    }));
+  }, []);
+
+  // Queued files from a multi-file selection still waiting to be cropped,
+  // plus the target they belong to, so the next queued file (advanced from
+  // applyCroppedImage/cancelCrop) reopens the crop modal against the right
+  // destination. Refs, not useState: the re-entrancy guard in
+  // handleFilesChosen below needs to see the queue update the instant a read
+  // begins, with no async gap — a useState-based queue leaves a window (after
+  // the last file's setCropQueue({files: [], ...}) but before the async
+  // FileReader resolves and sets cropTarget) where a concurrent
+  // handleFilesChosen call would read both conditions as false and slip
+  // through. A ref write is synchronous, so that window doesn't exist.
+  const cropQueueFilesRef = useRef([]);
+  const cropQueueTargetRef = useRef(null);
+
+  // Turns a multi-file selection into a sequence of single-file crop steps —
+  // handleFileChosen (unchanged) opens CropModal for the first file; applying
+  // that crop (applyCroppedImage below) advances to the next queued file.
+  // Guarded against re-entrancy: if a queue or crop is already in flight, a
+  // second file-selection is rejected with a notification rather than
+  // silently clobbering the in-flight batch.
+  const handleFilesChosen = useCallback((target, fileList) => {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
+    // Busy check reads cropQueueTargetRef, NOT the cropTarget state — the ref
+    // is set synchronously the instant any file starts processing (below)
+    // and only clears once the queue truly drains or is cancelled, so it
+    // correctly reads "busy" through the async FileReader gap where
+    // cropTarget state hasn't been set yet. Checking cropTarget here would
+    // reopen the exact race this ref exists to close (see the comment above
+    // cropQueueFilesRef's declaration).
+    if (cropQueueFilesRef.current.length > 0 || cropQueueTargetRef.current) {
+      notifyError('Finish cropping the current batch of photos before adding more.');
+      return;
+    }
+    const [first, ...rest] = files;
+    cropQueueFilesRef.current = rest;
+    cropQueueTargetRef.current = target;
+    handleFileChosen(target, first);
+  }, [handleFileChosen, notifyError]);
+
   const applyCroppedImage = useCallback((dataUri) => {
     setCropTarget((current) => {
       if (!current) return current;
@@ -424,22 +598,40 @@ export default function PDIGeneratorForm() {
       if (target.type === 'drawing') {
         setField('drawing_image', dataUri);
       } else {
-        setForm((prev) => ({
-          ...prev,
-          photos: prev.photos.map((p) => (p.id === target.id ? { ...p, image: dataUri } : p)),
-        }));
+        addPhotoImage(target.id, dataUri);
       }
       return null;
     });
-  }, [setField]);
+    // Advance the queue synchronously (a ref, not state) — the instant this
+    // line runs, cropQueueFilesRef reflects reality with no async gap a
+    // concurrent handleFilesChosen call could slip through, unlike a
+    // useState-based queue (see the bug this replaced).
+    if (cropQueueFilesRef.current.length > 0) {
+      const [next, ...rest] = cropQueueFilesRef.current;
+      cropQueueFilesRef.current = rest;
+      handleFileChosen(cropQueueTargetRef.current, next);
+    } else {
+      cropQueueTargetRef.current = null;
+    }
+  }, [setField, addPhotoImage, handleFileChosen]);
 
-  const cancelCrop = useCallback(() => setCropTarget(null), []);
+  // Fully drains the queue on cancel — otherwise the remaining queued files
+  // from this batch would be silently abandoned (never cropped, never added).
+  const cancelCrop = useCallback(() => {
+    const remaining = cropQueueFilesRef.current.length;
+    cropQueueFilesRef.current = [];
+    cropQueueTargetRef.current = null;
+    setCropTarget(null);
+    if (remaining > 0) {
+      notifyError(`Cancelled — ${remaining} more photo${remaining === 1 ? '' : 's'} in this batch were not added.`);
+    }
+  }, [notifyError]);
 
   const addPhoto = useCallback(() => {
     setForm((prev) => (
       prev.photos.length >= MAX_PHOTOS
         ? prev
-        : { ...prev, photos: [...prev.photos, { id: makePhotoId(), label: '', image: null }] }
+        : { ...prev, photos: [...prev.photos, { id: makePhotoId(), label: '', images: [] }] }
     ));
   }, []);
 
@@ -449,10 +641,6 @@ export default function PDIGeneratorForm() {
 
   const setPhotoLabel = useCallback((id, label) => {
     setForm((prev) => ({ ...prev, photos: prev.photos.map((p) => (p.id === id ? { ...p, label } : p)) }));
-  }, []);
-
-  const clearPhotoImage = useCallback((id) => {
-    setForm((prev) => ({ ...prev, photos: prev.photos.map((p) => (p.id === id ? { ...p, image: null } : p)) }));
   }, []);
 
   const handleOpen = async () => {
@@ -711,15 +899,38 @@ export default function PDIGeneratorForm() {
                         <th className={TH_CLS}>S. No</th>
                         <th className={TH_CLS}>Motor Sr. No</th>
                         <th className={TH_CLS}>Voltage</th>
-                        <th className={TH_CLS}>F / R</th>
-                        <th className={TH_CLS}>Current Std</th>
-                        <th className={TH_CLS}>Current Measured</th>
-                        <th className={TH_CLS}>RPM Specified</th>
-                        <th className={TH_CLS}>RPM Measured</th>
+                        <th className={TH_CLS}>Current Measured F/R</th>
+                        <th className={TH_CLS}>RPM Measured F/R</th>
                         <th className={TH_CLS}>Remarks</th>
                       </tr>
                     </thead>
                     <tbody>
+                      <tr className="bg-amber-50">
+                        <td className={TD_CLS} colSpan={3}>
+                          <span className="font-semibold text-gray-700 text-xs">Specification</span>
+                        </td>
+                        <td className="py-1 px-1 border border-gray-100">
+                          <div className="flex gap-1">
+                            <input className={INPUT_CLS} value={form.spec_current_standard} onChange={(e) => setField('spec_current_standard', e.target.value)} placeholder="e.g. 4" />
+                            <select className={SELECT_CLS} value={form.spec_current_tol_mode} onChange={(e) => setField('spec_current_tol_mode', e.target.value)}>
+                              <option value="±">±</option>
+                              <option value="%">±%</option>
+                            </select>
+                            <input className={INPUT_CLS} value={form.spec_current_tol} onChange={(e) => setField('spec_current_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
+                          </div>
+                        </td>
+                        <td className="py-1 px-1 border border-gray-100">
+                          <div className="flex gap-1">
+                            <input className={INPUT_CLS} value={form.spec_rpm_specified} onChange={(e) => setField('spec_rpm_specified', e.target.value)} placeholder="e.g. 3000" />
+                            <select className={SELECT_CLS} value={form.spec_rpm_tol_mode} onChange={(e) => setField('spec_rpm_tol_mode', e.target.value)}>
+                              <option value="±">±</option>
+                              <option value="%">±%</option>
+                            </select>
+                            <input className={INPUT_CLS} value={form.spec_rpm_tol} onChange={(e) => setField('spec_rpm_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
+                          </div>
+                        </td>
+                        <td className="py-1 px-1 border border-gray-100" />
+                      </tr>
                       {form.rows.map((row, idx) => (
                         <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className={TD_CLS}>{row.sno}</td>
@@ -729,23 +940,37 @@ export default function PDIGeneratorForm() {
                           <td className="py-1 px-1 border border-gray-100">
                             <input className={INPUT_CLS} value={row.voltage} onChange={(e) => setRowField(idx, 'voltage', e.target.value)} placeholder="V" />
                           </td>
-                          <td className="py-1 px-2 border border-gray-100 text-center">
-                            <select className={SELECT_CLS} value={row.direction} onChange={(e) => setRowField(idx, 'direction', e.target.value)}>
-                              <option value="F">F</option>
-                              <option value="R">R</option>
-                            </select>
+                          <td className="py-1 px-1 border border-gray-100">
+                            {(() => {
+                              const { forward, reverse } = parseForwardReverse(row.current_measured);
+                              const fFlag = checkTolerance(forward, form.spec_current_standard, form.spec_current_tol_mode, form.spec_current_tol).outOfRange;
+                              const rFlag = checkTolerance(reverse, form.spec_current_standard, form.spec_current_tol_mode, form.spec_current_tol).outOfRange;
+                              return (
+                                <input
+                                  className={`${INPUT_CLS} ${(fFlag || rFlag) ? 'border-red-500 bg-red-50' : ''}`}
+                                  value={row.current_measured}
+                                  onChange={(e) => setRowField(idx, 'current_measured', e.target.value)}
+                                  placeholder="e.g. 2/4"
+                                  title={fFlag && rFlag ? 'Both F/R outside tolerance' : fFlag ? 'Forward (F) outside tolerance' : rFlag ? 'Reverse (R) outside tolerance' : undefined}
+                                />
+                              );
+                            })()}
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.current_standard} onChange={(e) => setRowField(idx, 'current_standard', e.target.value)} />
-                          </td>
-                          <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.current_measured} onChange={(e) => setRowField(idx, 'current_measured', e.target.value)} />
-                          </td>
-                          <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.rpm_specified} onChange={(e) => setRowField(idx, 'rpm_specified', e.target.value)} />
-                          </td>
-                          <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.rpm_measured} onChange={(e) => setRowField(idx, 'rpm_measured', e.target.value)} />
+                            {(() => {
+                              const { forward, reverse } = parseForwardReverse(row.rpm_measured);
+                              const fFlag = checkTolerance(forward, form.spec_rpm_specified, form.spec_rpm_tol_mode, form.spec_rpm_tol).outOfRange;
+                              const rFlag = checkTolerance(reverse, form.spec_rpm_specified, form.spec_rpm_tol_mode, form.spec_rpm_tol).outOfRange;
+                              return (
+                                <input
+                                  className={`${INPUT_CLS} ${(fFlag || rFlag) ? 'border-red-500 bg-red-50' : ''}`}
+                                  value={row.rpm_measured}
+                                  onChange={(e) => setRowField(idx, 'rpm_measured', e.target.value)}
+                                  placeholder="e.g. 2950/2960"
+                                  title={fFlag && rFlag ? 'Both F/R outside tolerance' : fFlag ? 'Forward (F) outside tolerance' : rFlag ? 'Reverse (R) outside tolerance' : undefined}
+                                />
+                              );
+                            })()}
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input className={INPUT_CLS} value={row.electrical_remarks} onChange={(e) => setRowField(idx, 'electrical_remarks', e.target.value)} />
@@ -819,15 +1044,36 @@ export default function PDIGeneratorForm() {
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Motor Length</label>
-                      <input className={INPUT_CLS} value={form.spec_motor_length} onChange={(e) => setField('spec_motor_length', e.target.value)} placeholder="e.g. 254.4±0.5mm" />
+                      <div className="flex gap-1">
+                        <input className={INPUT_CLS} value={form.spec_motor_length} onChange={(e) => setField('spec_motor_length', e.target.value)} placeholder="e.g. 254.4" />
+                        <select className={SELECT_CLS} value={form.spec_motor_length_tol_mode} onChange={(e) => setField('spec_motor_length_tol_mode', e.target.value)}>
+                          <option value="±">±</option>
+                          <option value="%">±%</option>
+                        </select>
+                        <input className={INPUT_CLS} value={form.spec_motor_length_tol} onChange={(e) => setField('spec_motor_length_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Shaft O/P Dia./Length</label>
-                      <input className={INPUT_CLS} value={form.spec_shaft_length} onChange={(e) => setField('spec_shaft_length', e.target.value)} placeholder="e.g. 24.0 mm/53.3 mm" />
+                      <div className="flex gap-1">
+                        <input className={INPUT_CLS} value={form.spec_shaft_length} onChange={(e) => setField('spec_shaft_length', e.target.value)} placeholder="e.g. 24.0" />
+                        <select className={SELECT_CLS} value={form.spec_shaft_length_tol_mode} onChange={(e) => setField('spec_shaft_length_tol_mode', e.target.value)}>
+                          <option value="±">±</option>
+                          <option value="%">±%</option>
+                        </select>
+                        <input className={INPUT_CLS} value={form.spec_shaft_length_tol} onChange={(e) => setField('spec_shaft_length_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">PCD</label>
-                      <input className={INPUT_CLS} value={form.spec_mounting_pcd} onChange={(e) => setField('spec_mounting_pcd', e.target.value)} placeholder="e.g. 152.74" />
+                      <div className="flex gap-1">
+                        <input className={INPUT_CLS} value={form.spec_mounting_pcd} onChange={(e) => setField('spec_mounting_pcd', e.target.value)} placeholder="e.g. 152.74" />
+                        <select className={SELECT_CLS} value={form.spec_mounting_pcd_tol_mode} onChange={(e) => setField('spec_mounting_pcd_tol_mode', e.target.value)}>
+                          <option value="±">±</option>
+                          <option value="%">±%</option>
+                        </select>
+                        <input className={INPUT_CLS} value={form.spec_mounting_pcd_tol} onChange={(e) => setField('spec_mounting_pcd_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">MTG</label>
@@ -839,7 +1085,14 @@ export default function PDIGeneratorForm() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Locating Dia.</label>
-                      <input className={INPUT_CLS} value={form.spec_locating_dia} onChange={(e) => setField('spec_locating_dia', e.target.value)} placeholder="e.g. 50.0 mm" />
+                      <div className="flex gap-1">
+                        <input className={INPUT_CLS} value={form.spec_locating_dia} onChange={(e) => setField('spec_locating_dia', e.target.value)} placeholder="e.g. 50.0" />
+                        <select className={SELECT_CLS} value={form.spec_locating_dia_tol_mode} onChange={(e) => setField('spec_locating_dia_tol_mode', e.target.value)}>
+                          <option value="±">±</option>
+                          <option value="%">±%</option>
+                        </select>
+                        <input className={INPUT_CLS} value={form.spec_locating_dia_tol} onChange={(e) => setField('spec_locating_dia_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -866,7 +1119,7 @@ export default function PDIGeneratorForm() {
                         <th className={TH_CLS}>Mounting PCD</th>
                         <th className={TH_CLS}>MTG</th>
                         <th className={TH_CLS}>Key Dim (Go/NG)</th>
-                        <th className={TH_CLS}>Locating Dia (Go/NG)</th>
+                        <th className={TH_CLS}>Locating Dia</th>
                         <th className={TH_CLS}>Remarks</th>
                       </tr>
                     </thead>
@@ -878,13 +1131,25 @@ export default function PDIGeneratorForm() {
                             <input className={INPUT_CLS} value={row.motor_sr_no} onChange={(e) => setRowField(idx, 'motor_sr_no', e.target.value)} />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.motor_length} onChange={(e) => setRowField(idx, 'motor_length', e.target.value)} placeholder="mm" />
+                            <input
+                              className={`${INPUT_CLS} ${checkTolerance(row.motor_length, form.spec_motor_length, form.spec_motor_length_tol_mode, form.spec_motor_length_tol).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
+                              value={row.motor_length} onChange={(e) => setRowField(idx, 'motor_length', e.target.value)} placeholder="mm"
+                              title={checkTolerance(row.motor_length, form.spec_motor_length, form.spec_motor_length_tol_mode, form.spec_motor_length_tol).outOfRange ? 'Outside tolerance' : undefined}
+                            />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.shaft_length} onChange={(e) => setRowField(idx, 'shaft_length', e.target.value)} placeholder="mm" />
+                            <input
+                              className={`${INPUT_CLS} ${checkTolerance(row.shaft_length, form.spec_shaft_length, form.spec_shaft_length_tol_mode, form.spec_shaft_length_tol).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
+                              value={row.shaft_length} onChange={(e) => setRowField(idx, 'shaft_length', e.target.value)} placeholder="mm"
+                              title={checkTolerance(row.shaft_length, form.spec_shaft_length, form.spec_shaft_length_tol_mode, form.spec_shaft_length_tol).outOfRange ? 'Outside tolerance' : undefined}
+                            />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.mounting_pcd} onChange={(e) => setRowField(idx, 'mounting_pcd', e.target.value)} placeholder="153" />
+                            <input
+                              className={`${INPUT_CLS} ${checkTolerance(row.mounting_pcd, form.spec_mounting_pcd, form.spec_mounting_pcd_tol_mode, form.spec_mounting_pcd_tol).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
+                              value={row.mounting_pcd} onChange={(e) => setRowField(idx, 'mounting_pcd', e.target.value)} placeholder="153"
+                              title={checkTolerance(row.mounting_pcd, form.spec_mounting_pcd, form.spec_mounting_pcd_tol_mode, form.spec_mounting_pcd_tol).outOfRange ? 'Outside tolerance' : undefined}
+                            />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input className={INPUT_CLS} value={row.mtg} onChange={(e) => setRowField(idx, 'mtg', e.target.value)} placeholder="4*M8" />
@@ -894,10 +1159,12 @@ export default function PDIGeneratorForm() {
                               {['GO', 'NG'].map((o) => <option key={o}>{o}</option>)}
                             </select>
                           </td>
-                          <td className="py-1 px-2 border border-gray-100 text-center">
-                            <select className={SELECT_CLS} value={row.locating_dia_result} onChange={(e) => setRowField(idx, 'locating_dia_result', e.target.value)}>
-                              {['GO', 'NG'].map((o) => <option key={o}>{o}</option>)}
-                            </select>
+                          <td className="py-1 px-1 border border-gray-100">
+                            <input
+                              className={`${INPUT_CLS} ${checkTolerance(row.locating_dia_result, form.spec_locating_dia, form.spec_locating_dia_tol_mode, form.spec_locating_dia_tol).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
+                              value={row.locating_dia_result} onChange={(e) => setRowField(idx, 'locating_dia_result', e.target.value)} placeholder="mm"
+                              title={checkTolerance(row.locating_dia_result, form.spec_locating_dia, form.spec_locating_dia_tol_mode, form.spec_locating_dia_tol).outOfRange ? 'Outside tolerance' : undefined}
+                            />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input className={INPUT_CLS} value={row.mechanical_remarks} onChange={(e) => setRowField(idx, 'mechanical_remarks', e.target.value)} />
@@ -989,9 +1256,10 @@ export default function PDIGeneratorForm() {
                 <ImageUploadCard
                   label="Technical Drawing (Pg 2)"
                   hint="Shown in the Mechanical Check sheet's drawing box. Leave blank to keep the text placeholder."
-                  value={form.drawing_image}
-                  onSelect={(file, el) => handleFileChosen({ type: 'drawing' }, file, el)}
-                  onClear={() => setField('drawing_image', null)}
+                  images={form.drawing_image ? [form.drawing_image] : []}
+                  maxImages={1}
+                  onFilesSelected={(fileList) => handleFilesChosen({ type: 'drawing' }, fileList)}
+                  onRemove={() => setField('drawing_image', null)}
                   heightCls="h-28"
                 />
 
@@ -1030,9 +1298,9 @@ export default function PDIGeneratorForm() {
                           </button>
                         </div>
                         <ImageUploadCard
-                          value={photo.image}
-                          onSelect={(file, el) => handleFileChosen({ type: 'photo', id: photo.id }, file, el)}
-                          onClear={() => clearPhotoImage(photo.id)}
+                          images={photo.images || []}
+                          onFilesSelected={(fileList) => handleFilesChosen({ type: 'photo', id: photo.id }, fileList)}
+                          onRemove={(imgIdx) => removePhotoImage(photo.id, imgIdx)}
                           heightCls="h-32"
                         />
                       </div>

@@ -258,7 +258,7 @@ function FixedTableSection({ section, form, setCell }) {
   );
 }
 
-function FreeformPhotoSection({ section, form, addPhoto, removePhoto, setLabel, handleFileChosen, setImage }) {
+function FreeformPhotoSection({ section, form, addPhoto, removePhoto, setLabel, handleFilesChosen, addImage, removeImage }) {
   const photos = form[section.dataKey] || [];
   return (
     <div className="mb-6">
@@ -275,17 +275,25 @@ function FreeformPhotoSection({ section, form, addPhoto, removePhoto, setLabel, 
       </div>
       <div className="grid grid-cols-2 gap-4">
         {photos.map((photo, idx) => (
-          <div key={idx} className="space-y-1.5">
+          // Keyed and labeled by display position (idx) — fine for React's
+          // own diffing and for the human-facing "Photo N" label since this
+          // list has no reorder affordance, but every handler below is
+          // addressed by the entry's stable `photo.id`, not idx, so a
+          // still-in-flight crop-queue callback for one entry can't land on
+          // a different entry that has since slid into its old index (e.g.
+          // an earlier photo was removed while this one's batch upload was
+          // still mid-flight).
+          <div key={photo.id} className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <input className={INPUT_CLS} value={photo.label} onChange={(e) => setLabel(section.dataKey, idx, e.target.value)} placeholder={`Photo ${idx + 1} label`} />
-              <button type="button" onClick={() => removePhoto(section.dataKey, idx)} className="shrink-0 p-1.5 text-gray-400 hover:text-red-500">
+              <input className={INPUT_CLS} value={photo.label} onChange={(e) => setLabel(section.dataKey, photo.id, e.target.value)} placeholder={`Photo ${idx + 1} label`} />
+              <button type="button" onClick={() => removePhoto(section.dataKey, photo.id)} className="shrink-0 p-1.5 text-gray-400 hover:text-red-500">
                 <Trash2 size={16} />
               </button>
             </div>
             <ImageUploadCard
-              value={photo.image}
-              onSelect={(file, el) => handleFileChosen((dataUri) => setImage(section.dataKey, idx, dataUri), file, el)}
-              onClear={() => setImage(section.dataKey, idx, null)}
+              images={photo.images || []}
+              onFilesSelected={(fileList) => handleFilesChosen((dataUri) => addImage(section.dataKey, photo.id, dataUri), fileList)}
+              onRemove={(imgIdx) => removeImage(section.dataKey, photo.id, imgIdx)}
               heightCls="h-32"
             />
           </div>
@@ -295,7 +303,7 @@ function FreeformPhotoSection({ section, form, addPhoto, removePhoto, setLabel, 
   );
 }
 
-function FixedSlotPhotoSection({ section, form, handleFileChosen, setSlotImage }) {
+function FixedSlotPhotoSection({ section, form, handleFilesChosen, addSlotImage, removeSlotImage }) {
   const slotData = form[section.dataKey] || {};
   return (
     <div className="mb-6">
@@ -305,9 +313,9 @@ function FixedSlotPhotoSection({ section, form, handleFileChosen, setSlotImage }
           <ImageUploadCard
             key={slot.key}
             label={slot.label}
-            value={slotData[slot.key]}
-            onSelect={(file, el) => handleFileChosen((dataUri) => setSlotImage(section.dataKey, slot.key, dataUri), file, el)}
-            onClear={() => setSlotImage(section.dataKey, slot.key, null)}
+            images={slotData[slot.key] || []}
+            onFilesSelected={(fileList) => handleFilesChosen((dataUri) => addSlotImage(section.dataKey, slot.key, dataUri), fileList)}
+            onRemove={(imgIdx) => removeSlotImage(section.dataKey, slot.key, imgIdx)}
           />
         ))}
       </div>
@@ -315,14 +323,16 @@ function FixedSlotPhotoSection({ section, form, handleFileChosen, setSlotImage }
   );
 }
 
-function ImageSection({ section, form, handleFileChosen, setImageField }) {
+function ImageSection({ section, form, handleFilesChosen, setImageField }) {
+  const value = form[section.dataKey];
   return (
     <div className="mb-6">
       <ImageUploadCard
         label={section.title || 'Image'}
-        value={form[section.dataKey]}
-        onSelect={(file, el) => handleFileChosen((dataUri) => setImageField(section.dataKey, dataUri), file, el)}
-        onClear={() => setImageField(section.dataKey, null)}
+        images={value ? [value] : []}
+        maxImages={1}
+        onFilesSelected={(fileList) => handleFilesChosen((dataUri) => setImageField(section.dataKey, dataUri), fileList)}
+        onRemove={() => setImageField(section.dataKey, null)}
         heightCls="h-28"
       />
     </div>
@@ -361,10 +371,10 @@ export function renderSection(section, ctx) {
         : <RepeatableTableSection key={section.dataKey} section={section} form={ctx.form} addRow={ctx.addRepeatableRow} removeRow={ctx.removeRepeatableRow} setCell={ctx.setRepeatableCell} />;
     case 'photo':
       return section.mode === 'fixed-slots'
-        ? <FixedSlotPhotoSection key={section.dataKey} section={section} form={ctx.form} handleFileChosen={ctx.handleFileChosen} setSlotImage={ctx.setFixedSlotImage} />
-        : <FreeformPhotoSection key={section.dataKey} section={section} form={ctx.form} addPhoto={ctx.addFreeformPhoto} removePhoto={ctx.removeFreeformPhoto} setLabel={ctx.setFreeformPhotoLabel} handleFileChosen={ctx.handleFileChosen} setImage={ctx.setFreeformPhotoImage} />;
+        ? <FixedSlotPhotoSection key={section.dataKey} section={section} form={ctx.form} handleFilesChosen={ctx.handleFilesChosen} addSlotImage={ctx.addFixedSlotImage} removeSlotImage={ctx.removeFixedSlotImage} />
+        : <FreeformPhotoSection key={section.dataKey} section={section} form={ctx.form} addPhoto={ctx.addFreeformPhoto} removePhoto={ctx.removeFreeformPhoto} setLabel={ctx.setFreeformPhotoLabel} handleFilesChosen={ctx.handleFilesChosen} addImage={ctx.addFreeformPhotoImage} removeImage={ctx.removeFreeformPhotoImage} />;
     case 'image':
-      return <ImageSection key={section.dataKey} section={section} form={ctx.form} handleFileChosen={ctx.handleFileChosen} setImageField={ctx.setImageField} />;
+      return <ImageSection key={section.dataKey} section={section} form={ctx.form} handleFilesChosen={ctx.handleFilesChosen} setImageField={ctx.setImageField} />;
     case 'signature':
       return <SignatureSection key="signature" section={section} form={ctx.form} setField={ctx.setField} />;
     case 'text':

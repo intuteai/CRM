@@ -1,7 +1,7 @@
 // CRM/src/components/shared/PdiReportsTable.jsx
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownUp, Search, Eye, Pencil, Trash2 } from 'lucide-react';
+import { ArrowDownUp, Search, Eye, Pencil, Trash2, Copy } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { useNotify } from '../../hooks/useNotify';
@@ -49,6 +49,11 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   const [cursorHistory, setCursorHistory] = useState([]);
   const [currentCursor, setCurrentCursor] = useState(null);
   const [limit] = useState(10);
+  // Report ids with a Duplicate POST currently in flight — unlike Delete
+  // (gated by a blocking window.confirm) or View (idempotent), a double-click
+  // here would silently create two duplicate reports server-side, so the
+  // button disables itself per-row while its own request is outstanding.
+  const [duplicatingIds, setDuplicatingIds] = useState(() => new Set());
   const tableRef = useRef(null);
   const searchInputRef = useRef(null);
   const hasFetched = useRef(false);
@@ -240,6 +245,35 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
     [notifySuccess, notifyError]
   );
 
+  const handleDuplicate = useCallback(
+    async (report) => {
+      if (duplicatingIds.has(report.report_id)) return; // already in flight for this row
+      const label = report.pdi_no || `#${report.report_id}`;
+      setDuplicatingIds((prev) => new Set(prev).add(report.report_id));
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${BASE_URL}/api/pdi/reports/${report.report_id}/duplicate`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Duplicate failed');
+        const newReport = await response.json();
+        notifySuccess(`Duplicated ${label} — opening the new PDI.`, { autoClose: 2000 });
+        navigate(`/pdi-generator/${newReport.template_id || 'general'}?report=${newReport.report_id}`);
+      } catch (err) {
+        console.error('Duplicate error:', err);
+        notifyError('Failed to duplicate PDI report.', { autoClose: 3000 });
+      } finally {
+        setDuplicatingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(report.report_id);
+          return next;
+        });
+      }
+    },
+    [duplicatingIds, navigate, notifySuccess, notifyError]
+  );
+
   const handlePrevPage = useCallback(async () => {
     if (cursorHistory.length === 0) return;
     const prevCursor = cursorHistory[cursorHistory.length - 1];
@@ -365,6 +399,17 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                       <button onClick={() => handleViewDownload(report)} className="p-2 hover:bg-amber-100 rounded-full text-amber-700" title="View / Download PDF" aria-label={`View PDI report ${report.pdi_no || report.report_id}`}>
                         <Eye size={18} />
                       </button>
+                      {canManage && (
+                        <button
+                          onClick={() => handleDuplicate(report)}
+                          disabled={duplicatingIds.has(report.report_id)}
+                          className="p-2 hover:bg-amber-100 rounded-full text-amber-700 disabled:opacity-40 disabled:hover:bg-transparent"
+                          title="Duplicate as New PDI"
+                          aria-label={`Duplicate PDI report ${report.pdi_no || report.report_id}`}
+                        >
+                          <Copy size={18} />
+                        </button>
+                      )}
                       {canManage && (
                         <button onClick={() => handleDelete(report)} className="p-2 hover:bg-red-50 rounded-full text-red-500" title="Delete" aria-label={`Delete PDI report ${report.pdi_no || report.report_id}`}>
                           <Trash2 size={18} />

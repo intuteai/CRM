@@ -11,6 +11,15 @@ import GenericPdiSidebar from './GenericPdiSidebar';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || '';
 
+// Stable per-entry id for freeform photo sections, same technique as
+// PDIGeneratorForm.jsx's own makePhotoId — freeform entries are addressed by
+// this id rather than by array index, since removeFreeformPhoto splices the
+// array and a crop-queue callback that's still in flight for a later entry
+// would otherwise resolve against whatever entry has since slid into that
+// index instead of the one it actually targets.
+let photoIdCounter = 0;
+const makePhotoId = () => `photo-${Date.now()}-${photoIdCounter++}`;
+
 const SAVE_STATUS_LABEL = {
   idle: '',
   unsaved: 'Unsaved changes',
@@ -85,11 +94,16 @@ function isSectionFilled(section, form) {
         );
       }
     case 'photo':
+      // slotData[s.key]/p.images are now arrays (see the Step 8 shape change
+      // in GenericPdiGeneratorForm's photo helpers) — a plain truthiness
+      // check would always pass once an (even empty) array exists, e.g.
+      // right after the last image in a slot/entry is removed, so this
+      // checks length instead.
       if (section.mode === 'fixed-slots') {
         const slotData = form[section.dataKey] || {};
-        return section.slots.some((s) => !!slotData[s.key]);
+        return section.slots.some((s) => (slotData[s.key] || []).length > 0);
       }
-      return (form[section.dataKey] || []).some((p) => !!p.image);
+      return (form[section.dataKey] || []).some((p) => (p.images || []).length > 0);
     case 'image':
       return !!form[section.dataKey];
     case 'signature':
@@ -407,8 +421,16 @@ export default function GenericPdiGeneratorForm() {
         });
         const report = response.data;
         const base = buildDefaultFormData(definition);
-        const reportPhotos = report.photos;
+        let reportPhotos = report.photos;
         const hasRealPhotos = reportPhotos && (Array.isArray(reportPhotos) ? reportPhotos.length > 0 : Object.keys(reportPhotos).length > 0);
+        // Freeform photo entries are addressed by a stable `id` (see
+        // makePhotoId above) — a report saved before that field existed
+        // won't have it on its entries yet, so backfill one here at load
+        // time, same as buildDefaultFormData fills in any other field a
+        // resumed report predates.
+        if (hasRealPhotos && Array.isArray(reportPhotos)) {
+          reportPhotos = reportPhotos.map((entry) => (entry?.id ? entry : { ...entry, id: makePhotoId() }));
+        }
         const resumedForm = {
           ...base,
           ...(report.data || {}),
@@ -477,37 +499,81 @@ export default function GenericPdiGeneratorForm() {
         notifyError(`Maximum of ${MAX_PHOTOS} photos reached.`);
         return prev;
       }
-      return { ...prev, [dataKey]: [...(prev[dataKey] || []), { label: '', image: null }] };
+      return { ...prev, [dataKey]: [...(prev[dataKey] || []), { id: makePhotoId(), label: '', images: [] }] };
     });
   }, [notifyError]);
-  const removeFreeformPhoto = useCallback((dataKey, idx) => {
-    const removedPhoto = formRef.current[dataKey][idx];
+  // Addressed by the entry's stable `id`, not array position — removing an
+  // earlier entry (or this one, then undoing it) must not shift which entry
+  // a still-in-flight crop-queue callback (addFreeformPhotoImage below) ends
+  // up applying to.
+  const removeFreeformPhoto = useCallback((dataKey, id) => {
+    const list = formRef.current[dataKey];
+    const idx = list.findIndex((p) => p.id === id);
+    if (idx === -1) return;
+    const removedPhoto = list[idx];
     showUndo('Photo removed', () => {
       setForm((p2) => {
-        const list = [...p2[dataKey]];
-        list.splice(idx, 0, removedPhoto);
-        return { ...p2, [dataKey]: list };
+        const l2 = [...p2[dataKey]];
+        l2.splice(idx, 0, removedPhoto);
+        return { ...p2, [dataKey]: l2 };
       });
     });
-    setForm((prev) => ({ ...prev, [dataKey]: prev[dataKey].filter((_, i) => i !== idx) }));
+    setForm((prev) => ({ ...prev, [dataKey]: prev[dataKey].filter((p) => p.id !== id) }));
   }, [showUndo]);
-  const setFreeformPhotoLabel = useCallback((dataKey, idx, label) => {
+  const setFreeformPhotoLabel = useCallback((dataKey, id, label) => {
     setForm((prev) => {
       const list = [...prev[dataKey]];
+      const idx = list.findIndex((p) => p.id === id);
+      if (idx === -1) return prev;
       list[idx] = { ...list[idx], label };
       return { ...prev, [dataKey]: list };
     });
   }, []);
-  const setFreeformPhotoImage = useCallback((dataKey, idx, image) => {
+  // A freeform entry now holds an array of images (was a single `image`) —
+  // add/remove replace the old single setFreeformPhotoImage setter. Resolved
+  // by stable id (see makePhotoId above), not array index, and guards
+  // against a missing entry (e.g. it was removed via removeFreeformPhoto
+  // while a multi-file crop queue for it was still mid-flight — see
+  // handleFilesChosen/advanceCropQueue below) rather than assuming the id
+  // still resolves, since the crop-apply callback that invokes these can now
+  // fire an arbitrary amount of time after the entry it targets was created.
+  const addFreeformPhotoImage = useCallback((dataKey, id, dataUri) => {
     setForm((prev) => {
-      const list = [...prev[dataKey]];
-      list[idx] = { ...list[idx], image };
+      const list = [...(prev[dataKey] || [])];
+      const idx = list.findIndex((p) => p.id === id);
+      if (idx === -1) return prev;
+      const entry = list[idx];
+      const images = [...(entry.images || []), dataUri].slice(0, 10);
+      list[idx] = { ...entry, images };
+      return { ...prev, [dataKey]: list };
+    });
+  }, []);
+  const removeFreeformPhotoImage = useCallback((dataKey, id, imgIdx) => {
+    setForm((prev) => {
+      const list = [...(prev[dataKey] || [])];
+      const idx = list.findIndex((p) => p.id === id);
+      if (idx === -1) return prev;
+      const entry = list[idx];
+      list[idx] = { ...entry, images: (entry.images || []).filter((_, i) => i !== imgIdx) };
       return { ...prev, [dataKey]: list };
     });
   }, []);
 
-  const setFixedSlotImage = useCallback((dataKey, slotKey, image) => {
-    setForm((prev) => ({ ...prev, [dataKey]: { ...prev[dataKey], [slotKey]: image } }));
+  // Same shape change for fixed slots: slotData[slot.key] was a single
+  // data-URI/null, now an array of data-URIs.
+  const addFixedSlotImage = useCallback((dataKey, slotKey, dataUri) => {
+    setForm((prev) => {
+      const slotData = prev[dataKey] || {};
+      const images = [...(slotData[slotKey] || []), dataUri].slice(0, 10);
+      return { ...prev, [dataKey]: { ...slotData, [slotKey]: images } };
+    });
+  }, []);
+  const removeFixedSlotImage = useCallback((dataKey, slotKey, imgIdx) => {
+    setForm((prev) => {
+      const slotData = prev[dataKey] || {};
+      const images = (slotData[slotKey] || []).filter((_, i) => i !== imgIdx);
+      return { ...prev, [dataKey]: { ...slotData, [slotKey]: images } };
+    });
   }, []);
 
   const setImageField = useCallback((dataKey, image) => {
@@ -540,6 +606,56 @@ export default function GenericPdiGeneratorForm() {
     }
   }, [notifyError]);
 
+  // Queue of remaining files to run through the crop flow after the file
+  // currently in the CropModal is applied — set by handleFilesChosen below
+  // (ImageUploadCard's multi-select/drag-drop entry point) and drained one
+  // file at a time by advanceCropQueue, which applyCroppedImage calls right
+  // after each crop is applied, so the modal reopens automatically for the
+  // next file until the batch is exhausted. Plain refs, not state: nothing
+  // rendered depends on the queue's contents, and advanceCropQueue's job is
+  // exactly the kind of "trigger a further setState from a side effect"
+  // that applyCroppedImage/handleUndo (above) are careful to do OUTSIDE a
+  // setState updater — keeping the queue in refs sidesteps that concern
+  // entirely rather than needing to replicate it inside an updater.
+  const cropQueueFilesRef = useRef([]);
+  const cropQueueApplyRef = useRef(null);
+
+  // Guards against a second file-selection starting while a batch from a
+  // FIRST selection is still being worked through the crop modal (whether
+  // still queued, or the current file is sitting in the modal right now) —
+  // without this, the new selection would silently clobber
+  // cropQueueFilesRef/cropQueueApplyRef out from under the in-flight batch
+  // (see cancelCrop below for the matching fix on the cancel path).
+  const handleFilesChosen = useCallback((applyFn, fileList) => {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
+    // Busy check reads cropQueueApplyRef, NOT the cropTarget state (nor
+    // cropTargetRef, which only mirrors cropTarget a render-cycle late via
+    // the useEffect above) — cropQueueApplyRef is set synchronously the
+    // instant any file starts processing, below, and only clears once the
+    // queue truly drains (advanceCropQueue) or is cancelled (cancelCrop), so
+    // it correctly reads "busy" through the async handleFileChosen/
+    // fileToDataUri gap where cropTarget hasn't been set yet — exactly the
+    // gap that let a second file-selection silently clobber an in-flight
+    // single-file crop before this fix.
+    if (cropQueueFilesRef.current.length > 0 || cropQueueApplyRef.current) {
+      notifyError('Finish cropping the current batch of photos before adding more.');
+      return;
+    }
+    const [first, ...rest] = files;
+    cropQueueFilesRef.current = rest;
+    cropQueueApplyRef.current = applyFn;
+    handleFileChosen(applyFn, first);
+  }, [handleFileChosen, notifyError]);
+
+  const advanceCropQueue = useCallback(() => {
+    const queue = cropQueueFilesRef.current;
+    if (queue.length === 0) { cropQueueApplyRef.current = null; return; }
+    const [next, ...rest] = queue;
+    cropQueueFilesRef.current = rest;
+    handleFileChosen(cropQueueApplyRef.current, next);
+  }, [handleFileChosen]);
+
   // Same reasoning as handleUndo above: read the target via a ref and apply
   // it outside the setCropTarget updater, rather than calling setForm
   // (via current.apply) from inside the updater itself.
@@ -547,8 +663,21 @@ export default function GenericPdiGeneratorForm() {
     const current = cropTargetRef.current;
     setCropTarget(null);
     current?.apply(dataUri);
-  }, []);
-  const cancelCrop = useCallback(() => setCropTarget(null), []);
+    advanceCropQueue();
+  }, [advanceCropQueue]);
+  // Cancelling applies to the WHOLE batch, not just the photo currently in
+  // the modal — clear the queue too, and tell the user if that means some
+  // queued photos were skipped, rather than leaving the refs pointing at a
+  // stale closure for handleFilesChosen's guard (above) to later trip on.
+  const cancelCrop = useCallback(() => {
+    const remaining = cropQueueFilesRef.current.length;
+    cropQueueFilesRef.current = [];
+    cropQueueApplyRef.current = null;
+    setCropTarget(null);
+    if (remaining > 0) {
+      notifyError(`Cancelled — ${remaining} more photo${remaining === 1 ? '' : 's'} in this batch were not added.`);
+    }
+  }, [notifyError]);
 
   const handleOpen = async () => {
     if (opening || !definition) return;
@@ -880,8 +1009,10 @@ export default function GenericPdiGeneratorForm() {
 
   const ctx = form ? {
     form, setField, addRepeatableRow, removeRepeatableRow, setRepeatableCell, setFixedCell,
-    addFreeformPhoto, removeFreeformPhoto, setFreeformPhotoLabel, setFreeformPhotoImage,
-    setFixedSlotImage, setImageField, handleFileChosen,
+    addFreeformPhoto, removeFreeformPhoto, setFreeformPhotoLabel,
+    addFreeformPhotoImage, removeFreeformPhotoImage,
+    addFixedSlotImage, removeFixedSlotImage,
+    setImageField, handleFilesChosen,
   } : null;
 
   const goToIndex = (idx) => {
