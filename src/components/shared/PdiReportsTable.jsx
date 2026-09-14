@@ -40,7 +40,12 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: 'report_id', direction: 'desc' });
+  // null = no active client-side sort, so the table shows exactly the order
+  // the server returned (newest inspection date first, undated drafts last).
+  // A sort only ever applies to the page currently on screen — there's no
+  // server-side sort param — so it's cleared on every page change instead of
+  // silently carrying forward and re-sorting a page it was never applied to.
+  const [sortConfig, setSortConfig] = useState(null);
   // `cursor` is the token for the NEXT page, handed back by the last response.
   // `cursorHistory` holds the cursor used to reach each PRIOR page (most recent
   // last), so Prev can pop back through them; `currentCursor` is whichever
@@ -95,8 +100,8 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `Server responded with status: ${response.status}`);
+          const errorBody = await response.json().catch(() => ({}));
+          throw new Error(errorBody.error || `Server responded with status: ${response.status}`);
         }
 
         const responseData = await response.json();
@@ -158,7 +163,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   const handleSort = useCallback((key) => {
     setSortConfig((prev) => ({
       key,
-      direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc',
+      direction: prev?.key === key && prev.direction === 'desc' ? 'asc' : 'desc',
     }));
   }, []);
 
@@ -187,6 +192,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
 
   const sortedPdiReports = useMemo(() => {
     if (!filteredPdiReports.length) return [];
+    if (!sortConfig) return filteredPdiReports; // preserve the server's own order
     return [...filteredPdiReports].sort((a, b) => {
       const valueA = a[sortConfig.key] ?? '';
       const valueB = b[sortConfig.key] ?? '';
@@ -281,6 +287,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
     if (!succeeded) return; // leave cursorHistory/currentCursor untouched so retry/Prev stay correct
     setCursorHistory((h) => h.slice(0, -1));
     setCurrentCursor(prevCursor);
+    setSortConfig(null); // a page-local sort has nothing left to apply to on the new page
   }, [cursorHistory, fetchPdiReports]);
 
   const handleNextPage = useCallback(async () => {
@@ -291,11 +298,13 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
     if (!succeeded) return; // leave cursorHistory/currentCursor untouched so retry/Prev stay correct
     setCursorHistory((h) => [...h, previousCursor]);
     setCurrentCursor(targetCursor);
+    setSortConfig(null); // a page-local sort has nothing left to apply to on the new page
   }, [cursor, isLoading, currentCursor, fetchPdiReports]);
 
   const handleRefresh = useCallback(() => {
     setCursorHistory([]);
     setCurrentCursor(null);
+    setSortConfig(null);
     fetchPdiReports(null);
   }, [fetchPdiReports]);
 
@@ -338,6 +347,12 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
           </button>
         </div>
 
+        {totalItems > pdiReports.length && (
+          <div className="text-gray-500 text-sm -mt-5 mb-6">
+            Search and column sorting only apply to the {pdiReports.length} reports currently loaded on this page, not the full {totalItems}.
+          </div>
+        )}
+
         {isLoading && pdiReports.length > 0 && (
           <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">Refreshing data...</div>
         )}
@@ -359,13 +374,13 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                     key={key}
                     className={`py-5 px-3 text-gray-800 text-base font-semibold ${key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''} transition-all duration-200`}
                     onClick={() => key !== 'actions' && handleSort(key)}
-                    aria-sort={sortConfig.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    aria-sort={sortConfig?.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
                     scope="col"
                   >
                     <div className="flex items-center justify-between">
                       <span>{label}</span>
                       {key !== 'actions' && (
-                        <ArrowDownUp size={16} className={`ml-2 text-gray-600 ${sortConfig.key === key ? 'text-gray-900' : 'opacity-50'}`} aria-hidden="true" />
+                        <ArrowDownUp size={16} className={`ml-2 text-gray-600 ${sortConfig?.key === key ? 'text-gray-900' : 'opacity-50'}`} aria-hidden="true" />
                       )}
                     </div>
                   </th>
