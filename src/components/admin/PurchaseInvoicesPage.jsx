@@ -76,8 +76,8 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Server responded with status: ${response.status}`);
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Server responded with status: ${response.status}`);
       }
 
       const responseData = await response.json();
@@ -253,8 +253,8 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Delete failed with status: ${response.status}`);
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Delete failed with status: ${response.status}`);
       }
 
       socket.emit('invoiceUpdate', { invoiceId, status: 'Deleted' });
@@ -298,8 +298,8 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `${modalMode === 'create' ? 'Create' : 'Update'} failed with status: ${response.status}`);
+          const errorBody = await response.json().catch(() => ({}));
+          throw new Error(errorBody.error || `${modalMode === 'create' ? 'Create' : 'Update'} failed with status: ${response.status}`);
         }
 
         const updatedInvoice = await response.json();

@@ -80,9 +80,9 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error(errorText || `Server responded with status: ${response.status}`);
+        const errorBody = await response.json().catch(() => ({}));
+        console.error('Error response:', errorBody);
+        throw new Error(errorBody.error || `Server responded with status: ${response.status}`);
       }
 
       const responseData = await response.json();

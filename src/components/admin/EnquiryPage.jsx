@@ -254,9 +254,9 @@ function EnquiryPage({ socket: providedSocket }) {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorBody = await response.json().catch(() => ({}));
           throw new Error(
-            errorText || `Server responded with status: ${response.status}`,
+            errorBody.error || `Server responded with status: ${response.status}`,
           );
         }
 
@@ -312,8 +312,8 @@ useEffect(() => {
       ]);
 
       if (!enqRes.ok) {
-        const txt = await enqRes.text();
-        throw new Error(txt || `Failed to load enquiry: ${enqRes.status}`);
+        const errorBody = await enqRes.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Failed to load enquiry: ${enqRes.status}`);
       }
 
       let tmplData = [];
@@ -593,9 +593,9 @@ useEffect(() => {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorBody = await response.json().catch(() => ({}));
           throw new Error(
-            errorText || `Delete failed with status: ${response.status}`,
+            errorBody.error || `Delete failed with status: ${response.status}`,
           );
         }
 
@@ -663,9 +663,9 @@ useEffect(() => {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorBody = await response.json().catch(() => ({}));
         throw new Error(
-          errorText ||
+          errorBody.error ||
             `${isEditing ? "Update" : "Create"} failed with status: ${
               response.status
             }`,
@@ -728,8 +728,8 @@ useEffect(() => {
       });
 
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || "Failed to update follow state");
+        const errorBody = await res.json().catch(() => ({}));
+        throw new Error(errorBody.error || "Failed to update follow state");
       }
 
       setFollowed((prev) => {
@@ -795,8 +795,8 @@ useEffect(() => {
       );
 
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || "Failed to assign enquiry");
+        const errorBody = await res.json().catch(() => ({}));
+        throw new Error(errorBody.error || "Failed to assign enquiry");
       }
 
       const updated = await res.json();
@@ -2093,8 +2093,8 @@ Warm regards,
                               },
                             );
                             if (!res.ok) {
-                              const txt = await res.text();
-                              throw new Error(txt || "Failed to add comment");
+                              const errorBody = await res.json().catch(() => ({}));
+                              throw new Error(errorBody.error || "Failed to add comment");
                             }
                             const activity = await res.json();
                             setDetailActivities((prev) => [...prev, activity]);

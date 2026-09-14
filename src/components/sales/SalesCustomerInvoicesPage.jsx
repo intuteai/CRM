@@ -83,8 +83,8 @@ function SalesCustomerInvoicesPage({ socket: providedSocket }) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Server responded with status: ${response.status}`);
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Server responded with status: ${response.status}`);
       }
 
       const responseData = await response.json();

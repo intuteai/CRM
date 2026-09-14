@@ -85,8 +85,8 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Server responded with status: ${response.status}`);
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Server responded with status: ${response.status}`);
       }
 
       const responseData = await response.json();
@@ -122,8 +122,8 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       ]);
 
       if (!productResponse.ok) {
-        const errorText = await productResponse.text();
-        throw new Error(`Failed to fetch products: ${errorText || productResponse.status}`);
+        const errorBody = await productResponse.json().catch(() => ({}));
+        throw new Error(`Failed to fetch products: ${errorBody.error || productResponse.status}`);
       }
       const productData = await productResponse.json();
       console.log('Raw product data from /api/inventory:', productData); // Debug log
@@ -139,8 +139,8 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       setProducts(normalizedProducts);
 
       if (!materialResponse.ok) {
-        const errorText = await materialResponse.text();
-        throw new Error(`Failed to fetch materials: ${errorText || materialResponse.status}`);
+        const errorBody = await materialResponse.json().catch(() => ({}));
+        throw new Error(`Failed to fetch materials: ${errorBody.error || materialResponse.status}`);
       }
       const materialData = await materialResponse.json();
       console.log('Raw material data from /api/stock:', materialData); // Debug log
@@ -411,8 +411,8 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `${modalMode === 'create' ? 'Create' : 'Update'} failed with status: ${response.status}`);
+          const errorBody = await response.json().catch(() => ({}));
+          throw new Error(errorBody.error || `${modalMode === 'create' ? 'Create' : 'Update'} failed with status: ${response.status}`);
         }
 
         const updatedBom = await response.json();

@@ -96,8 +96,8 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Server responded with status: ${response.status}`);
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Server responded with status: ${response.status}`);
       }
 
       const responseData = await response.json();
@@ -150,8 +150,8 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       ]);
 
       if (!productResponse.ok) {
-        const errorText = await productResponse.text();
-        throw new Error(`Failed to fetch products: ${errorText || productResponse.status}`);
+        const errorBody = await productResponse.json().catch(() => ({}));
+        throw new Error(`Failed to fetch products: ${errorBody.error || productResponse.status}`);
       }
       const productData = await productResponse.json();
       const normalizedProducts = Array.isArray(productData.data || productData)
@@ -163,8 +163,8 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
       setProducts(normalizedProducts);
 
       if (!materialResponse.ok) {
-        const errorText = await materialResponse.text();
-        throw new Error(`Failed to fetch materials: ${errorText || materialResponse.status}`);
+        const errorBody = await materialResponse.json().catch(() => ({}));
+        throw new Error(`Failed to fetch materials: ${errorBody.error || materialResponse.status}`);
       }
       const materialData = await materialResponse.json();
       const normalizedMaterials = Array.isArray(materialData.data || materialData)
@@ -429,9 +429,9 @@ function ProductionBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorBody = await response.json().catch(() => ({}));
           throw new Error(
-            errorText || `${modalMode === 'create' ? 'Create' : 'Update'} failed with status: ${response.status}`
+            errorBody.error || `${modalMode === 'create' ? 'Create' : 'Update'} failed with status: ${response.status}`
           );
         }
 

@@ -82,8 +82,8 @@ function DispatchTrackingPage({ socket: providedSocket }) {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Server responded with status: ${response.status}`);
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Server responded with status: ${response.status}`);
       }
       const responseData = await response.json();
       if (!Array.isArray(responseData)) {

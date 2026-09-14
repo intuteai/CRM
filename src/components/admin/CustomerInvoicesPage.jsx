@@ -131,6 +131,8 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
             const errorData = JSON.parse(errorText);
             if (errorData.code === 'RATE_LIMIT_EXCEEDED') {
               errorMessage = 'Too many requests. Please wait a moment and try again.';
+            } else if (errorData.error) {
+              errorMessage = errorData.error;
             }
           } catch (e) {
             // Not JSON, use raw errorText
@@ -320,6 +322,8 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
             const errorData = JSON.parse(errorText);
             if (errorData.code === 'RATE_LIMIT_EXCEEDED') {
               errorMessage = 'Too many requests. Please wait a moment and try again.';
+            } else if (errorData.error) {
+              errorMessage = errorData.error;
             }
           } catch (e) {
             // Not JSON, use raw errorText

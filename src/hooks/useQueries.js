@@ -24,7 +24,9 @@ export const useQueries = () => {
       const text = await res.text(); // Get raw response first
       console.log('Raw response:', text); // Debug raw content
       if (!res.ok) {
-        throw new Error(`HTTP error! Status: ${res.status}, Response: ${text}`);
+        let parsed;
+        try { parsed = JSON.parse(text); } catch {}
+        throw new Error(parsed?.error || parsed?.message || `HTTP error! Status: ${res.status}, Response: ${text}`);
       }
       const data = JSON.parse(text); // Manually parse JSON
       setQueries(Array.isArray(data) ? data : []);

@@ -212,9 +212,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorBody = await response.json().catch(() => ({}));
           throw new Error(
-            errorText || `Server responded with status: ${response.status}`,
+            errorBody.error || `Server responded with status: ${response.status}`,
           );
         }
 
@@ -271,8 +271,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         ]);
 
         if (!enqRes.ok) {
-          const txt = await enqRes.text();
-          throw new Error(txt || `Failed to load enquiry: ${enqRes.status}`);
+          const errorBody = await enqRes.json().catch(() => ({}));
+          throw new Error(errorBody.error || `Failed to load enquiry: ${enqRes.status}`);
         }
 
         let tmplData = [];
@@ -552,9 +552,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorBody = await response.json().catch(() => ({}));
           throw new Error(
-            errorText || `Delete failed with status: ${response.status}`,
+            errorBody.error || `Delete failed with status: ${response.status}`,
           );
         }
 
@@ -612,9 +612,9 @@ function DesignEnquiryPage({ socket: providedSocket }) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorBody = await response.json().catch(() => ({}));
         throw new Error(
-          errorText ||
+          errorBody.error ||
             `${isEditing ? "Update" : "Create"} failed with status: ${
               response.status
             }`,
@@ -666,8 +666,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
       });
 
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || "Failed to update follow state");
+        const errorBody = await res.json().catch(() => ({}));
+        throw new Error(errorBody.error || "Failed to update follow state");
       }
 
       setFollowed((prev) => {
@@ -756,8 +756,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         }),
       });
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || "Failed to assign to Sales");
+        const errorBody = await res.json().catch(() => ({}));
+        throw new Error(errorBody.error || "Failed to assign to Sales");
       }
       const updated = await res.json();
       // update locally
@@ -802,8 +802,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
         }),
       });
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || "Failed to assign to Admin");
+        const errorBody = await res.json().catch(() => ({}));
+        throw new Error(errorBody.error || "Failed to assign to Admin");
       }
       const updated = await res.json();
       // update locally
@@ -843,8 +843,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
       });
 
       if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || "Failed to mark done");
+        const errorBody = await res.json().catch(() => ({}));
+        throw new Error(errorBody.error || "Failed to mark done");
       }
 
       const updated = await res.json();
@@ -2062,8 +2062,8 @@ function DesignEnquiryPage({ socket: providedSocket }) {
                                 },
                               );
                               if (!res.ok) {
-                                const txt = await res.text();
-                                throw new Error(txt || "Failed to add comment");
+                                const errorBody = await res.json().catch(() => ({}));
+                                throw new Error(errorBody.error || "Failed to add comment");
                               }
                               const activity = await res.json();
                               setDetailActivities((prev) => [

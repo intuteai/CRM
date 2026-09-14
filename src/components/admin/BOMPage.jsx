@@ -208,8 +208,8 @@ function BOMPage({ socket: providedSocket }) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Server responded with status: ${response.status}`);
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || `Server responded with status: ${response.status}`);
       }
 
       const responseData = await response.json();
@@ -263,8 +263,8 @@ function BOMPage({ socket: providedSocket }) {
       ]);
 
       if (!productResponse.ok) {
-        const errorText = await productResponse.text();
-        throw new Error(`Failed to fetch products: ${errorText || productResponse.status}`);
+        const errorBody = await productResponse.json().catch(() => ({}));
+        throw new Error(`Failed to fetch products: ${errorBody.error || productResponse.status}`);
       }
       const productData = await productResponse.json();
       const normalizedProducts = Array.isArray(productData.data || productData)
@@ -276,8 +276,8 @@ function BOMPage({ socket: providedSocket }) {
       setProducts(normalizedProducts);
 
       if (!materialResponse.ok) {
-        const errorText = await materialResponse.text();
-        throw new Error(`Failed to fetch materials: ${errorText || materialResponse.status}`);
+        const errorBody = await materialResponse.json().catch(() => ({}));
+        throw new Error(`Failed to fetch materials: ${errorBody.error || materialResponse.status}`);
       }
       const materialData = await materialResponse.json();
       console.log('Raw material data from /api/stock:', materialData); // Debug log
@@ -433,8 +433,8 @@ function BOMPage({ socket: providedSocket }) {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `Delete failed with status: ${response.status}`);
+          const errorBody = await response.json().catch(() => ({}));
+          throw new Error(errorBody.error || `Delete failed with status: ${response.status}`);
         }
 
         notifySuccess(`BOM #${bomId} deleted successfully!`, { autoClose: 2000 });
@@ -538,8 +538,8 @@ function BOMPage({ socket: providedSocket }) {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `${modalMode === 'create' ? 'Create' : 'Update'} failed with status: ${response.status}`);
+          const errorBody = await response.json().catch(() => ({}));
+          throw new Error(errorBody.error || `${modalMode === 'create' ? 'Create' : 'Update'} failed with status: ${response.status}`);
         }
 
         const updatedBom = await response.json();
