@@ -5,6 +5,7 @@ import { ArrowDownUp, Search, Eye, Pencil, Trash2, Copy } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { useNotify } from '../../hooks/useNotify';
+import { debounce } from 'lodash';
 import ConnectionError from '../pages/ConnectionError.jsx';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -87,27 +88,33 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   const canManage = RESUME_ROLES.includes(userRole);
   const [pdiReports, setPdiReports] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
+  // searchInput is what's bound to the <input> (updates every keystroke, for
+  // a responsive-feeling textbox); searchTerm is the debounced value that
+  // actually drives the server query -- same split InventoryPage.jsx already
+  // uses elsewhere in this app for the same reason (one network request per
+  // pause in typing, not one per keystroke).
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  // null = no active client-side sort, so the table shows exactly the order
-  // the server returned (newest inspection date first, undated drafts last).
-  // A sort only ever applies to the page currently on screen — there's no
-  // server-side sort param — so it's cleared on every page change instead of
-  // silently carrying forward and re-sorting a page it was never applied to.
+  // { key, direction } | null. Unlike before this change, this now drives a
+  // real server-side ORDER BY across the whole dataset (not just the loaded
+  // page) -- see the offset-pagination branch in fetchPdiReports below.
   const [sortConfig, setSortConfig] = useState(null);
-  // '' = All statuses. Unlike search/sort (page-local), this is a real
-  // server-side filter -- GET /api/pdi/reports?status=X already filters and
-  // counts correctly on the backend (verified against production), so
-  // changing this always re-fetches rather than filtering client-side.
   const [statusFilter, setStatusFilter] = useState('');
-  // `cursor` is the token for the NEXT page, handed back by the last response.
-  // `cursorHistory` holds the cursor used to reach each PRIOR page (most recent
-  // last), so Prev can pop back through them; `currentCursor` is whichever
-  // cursor produced the page currently on screen (null = first page).
+  const [templateFilter, setTemplateFilter] = useState('');
+  const [templateOptions, setTemplateOptions] = useState([]);
+  // `cursor` is the token for the NEXT page in the DEFAULT (unsorted) view;
+  // `cursorHistory` holds the cursor used to reach each PRIOR page (most
+  // recent last); `currentCursor` is whichever cursor produced the page on
+  // screen now (null = first page). Only meaningful when sortConfig is null.
   const [cursor, setCursor] = useState(null);
   const [cursorHistory, setCursorHistory] = useState([]);
   const [currentCursor, setCurrentCursor] = useState(null);
+  // Offset-pagination equivalents, only meaningful when sortConfig is set
+  // (an explicit sort uses OFFSET/LIMIT server-side -- see Task 2).
+  const [sortOffset, setSortOffset] = useState(0);
+  const [nextOffset, setNextOffset] = useState(null);
   const [limit] = useState(10);
   // Report ids with a Duplicate POST currently in flight — unlike Delete
   // (gated by a blocking window.confirm) or View (idempotent), a double-click
@@ -134,11 +141,11 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   );
 
   // Returns true on a successful fetch, false on failure — callers that move
-  // cursorHistory/currentCursor (handleNextPage/handlePrevPage) use this to
-  // only commit that bookkeeping once the new page has actually loaded, so a
-  // failed fetch leaves pagination state exactly as it was for a clean retry.
+  // pagination state (handleNextPage/handlePrevPage) use this to only commit
+  // that bookkeeping once the new page has actually loaded, so a failed
+  // fetch leaves pagination state exactly as it was for a clean retry.
   const fetchPdiReports = useCallback(
-    async (cursorToUse, statusToUse) => {
+    async ({ cursorToUse = null, offsetToUse = 0, statusToUse, templateToUse, searchToUse, sortByToUse, sortDirToUse } = {}) => {
       if (isFetching.current) return false;
       isFetching.current = true;
       setIsLoading(true);
@@ -147,8 +154,16 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
       try {
         const token = localStorage.getItem('token');
         const params = new URLSearchParams({ limit: String(limit) });
-        if (cursorToUse) params.set('cursor', cursorToUse);
+        if (sortByToUse) {
+          params.set('sortBy', sortByToUse);
+          params.set('sortDir', sortDirToUse || 'desc');
+          params.set('offset', String(offsetToUse));
+        } else if (cursorToUse) {
+          params.set('cursor', cursorToUse);
+        }
         if (statusToUse) params.set('status', statusToUse);
+        if (templateToUse) params.set('template_id', templateToUse);
+        if (searchToUse) params.set('search', searchToUse);
         const url = `${BASE_URL}/api/pdi/reports?${params.toString()}`;
 
         const response = await fetch(url, {
@@ -168,6 +183,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
         setPdiReports(responseData.data);
         setTotalItems(responseData.total || 0);
         setCursor(responseData.cursor || null);
+        setNextOffset(responseData.offset ?? null);
         return true;
       } catch (err) {
         console.error('Error fetching PDI reports:', err);
@@ -183,9 +199,35 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
     [limit, notifyError]
   );
 
+  // Shared by the mount effect, Refresh, and every filter/sort/search change
+  // below -- resets BOTH pagination modes' state (only one is ever "live" at
+  // a time, based on whether sortConfig is set) and refetches from page 1
+  // with the current filters.
+  const fetchFirstPage = useCallback(() => {
+    setCursorHistory([]);
+    setCurrentCursor(null);
+    setSortOffset(0);
+    if (sortConfig) {
+      return fetchPdiReports({
+        offsetToUse: 0,
+        statusToUse: statusFilter,
+        templateToUse: templateFilter,
+        searchToUse: searchTerm,
+        sortByToUse: sortConfig.key,
+        sortDirToUse: sortConfig.direction,
+      });
+    }
+    return fetchPdiReports({
+      cursorToUse: null,
+      statusToUse: statusFilter,
+      templateToUse: templateFilter,
+      searchToUse: searchTerm,
+    });
+  }, [sortConfig, statusFilter, templateFilter, searchTerm, fetchPdiReports]);
+
   useEffect(() => {
     if (!hasFetched.current) {
-      fetchPdiReports(null, '');
+      fetchPdiReports({});
       hasFetched.current = true;
     }
 
@@ -216,6 +258,43 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
     };
   }, [fetchPdiReports, socket, providedSocket, notifyInfo]);
 
+  // Central "something that changes the RESULT SET changed" handler. Any of
+  // these four changing means the current page is stale, so: reset to page
+  // 1 (both pagination modes) and refetch. Runs after the mount effect's own
+  // first fetch (hasFetched guards that), and after every subsequent change
+  // to any of the four.
+  useEffect(() => {
+    if (!hasFetched.current) return;
+    fetchFirstPage();
+  }, [statusFilter, templateFilter, searchTerm, sortConfig, fetchFirstPage]);
+
+  // Populates the Template filter dropdown (added by a later task). Reuses
+  // the same endpoint PdiTemplatePicker.jsx already calls (GET
+  // /api/pdi/templates -- code templates + every active admin-authored one,
+  // [{id, name, version}]). Non-critical: if it fails, the dropdown just
+  // stays at "All templates" only -- the reports table itself doesn't
+  // depend on this list.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${BASE_URL}/api/pdi/templates`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok || cancelled) return;
+        const list = await response.json();
+        if (!cancelled) setTemplateOptions(list);
+      } catch (err) {
+        console.error('Error loading PDI template list:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Unchanged from before this task -- the new central useEffect (Step 3) is
+  // what now reacts to sortConfig changing and triggers the server refetch;
+  // this handler just toggles the state.
   const handleSort = useCallback((key) => {
     setSortConfig((prev) => ({
       key,
@@ -223,41 +302,38 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
     }));
   }, []);
 
+  // No handleStatusFilterChange here -- the status filter will render as pill
+  // buttons in a later task (not a <select>), so its JSX will call
+  // setStatusFilter(value) directly with the pill's own value, no event
+  // object to unwrap. The template filter stays a <select>, which does need
+  // an onChange wrapper.
+  const handleTemplateFilterChange = useCallback((e) => {
+    setTemplateFilter(e.target.value);
+  }, []);
+
+  // Same debounce pattern already used in CRM/src/components/admin/InventoryPage.jsx:
+  // debounce the STATE UPDATE itself (not a fetch call directly), so it never
+  // holds a stale closure over the other filters -- the central useEffect
+  // above reacts to searchTerm changing with whatever the other filter values
+  // currently are.
+  const debouncedSetSearchTerm = useCallback(debounce((value) => setSearchTerm(value), 400), []);
+
+  const handleSearchChange = useCallback(
+    (e) => {
+      const value = e.target.value;
+      setSearchInput(value);
+      debouncedSetSearchTerm(value);
+    },
+    [debouncedSetSearchTerm]
+  );
+
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
+      setSearchInput('');
       setSearchTerm('');
       searchInputRef.current?.focus();
     }
   }, []);
-
-  const filteredPdiReports = useMemo(() => {
-    if (!Array.isArray(pdiReports)) return [];
-    return pdiReports.filter((item) => {
-      if (!item) return false;
-      const searchFields = [
-        String(item.report_id || ''),
-        String(item.sr_no || ''),
-        String(item.pdi_no || ''),
-        String(item.customer_name || ''),
-        String(item.status || ''),
-        String(item.prepared_by || ''),
-        String(item.approved_by || ''),
-      ];
-      return searchFields.some((field) => field.toLowerCase().includes(searchTerm.toLowerCase()));
-    });
-  }, [pdiReports, searchTerm]);
-
-  const sortedPdiReports = useMemo(() => {
-    if (!filteredPdiReports.length) return [];
-    if (!sortConfig) return filteredPdiReports; // preserve the server's own order
-    return [...filteredPdiReports].sort((a, b) => {
-      const valueA = a[sortConfig.key] ?? '';
-      const valueB = b[sortConfig.key] ?? '';
-      if (valueA < valueB) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (valueA > valueB) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [filteredPdiReports, sortConfig]);
 
   const handleResume = useCallback(
     (report) => {
@@ -338,44 +414,63 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   );
 
   const handlePrevPage = useCallback(async () => {
+    if (sortConfig) {
+      const prevOffset = Math.max(0, sortOffset - limit);
+      const succeeded = await fetchPdiReports({
+        offsetToUse: prevOffset,
+        statusToUse: statusFilter,
+        templateToUse: templateFilter,
+        searchToUse: searchTerm,
+        sortByToUse: sortConfig.key,
+        sortDirToUse: sortConfig.direction,
+      });
+      if (succeeded) setSortOffset(prevOffset);
+      return;
+    }
     if (cursorHistory.length === 0) return;
     const prevCursor = cursorHistory[cursorHistory.length - 1];
-    const succeeded = await fetchPdiReports(prevCursor, statusFilter);
+    const succeeded = await fetchPdiReports({
+      cursorToUse: prevCursor,
+      statusToUse: statusFilter,
+      templateToUse: templateFilter,
+      searchToUse: searchTerm,
+    });
     if (!succeeded) return; // leave cursorHistory/currentCursor untouched so retry/Prev stay correct
     setCursorHistory((h) => h.slice(0, -1));
     setCurrentCursor(prevCursor);
-    setSortConfig(null); // a page-local sort has nothing left to apply to on the new page
-  }, [cursorHistory, fetchPdiReports, statusFilter]);
+  }, [sortConfig, sortOffset, limit, cursorHistory, fetchPdiReports, statusFilter, templateFilter, searchTerm]);
 
   const handleNextPage = useCallback(async () => {
+    if (sortConfig) {
+      if (nextOffset == null || isLoading) return;
+      const succeeded = await fetchPdiReports({
+        offsetToUse: nextOffset,
+        statusToUse: statusFilter,
+        templateToUse: templateFilter,
+        searchToUse: searchTerm,
+        sortByToUse: sortConfig.key,
+        sortDirToUse: sortConfig.direction,
+      });
+      if (succeeded) setSortOffset(nextOffset);
+      return;
+    }
     if (!cursor || isLoading) return;
     const targetCursor = cursor;
     const previousCursor = currentCursor;
-    const succeeded = await fetchPdiReports(targetCursor, statusFilter);
+    const succeeded = await fetchPdiReports({
+      cursorToUse: targetCursor,
+      statusToUse: statusFilter,
+      templateToUse: templateFilter,
+      searchToUse: searchTerm,
+    });
     if (!succeeded) return; // leave cursorHistory/currentCursor untouched so retry/Prev stay correct
     setCursorHistory((h) => [...h, previousCursor]);
     setCurrentCursor(targetCursor);
-    setSortConfig(null); // a page-local sort has nothing left to apply to on the new page
-  }, [cursor, isLoading, currentCursor, fetchPdiReports, statusFilter]);
+  }, [sortConfig, nextOffset, isLoading, cursor, currentCursor, fetchPdiReports, statusFilter, templateFilter, searchTerm]);
 
   const handleRefresh = useCallback(() => {
-    setCursorHistory([]);
-    setCurrentCursor(null);
-    setSortConfig(null);
-    fetchPdiReports(null, statusFilter);
-  }, [fetchPdiReports, statusFilter]);
-
-  const handleStatusFilterChange = useCallback(
-    (e) => {
-      const nextStatus = e.target.value;
-      setStatusFilter(nextStatus);
-      setCursorHistory([]);
-      setCurrentCursor(null);
-      setSortConfig(null); // a new filtered result set is a new "page" in the same sense as paging
-      fetchPdiReports(null, nextStatus);
-    },
-    [fetchPdiReports]
-  );
+    fetchFirstPage();
+  }, [fetchFirstPage]);
 
   if (isLoading && !pdiReports.length) {
     return (
@@ -385,7 +480,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
     );
   }
 
-  if (error && !pdiReports.length) return <ConnectionError onRetry={() => fetchPdiReports(null, statusFilter)} />;
+  if (error && !pdiReports.length) return <ConnectionError onRetry={fetchFirstPage} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
