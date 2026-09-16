@@ -184,7 +184,8 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
         String(item.pdi_no || ''),
         String(item.customer_name || ''),
         String(item.status || ''),
-        String(item.inspected_by || ''),
+        String(item.prepared_by || ''),
+        String(item.approved_by || ''),
       ];
       return searchFields.some((field) => field.toLowerCase().includes(searchTerm.toLowerCase()));
     });
@@ -329,7 +330,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
               id="search-pdi"
               ref={searchInputRef}
               type="text"
-              placeholder="Search by PDI No., Customer, Status, or Inspected By..."
+              placeholder="Search by PDI No., Customer, Status, Prepared By, or Approved By..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -366,7 +367,8 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                   { key: 'pdi_no', label: 'PDI No.' },
                   { key: 'customer_name', label: 'Customer' },
                   { key: 'status', label: 'Status' },
-                  { key: 'inspected_by', label: 'Inspected By' },
+                  { key: 'prepared_by', label: 'Prepared By' },
+                  { key: 'approved_by', label: 'Approved By' },
                   { key: 'inspection_date', label: 'Inspection Date' },
                   { key: 'actions', label: 'Actions' },
                 ].map(({ key, label }) => (
@@ -402,7 +404,8 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                   >
                     {report.status}
                   </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.inspected_by || 'N/A'}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{report.prepared_by || 'N/A'}</td>
+                  <td className="py-4 px-3 text-gray-600 text-base">{report.approved_by || 'N/A'}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">{report.inspection_date ? formatDate(report.inspection_date) : 'N/A'}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">
                     <div className="flex items-center gap-1">
