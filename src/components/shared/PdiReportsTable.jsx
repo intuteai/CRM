@@ -541,7 +541,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 mb-8">
+        <div className="flex flex-wrap items-center gap-2 mb-8" role="group" aria-label="Filter by status">
           <span className="text-xs uppercase font-bold text-gray-400 tracking-wide mr-1">Status</span>
           {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
             <button
@@ -550,7 +550,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
               onClick={() => setStatusFilter(value)}
               aria-pressed={statusFilter === value}
               disabled={isLoading}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors focus:outline-none focus:ring-2 focus:ring-amber-300 ${
                 statusFilter === value
                   ? 'bg-gray-800 text-white border-gray-800'
                   : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
