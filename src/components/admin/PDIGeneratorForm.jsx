@@ -122,29 +122,21 @@ const todayIST = () =>
   }).format(new Date());
 
 // Returns { outOfRange: boolean } for a single numeric reading against a
-// nominal + tolerance. Tolerance mode is '±' (absolute) or '%' (percent of
-// nominal). Any missing/non-numeric input is treated as in-range (nothing to
-// flag) — flagging only fires once there's a real number to compare.
-// Mirrored server-side in CRM_BACKEND/models/operations/pdi/tolerance.js so
-// the generated PDF flags the same cells this form does — keep both in sync.
 // Mirrors CRM_BACKEND/models/operations/pdi/tolerance.js's checkTolerance --
 // kept as a duplicate since frontend and backend don't share a build
-// pipeline. Any change here must be mirrored there, and vice versa.
+// pipeline. Any change here must be mirrored there, and vice versa. A third,
+// independent implementation also lives in pdi-erp-app/src/services/
+// tolerance.ts (TypeScript, different shape) — the FORMULA below must stay
+// identical across all three, since the same report can be edited from any
+// of the three apps and must get the same pass/fail result everywhere.
 //
 // Three modes:
 //   '±'  (Symmetric):  range = [nominal - tol,  nominal + tol]
 //   '%'  (Percentage): range = [nominal - nominal*tol/100, nominal + nominal*tol/100]
 //   'bilateral':        range = [nominal + min(tol, tol2), nominal + max(tol, tol2)]
-// Note: any toleranceMode value that isn't exactly the literal string
-// 'bilateral' falls through to the symmetric/percentage branch below,
-// which reads only toleranceAmountStr and silently ignores
-// toleranceAmount2Str. This is intentional -- consistent with this
-// function's existing philosophy of gracefully skipping validation on
-// malformed input rather than throwing -- not an oversight. The mode
-// string is driven by a fixed <select> in both UI clients, not free
-// text, so a real-world typo reaching this function is unlikely, but
-// this comment exists so a future reader doesn't mistake the fallthrough
-// for a bug.
+// Bilateral's min/max wrapping is deliberate — same defensive reasoning as
+// the existing Math.abs guard below, so a mistyped sign on either field
+// can't silently invert the range.
 function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountStr, toleranceAmount2Str) {
   const measured = parseFloat(measuredStr);
   const nominal = parseFloat(nominalStr);
@@ -152,6 +144,16 @@ function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountS
     return { outOfRange: false };
   }
 
+  // Note: any toleranceMode value that isn't exactly the literal string
+  // 'bilateral' falls through to the symmetric/percentage branch below,
+  // which reads only toleranceAmountStr and silently ignores
+  // toleranceAmount2Str. This is intentional -- consistent with this
+  // function's existing philosophy of gracefully skipping validation on
+  // malformed input rather than throwing -- not an oversight. The mode
+  // string is driven by a fixed <select> in both UI clients, not free
+  // text, so a real-world typo reaching this function is unlikely, but
+  // this comment exists so a future reader doesn't mistake the fallthrough
+  // for a bug.
   if (toleranceMode === 'bilateral') {
     const plus = parseFloat(toleranceAmountStr);
     const minus = parseFloat(toleranceAmount2Str);
