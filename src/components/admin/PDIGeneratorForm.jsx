@@ -287,6 +287,42 @@ const SELECT_CLS =
 const TH_CLS = 'py-2 px-2 text-xs font-semibold text-gray-700 bg-amber-100 border border-gray-200 whitespace-nowrap';
 const TD_CLS = 'py-1 px-1 border border-gray-100 text-sm text-gray-500 text-center';
 
+// Shared by every spec-row tolerance group in this form (7 total after this
+// task: Motor Length, Shaft Length, Shaft Diameter, Mounting PCD, Locating
+// Dia., Current, RPM) -- renders the nominal value, the tolerance-mode
+// select, and either one tolerance-amount input (Symmetric/Percentage) or
+// two signed "+"/"-" inputs (Bilateral). The existing `tol` value doubles
+// as the "+" field in Bilateral mode (matching every other codebase's
+// identical reuse of the single existing tolerance field) -- `tolMinus` is
+// the only genuinely new value.
+function ToleranceSpecInput({
+  nominalValue, onNominalChange, nominalPlaceholder,
+  mode, onModeChange,
+  tol, onTolChange,
+  tolMinus, onTolMinusChange,
+}) {
+  return (
+    <div className="flex gap-1 flex-wrap">
+      <input className={INPUT_CLS} value={nominalValue} onChange={(e) => onNominalChange(e.target.value)} placeholder={nominalPlaceholder} />
+      <select className={SELECT_CLS} value={mode} onChange={(e) => onModeChange(e.target.value)}>
+        <option value="±">±</option>
+        <option value="%">±%</option>
+        <option value="bilateral">Bilateral</option>
+      </select>
+      <input
+        className={INPUT_CLS}
+        value={tol}
+        onChange={(e) => onTolChange(e.target.value)}
+        placeholder={mode === 'bilateral' ? '+' : 'tol.'}
+        style={{ maxWidth: mode === 'bilateral' ? 50 : 60 }}
+      />
+      {mode === 'bilateral' && (
+        <input className={INPUT_CLS} value={tolMinus} onChange={(e) => onTolMinusChange(e.target.value)} placeholder="-" style={{ maxWidth: 50 }} />
+      )}
+    </div>
+  );
+}
+
 function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, heightCls = 'h-40', maxImages = 10 }) {
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -969,24 +1005,20 @@ export default function PDIGeneratorForm() {
                           <span className="font-semibold text-gray-700 text-xs">Specification</span>
                         </td>
                         <td className="py-1 px-1 border border-gray-100">
-                          <div className="flex gap-1">
-                            <input className={INPUT_CLS} value={form.spec_current_standard} onChange={(e) => setField('spec_current_standard', e.target.value)} placeholder="e.g. 4" />
-                            <select className={SELECT_CLS} value={form.spec_current_tol_mode} onChange={(e) => setField('spec_current_tol_mode', e.target.value)}>
-                              <option value="±">±</option>
-                              <option value="%">±%</option>
-                            </select>
-                            <input className={INPUT_CLS} value={form.spec_current_tol} onChange={(e) => setField('spec_current_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
-                          </div>
+                          <ToleranceSpecInput
+                            nominalValue={form.spec_current_standard} onNominalChange={(v) => setField('spec_current_standard', v)} nominalPlaceholder="e.g. 4"
+                            mode={form.spec_current_tol_mode} onModeChange={(v) => setField('spec_current_tol_mode', v)}
+                            tol={form.spec_current_tol} onTolChange={(v) => setField('spec_current_tol', v)}
+                            tolMinus={form.spec_current_tol_minus} onTolMinusChange={(v) => setField('spec_current_tol_minus', v)}
+                          />
                         </td>
                         <td className="py-1 px-1 border border-gray-100">
-                          <div className="flex gap-1">
-                            <input className={INPUT_CLS} value={form.spec_rpm_specified} onChange={(e) => setField('spec_rpm_specified', e.target.value)} placeholder="e.g. 3000" />
-                            <select className={SELECT_CLS} value={form.spec_rpm_tol_mode} onChange={(e) => setField('spec_rpm_tol_mode', e.target.value)}>
-                              <option value="±">±</option>
-                              <option value="%">±%</option>
-                            </select>
-                            <input className={INPUT_CLS} value={form.spec_rpm_tol} onChange={(e) => setField('spec_rpm_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
-                          </div>
+                          <ToleranceSpecInput
+                            nominalValue={form.spec_rpm_specified} onNominalChange={(v) => setField('spec_rpm_specified', v)} nominalPlaceholder="e.g. 3000"
+                            mode={form.spec_rpm_tol_mode} onModeChange={(v) => setField('spec_rpm_tol_mode', v)}
+                            tol={form.spec_rpm_tol} onTolChange={(v) => setField('spec_rpm_tol', v)}
+                            tolMinus={form.spec_rpm_tol_minus} onTolMinusChange={(v) => setField('spec_rpm_tol_minus', v)}
+                          />
                         </td>
                         <td className="py-1 px-1 border border-gray-100" />
                       </tr>
@@ -1002,8 +1034,8 @@ export default function PDIGeneratorForm() {
                           <td className="py-1 px-1 border border-gray-100">
                             {(() => {
                               const { forward, reverse } = parseForwardReverse(row.current_measured);
-                              const fFlag = checkTolerance(forward, form.spec_current_standard, form.spec_current_tol_mode, form.spec_current_tol).outOfRange;
-                              const rFlag = checkTolerance(reverse, form.spec_current_standard, form.spec_current_tol_mode, form.spec_current_tol).outOfRange;
+                              const fFlag = checkTolerance(forward, form.spec_current_standard, form.spec_current_tol_mode, form.spec_current_tol, form.spec_current_tol_minus).outOfRange;
+                              const rFlag = checkTolerance(reverse, form.spec_current_standard, form.spec_current_tol_mode, form.spec_current_tol, form.spec_current_tol_minus).outOfRange;
                               return (
                                 <input
                                   className={`${INPUT_CLS} ${(fFlag || rFlag) ? 'border-red-500 bg-red-50' : ''}`}
@@ -1018,8 +1050,8 @@ export default function PDIGeneratorForm() {
                           <td className="py-1 px-1 border border-gray-100">
                             {(() => {
                               const { forward, reverse } = parseForwardReverse(row.rpm_measured);
-                              const fFlag = checkTolerance(forward, form.spec_rpm_specified, form.spec_rpm_tol_mode, form.spec_rpm_tol).outOfRange;
-                              const rFlag = checkTolerance(reverse, form.spec_rpm_specified, form.spec_rpm_tol_mode, form.spec_rpm_tol).outOfRange;
+                              const fFlag = checkTolerance(forward, form.spec_rpm_specified, form.spec_rpm_tol_mode, form.spec_rpm_tol, form.spec_rpm_tol_minus).outOfRange;
+                              const rFlag = checkTolerance(reverse, form.spec_rpm_specified, form.spec_rpm_tol_mode, form.spec_rpm_tol, form.spec_rpm_tol_minus).outOfRange;
                               return (
                                 <input
                                   className={`${INPUT_CLS} ${(fFlag || rFlag) ? 'border-red-500 bg-red-50' : ''}`}
@@ -1103,36 +1135,41 @@ export default function PDIGeneratorForm() {
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Motor Length</label>
-                      <div className="flex gap-1">
-                        <input className={INPUT_CLS} value={form.spec_motor_length} onChange={(e) => setField('spec_motor_length', e.target.value)} placeholder="e.g. 254.4" />
-                        <select className={SELECT_CLS} value={form.spec_motor_length_tol_mode} onChange={(e) => setField('spec_motor_length_tol_mode', e.target.value)}>
-                          <option value="±">±</option>
-                          <option value="%">±%</option>
-                        </select>
-                        <input className={INPUT_CLS} value={form.spec_motor_length_tol} onChange={(e) => setField('spec_motor_length_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
-                      </div>
+                      <ToleranceSpecInput
+                        nominalValue={form.spec_motor_length} onNominalChange={(v) => setField('spec_motor_length', v)} nominalPlaceholder="e.g. 254.4"
+                        mode={form.spec_motor_length_tol_mode} onModeChange={(v) => setField('spec_motor_length_tol_mode', v)}
+                        tol={form.spec_motor_length_tol} onTolChange={(v) => setField('spec_motor_length_tol', v)}
+                        tolMinus={form.spec_motor_length_tol_minus} onTolMinusChange={(v) => setField('spec_motor_length_tol_minus', v)}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Shaft O/P Dia./Length</label>
-                      <div className="flex gap-1">
-                        <input className={INPUT_CLS} value={form.spec_shaft_length} onChange={(e) => setField('spec_shaft_length', e.target.value)} placeholder="e.g. 24.0" />
-                        <select className={SELECT_CLS} value={form.spec_shaft_length_tol_mode} onChange={(e) => setField('spec_shaft_length_tol_mode', e.target.value)}>
-                          <option value="±">±</option>
-                          <option value="%">±%</option>
-                        </select>
-                        <input className={INPUT_CLS} value={form.spec_shaft_length_tol} onChange={(e) => setField('spec_shaft_length_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
-                      </div>
+                      <p className="text-[10px] text-gray-400 mb-1">Length spec — measured value below is entered as &ldquo;diameter/length&rdquo;</p>
+                      <ToleranceSpecInput
+                        nominalValue={form.spec_shaft_length} onNominalChange={(v) => setField('spec_shaft_length', v)} nominalPlaceholder="e.g. 24.0"
+                        mode={form.spec_shaft_length_tol_mode} onModeChange={(v) => setField('spec_shaft_length_tol_mode', v)}
+                        tol={form.spec_shaft_length_tol} onTolChange={(v) => setField('spec_shaft_length_tol', v)}
+                        tolMinus={form.spec_shaft_length_tol_minus} onTolMinusChange={(v) => setField('spec_shaft_length_tol_minus', v)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Shaft Diameter</label>
+                      <p className="text-[10px] text-gray-400 mb-1">Diameter spec — same measured field as Length above</p>
+                      <ToleranceSpecInput
+                        nominalValue={form.spec_shaft_diameter} onNominalChange={(v) => setField('spec_shaft_diameter', v)} nominalPlaceholder="e.g. 12.0"
+                        mode={form.spec_shaft_diameter_tol_mode} onModeChange={(v) => setField('spec_shaft_diameter_tol_mode', v)}
+                        tol={form.spec_shaft_diameter_tol} onTolChange={(v) => setField('spec_shaft_diameter_tol', v)}
+                        tolMinus={form.spec_shaft_diameter_tol_minus} onTolMinusChange={(v) => setField('spec_shaft_diameter_tol_minus', v)}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">PCD</label>
-                      <div className="flex gap-1">
-                        <input className={INPUT_CLS} value={form.spec_mounting_pcd} onChange={(e) => setField('spec_mounting_pcd', e.target.value)} placeholder="e.g. 152.74" />
-                        <select className={SELECT_CLS} value={form.spec_mounting_pcd_tol_mode} onChange={(e) => setField('spec_mounting_pcd_tol_mode', e.target.value)}>
-                          <option value="±">±</option>
-                          <option value="%">±%</option>
-                        </select>
-                        <input className={INPUT_CLS} value={form.spec_mounting_pcd_tol} onChange={(e) => setField('spec_mounting_pcd_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
-                      </div>
+                      <ToleranceSpecInput
+                        nominalValue={form.spec_mounting_pcd} onNominalChange={(v) => setField('spec_mounting_pcd', v)} nominalPlaceholder="e.g. 152.74"
+                        mode={form.spec_mounting_pcd_tol_mode} onModeChange={(v) => setField('spec_mounting_pcd_tol_mode', v)}
+                        tol={form.spec_mounting_pcd_tol} onTolChange={(v) => setField('spec_mounting_pcd_tol', v)}
+                        tolMinus={form.spec_mounting_pcd_tol_minus} onTolMinusChange={(v) => setField('spec_mounting_pcd_tol_minus', v)}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">MTG</label>
@@ -1144,14 +1181,12 @@ export default function PDIGeneratorForm() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Locating Dia.</label>
-                      <div className="flex gap-1">
-                        <input className={INPUT_CLS} value={form.spec_locating_dia} onChange={(e) => setField('spec_locating_dia', e.target.value)} placeholder="e.g. 50.0" />
-                        <select className={SELECT_CLS} value={form.spec_locating_dia_tol_mode} onChange={(e) => setField('spec_locating_dia_tol_mode', e.target.value)}>
-                          <option value="±">±</option>
-                          <option value="%">±%</option>
-                        </select>
-                        <input className={INPUT_CLS} value={form.spec_locating_dia_tol} onChange={(e) => setField('spec_locating_dia_tol', e.target.value)} placeholder="tol." style={{ maxWidth: 60 }} />
-                      </div>
+                      <ToleranceSpecInput
+                        nominalValue={form.spec_locating_dia} onNominalChange={(v) => setField('spec_locating_dia', v)} nominalPlaceholder="e.g. 50.0"
+                        mode={form.spec_locating_dia_tol_mode} onModeChange={(v) => setField('spec_locating_dia_tol_mode', v)}
+                        tol={form.spec_locating_dia_tol} onTolChange={(v) => setField('spec_locating_dia_tol', v)}
+                        tolMinus={form.spec_locating_dia_tol_minus} onTolMinusChange={(v) => setField('spec_locating_dia_tol_minus', v)}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1191,23 +1226,32 @@ export default function PDIGeneratorForm() {
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input
-                              className={`${INPUT_CLS} ${checkTolerance(row.motor_length, form.spec_motor_length, form.spec_motor_length_tol_mode, form.spec_motor_length_tol).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
+                              className={`${INPUT_CLS} ${checkTolerance(row.motor_length, form.spec_motor_length, form.spec_motor_length_tol_mode, form.spec_motor_length_tol, form.spec_motor_length_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
                               value={row.motor_length} onChange={(e) => setRowField(idx, 'motor_length', e.target.value)} placeholder="mm"
-                              title={checkTolerance(row.motor_length, form.spec_motor_length, form.spec_motor_length_tol_mode, form.spec_motor_length_tol).outOfRange ? 'Outside tolerance' : undefined}
+                              title={checkTolerance(row.motor_length, form.spec_motor_length, form.spec_motor_length_tol_mode, form.spec_motor_length_tol, form.spec_motor_length_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
                             />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input
-                              className={`${INPUT_CLS} ${checkTolerance(row.shaft_length, form.spec_shaft_length, form.spec_shaft_length_tol_mode, form.spec_shaft_length_tol).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
-                              value={row.shaft_length} onChange={(e) => setRowField(idx, 'shaft_length', e.target.value)} placeholder="mm"
-                              title={checkTolerance(row.shaft_length, form.spec_shaft_length, form.spec_shaft_length_tol_mode, form.spec_shaft_length_tol).outOfRange ? 'Outside tolerance' : undefined}
-                            />
+                            {(() => {
+                              const { diameter, length } = parseDiaLength(row.shaft_length);
+                              const dFlag = checkTolerance(diameter, form.spec_shaft_diameter, form.spec_shaft_diameter_tol_mode, form.spec_shaft_diameter_tol, form.spec_shaft_diameter_tol_minus).outOfRange;
+                              const lFlag = checkTolerance(length, form.spec_shaft_length, form.spec_shaft_length_tol_mode, form.spec_shaft_length_tol, form.spec_shaft_length_tol_minus).outOfRange;
+                              return (
+                                <input
+                                  className={`${INPUT_CLS} ${(dFlag || lFlag) ? 'border-red-500 bg-red-50' : ''}`}
+                                  value={row.shaft_length}
+                                  onChange={(e) => setRowField(idx, 'shaft_length', e.target.value)}
+                                  placeholder="e.g. 12/45"
+                                  title={dFlag && lFlag ? 'Both diameter and length outside tolerance' : dFlag ? 'Diameter outside tolerance' : lFlag ? 'Length outside tolerance' : undefined}
+                                />
+                              );
+                            })()}
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input
-                              className={`${INPUT_CLS} ${checkTolerance(row.mounting_pcd, form.spec_mounting_pcd, form.spec_mounting_pcd_tol_mode, form.spec_mounting_pcd_tol).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
+                              className={`${INPUT_CLS} ${checkTolerance(row.mounting_pcd, form.spec_mounting_pcd, form.spec_mounting_pcd_tol_mode, form.spec_mounting_pcd_tol, form.spec_mounting_pcd_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
                               value={row.mounting_pcd} onChange={(e) => setRowField(idx, 'mounting_pcd', e.target.value)} placeholder="153"
-                              title={checkTolerance(row.mounting_pcd, form.spec_mounting_pcd, form.spec_mounting_pcd_tol_mode, form.spec_mounting_pcd_tol).outOfRange ? 'Outside tolerance' : undefined}
+                              title={checkTolerance(row.mounting_pcd, form.spec_mounting_pcd, form.spec_mounting_pcd_tol_mode, form.spec_mounting_pcd_tol, form.spec_mounting_pcd_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
                             />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
@@ -1220,9 +1264,9 @@ export default function PDIGeneratorForm() {
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input
-                              className={`${INPUT_CLS} ${checkTolerance(row.locating_dia_result, form.spec_locating_dia, form.spec_locating_dia_tol_mode, form.spec_locating_dia_tol).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
+                              className={`${INPUT_CLS} ${checkTolerance(row.locating_dia_result, form.spec_locating_dia, form.spec_locating_dia_tol_mode, form.spec_locating_dia_tol, form.spec_locating_dia_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
                               value={row.locating_dia_result} onChange={(e) => setRowField(idx, 'locating_dia_result', e.target.value)} placeholder="mm"
-                              title={checkTolerance(row.locating_dia_result, form.spec_locating_dia, form.spec_locating_dia_tol_mode, form.spec_locating_dia_tol).outOfRange ? 'Outside tolerance' : undefined}
+                              title={checkTolerance(row.locating_dia_result, form.spec_locating_dia, form.spec_locating_dia_tol_mode, form.spec_locating_dia_tol, form.spec_locating_dia_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
                             />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
