@@ -1302,6 +1302,7 @@ export default function PDIGeneratorForm() {
                           onFilesSelected={(fileList) => handleFilesChosen({ type: 'photo', id: photo.id }, fileList)}
                           onRemove={(imgIdx) => removePhotoImage(photo.id, imgIdx)}
                           heightCls="h-32"
+                          maxImages={25}
                         />
                       </div>
                     ))}
