@@ -42,6 +42,41 @@ function getStatusStyle(status) {
   return STATUS_STYLES[status] || DEFAULT_STATUS_STYLE;
 }
 
+// Shared by both the desktop table's Actions cell and the mobile card's
+// action row (Task 3) -- identical buttons, conditions, and handlers in
+// both places, so this is the one spot that needs editing if that ever
+// changes.
+function ReportActions({ report, canManage, duplicatingIds, onResume, onViewDownload, onDuplicate, onDelete }) {
+  return (
+    <div className="flex items-center gap-1">
+      {canManage && (
+        <button onClick={() => onResume(report)} className="p-2 hover:bg-amber-100 rounded-full text-amber-700" title="Resume in Generator" aria-label={`Resume PDI report ${report.pdi_no || report.report_id}`}>
+          <Pencil size={18} />
+        </button>
+      )}
+      <button onClick={() => onViewDownload(report)} className="p-2 hover:bg-amber-100 rounded-full text-amber-700" title="View / Download PDF" aria-label={`View PDI report ${report.pdi_no || report.report_id}`}>
+        <Eye size={18} />
+      </button>
+      {canManage && (
+        <button
+          onClick={() => onDuplicate(report)}
+          disabled={duplicatingIds.has(report.report_id)}
+          className="p-2 hover:bg-amber-100 rounded-full text-amber-700 disabled:opacity-40 disabled:hover:bg-transparent"
+          title="Duplicate as New PDI"
+          aria-label={`Duplicate PDI report ${report.pdi_no || report.report_id}`}
+        >
+          <Copy size={18} />
+        </button>
+      )}
+      {canManage && (
+        <button onClick={() => onDelete(report)} className="p-2 hover:bg-red-50 rounded-full text-red-500" title="Delete" aria-label={`Delete PDI report ${report.pdi_no || report.report_id}`}>
+          <Trash2 size={18} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function PdiReportsTable({ socket: providedSocket, userRole: userRoleProp, title = 'PDI Reports' }) {
   // Prefer a live `userRole` prop (threaded down from App.jsx/routeConfig.jsx
   // via renderRoute) so a logout/login in the same tab — which this app does
@@ -405,83 +440,99 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
           <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">Refreshing data...</div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
-          <table className="w-full text-left border-collapse" role="grid" aria-label="PDI Reports table" ref={tableRef} tabIndex={0}>
-            <thead>
-              <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50" role="row">
-                {[
-                  { key: 'sr_no', label: 'Sr. No.' },
-                  { key: 'pdi_no', label: 'PDI No.' },
-                  { key: 'customer_name', label: 'Customer' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'prepared_by', label: 'Prepared By' },
-                  { key: 'approved_by', label: 'Approved By' },
-                  { key: 'inspection_date', label: 'Inspection Date' },
-                  { key: 'actions', label: 'Actions' },
-                ].map(({ key, label }) => (
-                  <th
-                    key={key}
-                    className={`py-5 px-3 text-gray-800 text-base font-semibold ${key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''} transition-all duration-200`}
-                    onClick={() => key !== 'actions' && handleSort(key)}
-                    aria-sort={sortConfig?.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    scope="col"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span>{label}</span>
-                      {key !== 'actions' && (
-                        <ArrowDownUp size={16} className={`ml-2 text-gray-600 ${sortConfig?.key === key ? 'text-gray-900' : 'opacity-50'}`} aria-hidden="true" />
-                      )}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sortedPdiReports.map((report) => (
-                <tr key={report.report_id} className={`border-t border-l-4 ${getStatusStyle(report.status).border} hover:bg-amber-50 transition-all duration-200`} role="row">
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.sr_no}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.pdi_no || '—'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.customer_name || '—'}</td>
-                  <td className="py-4 px-3 text-base">
-                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatusStyle(report.status).pill}`}>
-                      {report.status}
-                    </span>
-                  </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.prepared_by || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.approved_by || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{report.inspection_date ? formatDate(report.inspection_date) : 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    <div className="flex items-center gap-1">
-                      {canManage && (
-                        <button onClick={() => handleResume(report)} className="p-2 hover:bg-amber-100 rounded-full text-amber-700" title="Resume in Generator" aria-label={`Resume PDI report ${report.pdi_no || report.report_id}`}>
-                          <Pencil size={18} />
-                        </button>
-                      )}
-                      <button onClick={() => handleViewDownload(report)} className="p-2 hover:bg-amber-100 rounded-full text-amber-700" title="View / Download PDF" aria-label={`View PDI report ${report.pdi_no || report.report_id}`}>
-                        <Eye size={18} />
-                      </button>
-                      {canManage && (
-                        <button
-                          onClick={() => handleDuplicate(report)}
-                          disabled={duplicatingIds.has(report.report_id)}
-                          className="p-2 hover:bg-amber-100 rounded-full text-amber-700 disabled:opacity-40 disabled:hover:bg-transparent"
-                          title="Duplicate as New PDI"
-                          aria-label={`Duplicate PDI report ${report.pdi_no || report.report_id}`}
-                        >
-                          <Copy size={18} />
-                        </button>
-                      )}
-                      {canManage && (
-                        <button onClick={() => handleDelete(report)} className="p-2 hover:bg-red-50 rounded-full text-red-500" title="Delete" aria-label={`Delete PDI report ${report.pdi_no || report.report_id}`}>
-                          <Trash2 size={18} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-left border-collapse" role="grid" aria-label="PDI Reports table" ref={tableRef} tabIndex={0}>
+              <thead>
+                <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50" role="row">
+                  {[
+                    { key: 'sr_no', label: 'Sr. No.' },
+                    { key: 'pdi_no', label: 'PDI No.' },
+                    { key: 'customer_name', label: 'Customer' },
+                    { key: 'status', label: 'Status' },
+                    { key: 'prepared_by', label: 'Prepared By' },
+                    { key: 'approved_by', label: 'Approved By' },
+                    { key: 'inspection_date', label: 'Inspection Date' },
+                    { key: 'actions', label: 'Actions' },
+                  ].map(({ key, label }) => (
+                    <th
+                      key={key}
+                      className={`py-5 px-3 text-gray-800 text-base font-semibold ${key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''} transition-all duration-200`}
+                      onClick={() => key !== 'actions' && handleSort(key)}
+                      aria-sort={sortConfig?.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      scope="col"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span>{label}</span>
+                        {key !== 'actions' && (
+                          <ArrowDownUp size={16} className={`ml-2 text-gray-600 ${sortConfig?.key === key ? 'text-gray-900' : 'opacity-50'}`} aria-hidden="true" />
+                        )}
+                      </div>
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sortedPdiReports.map((report) => (
+                  <tr key={report.report_id} className={`border-t border-l-4 ${getStatusStyle(report.status).border} hover:bg-amber-50 transition-all duration-200`} role="row">
+                    <td className="py-4 px-3 text-gray-600 text-base">{report.sr_no}</td>
+                    <td className="py-4 px-3 text-gray-600 text-base">{report.pdi_no || '—'}</td>
+                    <td className="py-4 px-3 text-gray-600 text-base">{report.customer_name || '—'}</td>
+                    <td className="py-4 px-3 text-base">
+                      <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatusStyle(report.status).pill}`}>
+                        {report.status}
+                      </span>
+                    </td>
+                    <td className="py-4 px-3 text-gray-600 text-base">{report.prepared_by || 'N/A'}</td>
+                    <td className="py-4 px-3 text-gray-600 text-base">{report.approved_by || 'N/A'}</td>
+                    <td className="py-4 px-3 text-gray-600 text-base">{report.inspection_date ? formatDate(report.inspection_date) : 'N/A'}</td>
+                    <td className="py-4 px-3 text-gray-600 text-base">
+                      <ReportActions
+                        report={report}
+                        canManage={canManage}
+                        duplicatingIds={duplicatingIds}
+                        onResume={handleResume}
+                        onViewDownload={handleViewDownload}
+                        onDuplicate={handleDuplicate}
+                        onDelete={handleDelete}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden divide-y divide-gray-100">
+            {sortedPdiReports.map((report) => (
+              <div key={report.report_id} className={`p-4 border-l-4 ${getStatusStyle(report.status).border}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-bold text-gray-800 text-base">{report.pdi_no || '—'}</span>
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${getStatusStyle(report.status).pill}`}>
+                    {report.status}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-500 mt-1">
+                  {report.customer_name || '—'} — {report.inspection_date ? formatDate(report.inspection_date) : 'N/A'}
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-2 text-xs text-gray-500">
+                  <div><span className="font-semibold text-gray-600">Prepared:</span> {report.prepared_by || 'N/A'}</div>
+                  <div><span className="font-semibold text-gray-600">Approved:</span> {report.approved_by || 'N/A'}</div>
+                </div>
+                <div className="mt-3">
+                  <ReportActions
+                    report={report}
+                    canManage={canManage}
+                    duplicatingIds={duplicatingIds}
+                    onResume={handleResume}
+                    onViewDownload={handleViewDownload}
+                    onDuplicate={handleDuplicate}
+                    onDelete={handleDelete}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
 
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
