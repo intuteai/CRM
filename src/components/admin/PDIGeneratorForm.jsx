@@ -127,11 +127,44 @@ const todayIST = () =>
 // flag) — flagging only fires once there's a real number to compare.
 // Mirrored server-side in CRM_BACKEND/models/operations/pdi/tolerance.js so
 // the generated PDF flags the same cells this form does — keep both in sync.
-function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountStr) {
+// Mirrors CRM_BACKEND/models/operations/pdi/tolerance.js's checkTolerance --
+// kept as a duplicate since frontend and backend don't share a build
+// pipeline. Any change here must be mirrored there, and vice versa.
+//
+// Three modes:
+//   '±'  (Symmetric):  range = [nominal - tol,  nominal + tol]
+//   '%'  (Percentage): range = [nominal - nominal*tol/100, nominal + nominal*tol/100]
+//   'bilateral':        range = [nominal + min(tol, tol2), nominal + max(tol, tol2)]
+// Note: any toleranceMode value that isn't exactly the literal string
+// 'bilateral' falls through to the symmetric/percentage branch below,
+// which reads only toleranceAmountStr and silently ignores
+// toleranceAmount2Str. This is intentional -- consistent with this
+// function's existing philosophy of gracefully skipping validation on
+// malformed input rather than throwing -- not an oversight. The mode
+// string is driven by a fixed <select> in both UI clients, not free
+// text, so a real-world typo reaching this function is unlikely, but
+// this comment exists so a future reader doesn't mistake the fallthrough
+// for a bug.
+function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountStr, toleranceAmount2Str) {
   const measured = parseFloat(measuredStr);
   const nominal = parseFloat(nominalStr);
+  if (!Number.isFinite(measured) || !Number.isFinite(nominal)) {
+    return { outOfRange: false };
+  }
+
+  if (toleranceMode === 'bilateral') {
+    const plus = parseFloat(toleranceAmountStr);
+    const minus = parseFloat(toleranceAmount2Str);
+    if (!Number.isFinite(plus) || !Number.isFinite(minus)) {
+      return { outOfRange: false };
+    }
+    const low = nominal + Math.min(plus, minus);
+    const high = nominal + Math.max(plus, minus);
+    return { outOfRange: measured < low || measured > high };
+  }
+
   const toleranceAmount = parseFloat(toleranceAmountStr);
-  if (!Number.isFinite(measured) || !Number.isFinite(nominal) || !Number.isFinite(toleranceAmount)) {
+  if (!Number.isFinite(toleranceAmount)) {
     return { outOfRange: false };
   }
   // Math.abs on the tolerance amount itself — a negative value typed by
@@ -158,6 +191,20 @@ function parseForwardReverse(raw) {
   return { forward: trimmed, reverse: '' };
 }
 
+// Parses a Shaft Diameter/Length cell's raw text into { diameter, length }.
+// "12/45" -> diameter=12, length=45. Same split-on-"/" mechanics as
+// parseForwardReverse above, distinctly named since diameter and length
+// validate against two independent specs, not one shared spec.
+function parseDiaLength(raw) {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return { diameter: '', length: '' };
+  if (trimmed.includes('/')) {
+    const [d, l] = trimmed.split('/');
+    return { diameter: (d || '').trim(), length: (l || '').trim() };
+  }
+  return { diameter: trimmed, length: '' };
+}
+
 const initGeneralChecks = (checks, defaultMeasured = 'GO') =>
   Object.fromEntries(
     checks.map((c) => [c.key, { measured: defaultMeasured, remarks: 'OK' }])
@@ -174,9 +221,11 @@ const defaultForm = () => ({
   spec_current_standard: '',
   spec_current_tol_mode: '±',
   spec_current_tol: '',
+  spec_current_tol_minus: '',
   spec_rpm_specified: '',
   spec_rpm_tol_mode: '±',
   spec_rpm_tol: '',
+  spec_rpm_tol_minus: '',
   pdi_no: '',
   prepared_by: '',
   approved_by: '',
@@ -193,17 +242,25 @@ const defaultForm = () => ({
   spec_motor_length: '',
   spec_motor_length_tol_mode: '±',
   spec_motor_length_tol: '',
+  spec_motor_length_tol_minus: '',
   spec_shaft_length: '',
   spec_shaft_length_tol_mode: '±',
   spec_shaft_length_tol: '',
+  spec_shaft_length_tol_minus: '',
+  spec_shaft_diameter: '',
+  spec_shaft_diameter_tol_mode: '±',
+  spec_shaft_diameter_tol: '',
+  spec_shaft_diameter_tol_minus: '',
   spec_mounting_pcd: '',
   spec_mounting_pcd_tol_mode: '±',
   spec_mounting_pcd_tol: '',
+  spec_mounting_pcd_tol_minus: '',
   spec_mtg: '',
   spec_key_dim: 'Go/NG',
   spec_locating_dia: '',
   spec_locating_dia_tol_mode: '±',
   spec_locating_dia_tol: '',
+  spec_locating_dia_tol_minus: '',
   drawing_image: null,
   photos: [
     { id: makePhotoId(), label: 'Overall Motor', images: [] },
