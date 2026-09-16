@@ -1,7 +1,7 @@
 // CRM/src/components/shared/PdiReportsTable.jsx
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownUp, Search, Eye, Pencil, Trash2, Copy } from 'lucide-react';
+import { ArrowDownUp, Search, Eye, Pencil, Trash2, Copy, ClipboardList } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { useNotify } from '../../hooks/useNotify';
@@ -41,6 +41,28 @@ const DEFAULT_STATUS_STYLE = { pill: 'bg-gray-100 text-gray-600', border: 'borde
 
 function getStatusStyle(status) {
   return STATUS_STYLES[status] || DEFAULT_STATUS_STYLE;
+}
+
+const STATUS_FILTER_OPTIONS = [
+  { value: '', label: 'All' },
+  { value: 'Pending', label: 'Pending' },
+  { value: 'In Progress', label: 'In Progress' },
+  { value: 'Completed', label: 'Completed' },
+  { value: 'Failed', label: 'Failed' },
+];
+
+// Per-row template badge (next to PDI No.) -- General/AutoNXT get fixed
+// colors since they're the two known hardcoded templates; any admin-authored
+// custom template shares one color rather than assigning one per template
+// (an unbounded, admin-created set).
+const TEMPLATE_BADGE_STYLES = {
+  general: 'bg-indigo-50 text-indigo-700',
+  autonxt: 'bg-pink-50 text-pink-700',
+};
+const DEFAULT_TEMPLATE_BADGE_STYLE = 'bg-teal-50 text-teal-700';
+
+function getTemplateBadgeStyle(templateId) {
+  return TEMPLATE_BADGE_STYLES[templateId] || DEFAULT_TEMPLATE_BADGE_STYLE;
 }
 
 // Shared by both the desktop table's Actions cell and the mobile card's
@@ -484,9 +506,17 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">{title}</h1>
+      <div className="max-w-7xl mx-auto mb-8">
+        <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-2xl shadow-sm px-6 py-8 text-center">
+          <div className="inline-flex items-center justify-center rounded-2xl bg-gray-800 text-white mb-3 shadow-lg" style={{ width: 52, height: 52 }}>
+            <ClipboardList size={24} />
+          </div>
+          <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">{title}</h1>
+          <p className="text-gray-500 text-sm mt-1.5">Pre-dispatch inspection records across all customers and templates</p>
+        </div>
+      </div>
       <div className="max-w-7xl mx-auto">
-        <div className="flex mb-8 gap-6 flex-wrap">
+        <div className="flex gap-3 mb-4">
           <div className="relative flex-grow">
             <label htmlFor="search-pdi" className="sr-only">Search PDI Reports</label>
             <input
@@ -494,27 +524,13 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
               ref={searchInputRef}
               type="text"
               placeholder="Search by PDI No., Customer, Status, Prepared By, or Approved By..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchInput}
+              onChange={handleSearchChange}
               onKeyDown={handleKeyDown}
               className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
             />
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
-          <label htmlFor="status-filter-pdi" className="sr-only">Filter by status</label>
-          <select
-            id="status-filter-pdi"
-            value={statusFilter}
-            onChange={handleStatusFilterChange}
-            disabled={isLoading}
-            className="p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
-          >
-            <option value="">All statuses</option>
-            <option value="Pending">Pending</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Completed">Completed</option>
-            <option value="Failed">Failed</option>
-          </select>
           <button
             onClick={handleRefresh}
             className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
@@ -525,11 +541,39 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
           </button>
         </div>
 
-        {totalItems > pdiReports.length && (
-          <div className="text-gray-500 text-sm -mt-5 mb-6">
-            Search and column sorting only apply to the {pdiReports.length} reports currently loaded on this page, not the full {totalItems}.
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2 mb-8">
+          <span className="text-xs uppercase font-bold text-gray-400 tracking-wide mr-1">Status</span>
+          {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
+            <button
+              key={value || 'all'}
+              type="button"
+              onClick={() => setStatusFilter(value)}
+              aria-pressed={statusFilter === value}
+              disabled={isLoading}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                statusFilter === value
+                  ? 'bg-gray-800 text-white border-gray-800'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <div className="w-px h-5 bg-gray-200 mx-1" aria-hidden="true" />
+          <label htmlFor="template-filter-pdi" className="text-xs uppercase font-bold text-gray-400 tracking-wide mr-1">Template</label>
+          <select
+            id="template-filter-pdi"
+            value={templateFilter}
+            onChange={handleTemplateFilterChange}
+            disabled={isLoading}
+            className="px-3 py-1.5 rounded-full text-xs font-semibold border border-gray-200 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          >
+            <option value="">All templates</option>
+            {templateOptions.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
 
         {isLoading && pdiReports.length > 0 && (
           <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">Refreshing data...</div>
@@ -569,10 +613,15 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
               </thead>
               <tbody>
                 {/* Field fallbacks ('—'/'N/A') here must match the md:hidden card list below -- kept as two plain JSX blocks per the CSS-only breakpoint-switch design, not a shared render function. */}
-                {sortedPdiReports.map((report) => (
+                {pdiReports.map((report) => (
                   <tr key={report.report_id} className={`border-t border-l-4 ${getStatusStyle(report.status).border} hover:bg-amber-50 transition-all duration-200`} role="row">
                     <td className="py-4 px-3 text-gray-600 text-base">{report.sr_no}</td>
-                    <td className="py-4 px-3 text-gray-600 text-base">{report.pdi_no || '—'}</td>
+                    <td className="py-4 px-3 text-gray-600 text-base">
+                      {report.pdi_no || '—'}
+                      <span className={`ml-2 inline-block px-2 py-0.5 rounded text-[10px] font-bold align-middle ${getTemplateBadgeStyle(report.template_id)}`}>
+                        {report.template_name}
+                      </span>
+                    </td>
                     <td className="py-4 px-3 text-gray-600 text-base">{report.customer_name || '—'}</td>
                     <td className="py-4 px-3 text-base">
                       <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatusStyle(report.status).pill}`}>
@@ -605,10 +654,15 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                 border-color shorthand on all four sides via a higher-specificity selector, silently
                 overriding the per-status border-l-* accent color below -- confirmed live, every card
                 rendered the divider's gray instead of its status color regardless of border-l-*. */}
-            {sortedPdiReports.map((report) => (
+            {pdiReports.map((report) => (
               <div key={report.report_id} className={`p-4 border-t-gray-100 border-l-4 ${getStatusStyle(report.status).border}`}>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-bold text-gray-800 text-base">{report.pdi_no || '—'}</span>
+                  <span className="font-bold text-gray-800 text-base">
+                    {report.pdi_no || '—'}
+                    <span className={`ml-2 inline-block px-2 py-0.5 rounded text-[10px] font-bold align-middle ${getTemplateBadgeStyle(report.template_id)}`}>
+                      {report.template_name}
+                    </span>
+                  </span>
                   <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${getStatusStyle(report.status).pill}`}>
                     {report.status}
                   </span>
@@ -637,27 +691,35 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
 
           {totalItems > 0 && (
             <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600">Showing {sortedPdiReports.length} of {totalItems} PDI reports</div>
+              <div className="text-gray-600">Showing {pdiReports.length} of {totalItems} PDI reports</div>
               <div className="flex space-x-2">
-                <button onClick={handlePrevPage} disabled={cursorHistory.length === 0} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Previous page">
+                <button
+                  onClick={handlePrevPage}
+                  disabled={sortConfig ? sortOffset === 0 : cursorHistory.length === 0}
+                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  aria-label="Previous page"
+                >
                   <ChevronLeft size={20} />
                 </button>
-                <button onClick={handleNextPage} disabled={!cursor || isLoading} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Next page">
+                <button
+                  onClick={handleNextPage}
+                  disabled={sortConfig ? nextOffset == null || isLoading : !cursor || isLoading}
+                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  aria-label="Next page"
+                >
                   <ChevronRight size={20} />
                 </button>
               </div>
             </div>
           )}
 
-          {!isLoading && sortedPdiReports.length === 0 && (
+          {!isLoading && pdiReports.length === 0 && (
             <div className="text-center py-12 text-gray-500 flex flex-col items-center" role="status">
               <Search className="mb-4 text-gray-400" size={48} />
               <p className="text-lg">
-                {pdiReports.length > 0
-                  ? 'No PDI reports found matching your search.'
-                  : statusFilter
-                    ? `No ${statusFilter} PDI reports found.`
-                    : 'No PDI reports yet.'}
+                {totalItems === 0 && !statusFilter && !templateFilter && !searchTerm
+                  ? 'No PDI reports yet.'
+                  : 'No PDI reports match your search and filters.'}
               </p>
             </div>
           )}
