@@ -27,6 +27,21 @@ const formatDate = (dateString) => {
   }
 };
 
+// Single source of truth for status -> color treatment, shared by the pill
+// badge and the accent border, in both the desktop table and the mobile
+// card list added in Task 3. Same four statuses the table has always had.
+const STATUS_STYLES = {
+  Completed: { pill: 'bg-green-100 text-green-700', border: 'border-l-green-500' },
+  'In Progress': { pill: 'bg-yellow-100 text-yellow-700', border: 'border-l-yellow-500' },
+  Failed: { pill: 'bg-red-100 text-red-700', border: 'border-l-red-500' },
+  Pending: { pill: 'bg-gray-100 text-gray-600', border: 'border-l-gray-300' },
+};
+const DEFAULT_STATUS_STYLE = { pill: 'bg-gray-100 text-gray-600', border: 'border-l-gray-300' };
+
+function getStatusStyle(status) {
+  return STATUS_STYLES[status] || DEFAULT_STATUS_STYLE;
+}
+
 export default function PdiReportsTable({ socket: providedSocket, userRole: userRoleProp, title = 'PDI Reports' }) {
   // Prefer a live `userRole` prop (threaded down from App.jsx/routeConfig.jsx
   // via renderRoute) so a logout/login in the same tab — which this app does
@@ -423,18 +438,14 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
             </thead>
             <tbody>
               {sortedPdiReports.map((report) => (
-                <tr key={report.report_id} className="border-t hover:bg-amber-50 transition-all duration-200" role="row">
+                <tr key={report.report_id} className={`border-t border-l-4 ${getStatusStyle(report.status).border} hover:bg-amber-50 transition-all duration-200`} role="row">
                   <td className="py-4 px-3 text-gray-600 text-base">{report.sr_no}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">{report.pdi_no || '—'}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">{report.customer_name || '—'}</td>
-                  <td
-                    className={`py-4 px-3 text-base ${
-                      report.status === 'Completed' ? 'text-green-600' :
-                      report.status === 'In Progress' ? 'text-yellow-600' :
-                      report.status === 'Failed' ? 'text-red-600' : 'text-gray-600'
-                    }`}
-                  >
-                    {report.status}
+                  <td className="py-4 px-3 text-base">
+                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatusStyle(report.status).pill}`}>
+                      {report.status}
+                    </span>
                   </td>
                   <td className="py-4 px-3 text-gray-600 text-base">{report.prepared_by || 'N/A'}</td>
                   <td className="py-4 px-3 text-gray-600 text-base">{report.approved_by || 'N/A'}</td>
