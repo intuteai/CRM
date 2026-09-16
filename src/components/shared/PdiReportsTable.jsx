@@ -473,6 +473,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                 </tr>
               </thead>
               <tbody>
+                {/* Field fallbacks ('—'/'N/A') here must match the md:hidden card list below -- kept as two plain JSX blocks per the CSS-only breakpoint-switch design, not a shared render function. */}
                 {sortedPdiReports.map((report) => (
                   <tr key={report.report_id} className={`border-t border-l-4 ${getStatusStyle(report.status).border} hover:bg-amber-50 transition-all duration-200`} role="row">
                     <td className="py-4 px-3 text-gray-600 text-base">{report.sr_no}</td>
@@ -504,6 +505,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
           </div>
 
           <div className="md:hidden divide-y divide-gray-100">
+            {/* Field fallbacks ('—'/'N/A') here must match the desktop table above. */}
             {sortedPdiReports.map((report) => (
               <div key={report.report_id} className={`p-4 border-l-4 ${getStatusStyle(report.status).border}`}>
                 <div className="flex items-center justify-between gap-3">
