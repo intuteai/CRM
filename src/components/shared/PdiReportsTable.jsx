@@ -46,6 +46,11 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   // server-side sort param — so it's cleared on every page change instead of
   // silently carrying forward and re-sorting a page it was never applied to.
   const [sortConfig, setSortConfig] = useState(null);
+  // '' = All statuses. Unlike search/sort (page-local), this is a real
+  // server-side filter -- GET /api/pdi/reports?status=X already filters and
+  // counts correctly on the backend (verified against production), so
+  // changing this always re-fetches rather than filtering client-side.
+  const [statusFilter, setStatusFilter] = useState('');
   // `cursor` is the token for the NEXT page, handed back by the last response.
   // `cursorHistory` holds the cursor used to reach each PRIOR page (most recent
   // last), so Prev can pop back through them; `currentCursor` is whichever
@@ -83,7 +88,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   // only commit that bookkeeping once the new page has actually loaded, so a
   // failed fetch leaves pagination state exactly as it was for a clean retry.
   const fetchPdiReports = useCallback(
-    async (cursorToUse) => {
+    async (cursorToUse, statusToUse) => {
       if (isFetching.current) return false;
       isFetching.current = true;
       setIsLoading(true);
@@ -91,9 +96,10 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
 
       try {
         const token = localStorage.getItem('token');
-        const url = cursorToUse
-          ? `${BASE_URL}/api/pdi/reports?limit=${limit}&cursor=${encodeURIComponent(cursorToUse)}`
-          : `${BASE_URL}/api/pdi/reports?limit=${limit}`;
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (cursorToUse) params.set('cursor', cursorToUse);
+        if (statusToUse) params.set('status', statusToUse);
+        const url = `${BASE_URL}/api/pdi/reports?${params.toString()}`;
 
         const response = await fetch(url, {
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -129,7 +135,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
 
   useEffect(() => {
     if (!hasFetched.current) {
-      fetchPdiReports(null);
+      fetchPdiReports(null, '');
       hasFetched.current = true;
     }
 
@@ -283,30 +289,42 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   const handlePrevPage = useCallback(async () => {
     if (cursorHistory.length === 0) return;
     const prevCursor = cursorHistory[cursorHistory.length - 1];
-    const succeeded = await fetchPdiReports(prevCursor);
+    const succeeded = await fetchPdiReports(prevCursor, statusFilter);
     if (!succeeded) return; // leave cursorHistory/currentCursor untouched so retry/Prev stay correct
     setCursorHistory((h) => h.slice(0, -1));
     setCurrentCursor(prevCursor);
     setSortConfig(null); // a page-local sort has nothing left to apply to on the new page
-  }, [cursorHistory, fetchPdiReports]);
+  }, [cursorHistory, fetchPdiReports, statusFilter]);
 
   const handleNextPage = useCallback(async () => {
     if (!cursor || isLoading) return;
     const targetCursor = cursor;
     const previousCursor = currentCursor;
-    const succeeded = await fetchPdiReports(targetCursor);
+    const succeeded = await fetchPdiReports(targetCursor, statusFilter);
     if (!succeeded) return; // leave cursorHistory/currentCursor untouched so retry/Prev stay correct
     setCursorHistory((h) => [...h, previousCursor]);
     setCurrentCursor(targetCursor);
     setSortConfig(null); // a page-local sort has nothing left to apply to on the new page
-  }, [cursor, isLoading, currentCursor, fetchPdiReports]);
+  }, [cursor, isLoading, currentCursor, fetchPdiReports, statusFilter]);
 
   const handleRefresh = useCallback(() => {
     setCursorHistory([]);
     setCurrentCursor(null);
     setSortConfig(null);
-    fetchPdiReports(null);
-  }, [fetchPdiReports]);
+    fetchPdiReports(null, statusFilter);
+  }, [fetchPdiReports, statusFilter]);
+
+  const handleStatusFilterChange = useCallback(
+    (e) => {
+      const nextStatus = e.target.value;
+      setStatusFilter(nextStatus);
+      setCursorHistory([]);
+      setCurrentCursor(null);
+      setSortConfig(null); // a new filtered result set is a new "page" in the same sense as paging
+      fetchPdiReports(null, nextStatus);
+    },
+    [fetchPdiReports]
+  );
 
   if (isLoading && !pdiReports.length) {
     return (
@@ -337,6 +355,20 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
             />
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
+          <label htmlFor="status-filter-pdi" className="sr-only">Filter by status</label>
+          <select
+            id="status-filter-pdi"
+            value={statusFilter}
+            onChange={handleStatusFilterChange}
+            disabled={isLoading}
+            className="p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
+          >
+            <option value="">All statuses</option>
+            <option value="Pending">Pending</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Completed">Completed</option>
+            <option value="Failed">Failed</option>
+          </select>
           <button
             onClick={handleRefresh}
             className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
@@ -454,7 +486,13 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
           {!isLoading && sortedPdiReports.length === 0 && (
             <div className="text-center py-12 text-gray-500 flex flex-col items-center" role="status">
               <Search className="mb-4 text-gray-400" size={48} />
-              <p className="text-lg">{pdiReports.length === 0 ? 'No PDI reports yet.' : 'No PDI reports found matching your search.'}</p>
+              <p className="text-lg">
+                {pdiReports.length > 0
+                  ? 'No PDI reports found matching your search.'
+                  : statusFilter
+                    ? `No ${statusFilter} PDI reports found.`
+                    : 'No PDI reports yet.'}
+              </p>
             </div>
           )}
         </div>
