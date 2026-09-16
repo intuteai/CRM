@@ -168,6 +168,19 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   // fetch leaves pagination state exactly as it was for a clean retry.
   const fetchPdiReports = useCallback(
     async ({ cursorToUse = null, offsetToUse = 0, statusToUse, templateToUse, searchToUse, sortByToUse, sortDirToUse } = {}) => {
+      // Known limitation (predates this file's server-side search/sort/
+      // template-filter work -- it already existed for the old status-only
+      // filter): if a call arrives while one is already in flight, it's
+      // dropped here with no retry/re-queue. In quick succession (e.g. two
+      // filter changes before the first request resolves), the UI can settle
+      // on stale results reflecting only the first change. Now that
+      // sortConfig/templateFilter/searchTerm all route through this same
+      // guard (not just status), the practical surface is broader than
+      // before. Left as-is rather than adding request-superseding/AbortController
+      // logic: this table is an internal admin tool with realistically one
+      // user at a time clicking through it, not a high-concurrency surface,
+      // and a stale result here is corrected by the next fetch (Refresh,
+      // another filter change, or Prev/Next).
       if (isFetching.current) return false;
       isFetching.current = true;
       setIsLoading(true);
@@ -285,6 +298,23 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   // 1 (both pagination modes) and refetch. Runs after the mount effect's own
   // first fetch (hasFetched guards that), and after every subsequent change
   // to any of the four.
+  //
+  // Ordering note: on initial mount, THIS effect and the mount effect above
+  // both technically fire in the same commit (React runs effects in
+  // declaration order), and the mount effect sets hasFetched.current = true
+  // synchronously -- so the `!hasFetched.current` guard here does NOT stop
+  // this effect from also calling fetchFirstPage() on mount. What actually
+  // prevents a duplicate HTTP request is that fetchPdiReports sets
+  // isFetching.current = true synchronously before its first `await`
+  // (guaranteed by JS async-function semantics: everything before the first
+  // await runs before control returns to the caller), so this effect's call
+  // bails out via that guard instead. That's an implicit ordering
+  // guarantee, not an explicit one -- if fetchPdiReports's synchronous
+  // prologue ever grows an early `await` (e.g. an `await` added before the
+  // isFetching.current = true line), this would silently start firing two
+  // requests on mount. Flagged in code review; left as a documented
+  // invariant rather than an explicit guard/rewrite, since it holds today
+  // and this table's usage doesn't warrant more defensive machinery.
   useEffect(() => {
     if (!hasFetched.current) return;
     fetchFirstPage();
