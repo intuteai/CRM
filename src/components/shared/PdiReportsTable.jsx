@@ -504,10 +504,14 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
             </table>
           </div>
 
-          <div className="md:hidden divide-y divide-gray-100">
+          <div className="md:hidden divide-y">
             {/* Field fallbacks ('—'/'N/A') here must match the desktop table above. */}
+            {/* divide-gray-100 (instead of the plain border-t-gray-100 used here) would set the
+                border-color shorthand on all four sides via a higher-specificity selector, silently
+                overriding the per-status border-l-* accent color below -- confirmed live, every card
+                rendered the divider's gray instead of its status color regardless of border-l-*. */}
             {sortedPdiReports.map((report) => (
-              <div key={report.report_id} className={`p-4 border-l-4 ${getStatusStyle(report.status).border}`}>
+              <div key={report.report_id} className={`p-4 border-t-gray-100 border-l-4 ${getStatusStyle(report.status).border}`}>
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-bold text-gray-800 text-base">{report.pdi_no || '—'}</span>
                   <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${getStatusStyle(report.status).pill}`}>
