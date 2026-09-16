@@ -335,7 +335,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
     );
   }
 
-  if (error && !pdiReports.length) return <ConnectionError onRetry={() => fetchPdiReports(null)} />;
+  if (error && !pdiReports.length) return <ConnectionError onRetry={() => fetchPdiReports(null, statusFilter)} />;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
