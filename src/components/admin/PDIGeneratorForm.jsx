@@ -314,10 +314,18 @@ function ToleranceSpecInput({
         value={tol}
         onChange={(e) => onTolChange(e.target.value)}
         placeholder={mode === 'bilateral' ? '+' : 'tol.'}
+        aria-label={mode === 'bilateral' ? 'Plus tolerance' : 'Tolerance amount'}
         style={{ maxWidth: mode === 'bilateral' ? 50 : 60 }}
       />
       {mode === 'bilateral' && (
-        <input className={INPUT_CLS} value={tolMinus} onChange={(e) => onTolMinusChange(e.target.value)} placeholder="-" style={{ maxWidth: 50 }} />
+        <input
+          className={INPUT_CLS}
+          value={tolMinus}
+          onChange={(e) => onTolMinusChange(e.target.value)}
+          placeholder="-"
+          aria-label="Minus tolerance"
+          style={{ maxWidth: 50 }}
+        />
       )}
     </div>
   );
