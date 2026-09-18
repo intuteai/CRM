@@ -13,10 +13,16 @@ const API_URL = import.meta.env.VITE_BACKEND_URL || '';
 // Every image goes through crop + client-side compression before upload (see
 // cropAndCompress below), so the *sent* payload stays small regardless of
 // source size — this raw cap is just a backstop against absurd files before
-// we even try to decode them. server.js's JSON body limit (25mb) is sized
-// for MAX_PHOTOS compressed photos plus the drawing image.
+// we even try to decode them.
 const MAX_RAW_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_PHOTOS = 12;
+// Per-slot and whole-report photo ceilings. MAX_PHOTOS (slots) x
+// MAX_IMAGES_PER_SLOT would allow 300 images in theory, but nobody needs
+// that many on one report and the combined base64 payload would blow well
+// past server.js's JSON body limit even with compression — so the total
+// across every slot is capped separately in addPhotoImage below.
+const MAX_IMAGES_PER_SLOT = 25;
+const MAX_TOTAL_PHOTOS = 60;
 // The generated PDF auto-paginates the motor tables with no hard limit
 // (verified up to 150 rows) — this is just a sane UI ceiling.
 const MAX_ROWS = 100;
@@ -642,11 +648,18 @@ export default function PDIGeneratorForm() {
   // ReferenceError on every render (it's a `const`, not hoisted like a
   // function declaration).
   const addPhotoImage = useCallback((id, dataUri) => {
-    setForm((prev) => ({
-      ...prev,
-      photos: prev.photos.map((p) => (p.id === id ? { ...p, images: [...(p.images || []), dataUri].slice(0, 10) } : p)),
-    }));
-  }, []);
+    setForm((prev) => {
+      const totalImages = prev.photos.reduce((sum, p) => sum + (p.images?.length || 0), 0);
+      if (totalImages >= MAX_TOTAL_PHOTOS) {
+        notifyError(`Reached the ${MAX_TOTAL_PHOTOS}-photo limit for this report — remove some photos before adding more.`);
+        return prev;
+      }
+      return {
+        ...prev,
+        photos: prev.photos.map((p) => (p.id === id ? { ...p, images: [...(p.images || []), dataUri].slice(0, MAX_IMAGES_PER_SLOT) } : p)),
+      };
+    });
+  }, [notifyError]);
 
   const removePhotoImage = useCallback((id, imgIdx) => {
     setForm((prev) => ({
@@ -1413,7 +1426,7 @@ export default function PDIGeneratorForm() {
                           onFilesSelected={(fileList) => handleFilesChosen({ type: 'photo', id: photo.id }, fileList)}
                           onRemove={(imgIdx) => removePhotoImage(photo.id, imgIdx)}
                           heightCls="h-32"
-                          maxImages={25}
+                          maxImages={MAX_IMAGES_PER_SLOT}
                         />
                       </div>
                     ))}
