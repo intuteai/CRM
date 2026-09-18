@@ -114,6 +114,7 @@ const makeRow = (sno) => ({
   // Mechanical
   motor_length: '',
   shaft_length: '',
+  shaft_diameter: '',
   mounting_pcd: '',
   mtg: '',
   key_dim_result: 'GO',
@@ -199,20 +200,6 @@ function parseForwardReverse(raw) {
   return { forward: trimmed, reverse: '' };
 }
 
-// Parses a Shaft Diameter/Length cell's raw text into { diameter, length }.
-// "12/45" -> diameter=12, length=45. Same split-on-"/" mechanics as
-// parseForwardReverse above, distinctly named since diameter and length
-// validate against two independent specs, not one shared spec.
-function parseDiaLength(raw) {
-  const trimmed = (raw || '').trim();
-  if (!trimmed) return { diameter: '', length: '' };
-  if (trimmed.includes('/')) {
-    const [d, l] = trimmed.split('/');
-    return { diameter: (d || '').trim(), length: (l || '').trim() };
-  }
-  return { diameter: trimmed, length: '' };
-}
-
 const initGeneralChecks = (checks, defaultMeasured = 'GO') =>
   Object.fromEntries(
     checks.map((c) => [c.key, { measured: defaultMeasured, remarks: 'OK' }])
@@ -242,8 +229,9 @@ const defaultForm = () => ({
   power_cable_length: '1250±50mm',
   sensor_cable_length: '1250±50mm',
   // Mechanical table's "Specification" row — manual entry, varies by product.
-  // Motor Length, Shaft O/P D/Length, Mounting PCD, and Locating Dia. are real
-  // numeric specs and get a tolerance mode + amount alongside the nominal.
+  // Motor Length, Shaft Length, Shaft Diameter, Mounting PCD, and Locating
+  // Dia. are real numeric specs and get a tolerance mode + amount alongside
+  // the nominal.
   // MTG stays a free-text compound description (two sub-specs in one string,
   // e.g. "1.M6 / 2.Ø8.0") — informational only, no tolerance math. Key Dim.
   // stays a GO/NG pass/fail check, also no tolerance math.
@@ -1164,8 +1152,7 @@ export default function PDIGeneratorForm() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Shaft O/P Dia./Length</label>
-                      <p className="text-[10px] text-gray-400 mb-1">Length spec — measured value below is entered as &ldquo;diameter/length&rdquo;</p>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Shaft Length</label>
                       <ToleranceSpecInput
                         nominalValue={form.spec_shaft_length} onNominalChange={(v) => setField('spec_shaft_length', v)} nominalPlaceholder="e.g. 24.0"
                         mode={form.spec_shaft_length_tol_mode} onModeChange={(v) => setField('spec_shaft_length_tol_mode', v)}
@@ -1175,7 +1162,6 @@ export default function PDIGeneratorForm() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Shaft Diameter</label>
-                      <p className="text-[10px] text-gray-400 mb-1">Diameter spec — same measured field as Length above</p>
                       <ToleranceSpecInput
                         nominalValue={form.spec_shaft_diameter} onNominalChange={(v) => setField('spec_shaft_diameter', v)} nominalPlaceholder="e.g. 12.0"
                         mode={form.spec_shaft_diameter_tol_mode} onModeChange={(v) => setField('spec_shaft_diameter_tol_mode', v)}
@@ -1230,7 +1216,8 @@ export default function PDIGeneratorForm() {
                         <th className={TH_CLS}>S. No</th>
                         <th className={TH_CLS}>Motor Sr. No</th>
                         <th className={TH_CLS}>Motor Length</th>
-                        <th className={TH_CLS}>Shaft O/P D/Length</th>
+                        <th className={TH_CLS}>Shaft Length</th>
+                        <th className={TH_CLS}>Shaft Diameter</th>
                         <th className={TH_CLS}>Mounting PCD</th>
                         <th className={TH_CLS}>MTG</th>
                         <th className={TH_CLS}>Key Dim (Go/NG)</th>
@@ -1253,20 +1240,18 @@ export default function PDIGeneratorForm() {
                             />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
-                            {(() => {
-                              const { diameter, length } = parseDiaLength(row.shaft_length);
-                              const dFlag = checkTolerance(diameter, form.spec_shaft_diameter, form.spec_shaft_diameter_tol_mode, form.spec_shaft_diameter_tol, form.spec_shaft_diameter_tol_minus).outOfRange;
-                              const lFlag = checkTolerance(length, form.spec_shaft_length, form.spec_shaft_length_tol_mode, form.spec_shaft_length_tol, form.spec_shaft_length_tol_minus).outOfRange;
-                              return (
-                                <input
-                                  className={`${INPUT_CLS} ${(dFlag || lFlag) ? 'border-red-500 bg-red-50' : ''}`}
-                                  value={row.shaft_length}
-                                  onChange={(e) => setRowField(idx, 'shaft_length', e.target.value)}
-                                  placeholder="e.g. 12/45"
-                                  title={dFlag && lFlag ? 'Both diameter and length outside tolerance' : dFlag ? 'Diameter outside tolerance' : lFlag ? 'Length outside tolerance' : undefined}
-                                />
-                              );
-                            })()}
+                            <input
+                              className={`${INPUT_CLS} ${checkTolerance(row.shaft_length, form.spec_shaft_length, form.spec_shaft_length_tol_mode, form.spec_shaft_length_tol, form.spec_shaft_length_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
+                              value={row.shaft_length} onChange={(e) => setRowField(idx, 'shaft_length', e.target.value)} placeholder="mm"
+                              title={checkTolerance(row.shaft_length, form.spec_shaft_length, form.spec_shaft_length_tol_mode, form.spec_shaft_length_tol, form.spec_shaft_length_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
+                            />
+                          </td>
+                          <td className="py-1 px-1 border border-gray-100">
+                            <input
+                              className={`${INPUT_CLS} ${checkTolerance(row.shaft_diameter, form.spec_shaft_diameter, form.spec_shaft_diameter_tol_mode, form.spec_shaft_diameter_tol, form.spec_shaft_diameter_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
+                              value={row.shaft_diameter} onChange={(e) => setRowField(idx, 'shaft_diameter', e.target.value)} placeholder="mm"
+                              title={checkTolerance(row.shaft_diameter, form.spec_shaft_diameter, form.spec_shaft_diameter_tol_mode, form.spec_shaft_diameter_tol, form.spec_shaft_diameter_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
+                            />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input
