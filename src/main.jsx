@@ -3,6 +3,9 @@ import "./index.css";
 import App from "./App.jsx";
 import { store } from "./app/store.js";
 import { Provider } from "react-redux";
+import { installApiStatusTracking } from "./services/apiStatus.js";
+
+installApiStatusTracking();
 
 createRoot(document.getElementById("root")).render(
   <Provider store={store}>
