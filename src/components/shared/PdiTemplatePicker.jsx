@@ -62,14 +62,14 @@ export default function PdiTemplatePicker() {
   }
 
   return (
-    <div className="max-w-lg mx-auto mt-16 p-6">
+    <div className="max-w-lg mx-auto mt-4 sm:mt-16 p-2 sm:p-6">
       <h1 className="text-xl font-semibold mb-4">Choose a PDI Template</h1>
       <div className="flex flex-col gap-3">
         {templates.map((tpl) => (
           <button
             key={tpl.id}
             onClick={() => navigate(`/pdi-generator/${tpl.id}`)}
-            className="text-left p-4 border rounded-lg hover:bg-amber-50 hover:border-amber-400 transition-colors"
+            className="text-left p-4 border rounded-lg hover:bg-navy-50 hover:border-gold-400 transition-colors"
           >
             <div className="font-medium">{tpl.name}</div>
           </button>

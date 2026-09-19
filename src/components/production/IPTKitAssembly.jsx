@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { Boxes, Search, Plus, Pencil, Trash2, Loader2, Settings2 } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Loader2, Settings2, Eye, X } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
@@ -14,6 +14,11 @@ const COMPONENT_FIELDS = [
   { key: 'vcu_serial', label: 'VCU' },
   { key: 'dcdc_serial', label: 'DC/DC' },
 ];
+
+// Table stays lean (scan-essential columns only) -- the remaining component
+// serials move into the "View" details modal, matching the trim pattern
+// established in CustomerList.jsx.
+const VISIBLE_COMPONENT_FIELDS = COMPONENT_FIELDS.slice(0, 3);
 
 const emptyForm = () => {
   const f = {};
@@ -29,6 +34,7 @@ function IPTKitAssembly({ socket }) {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [viewingKit, setViewingKit] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [previewSerial, setPreviewSerial] = useState('');
   const [form, setForm] = useState(emptyForm());
@@ -163,27 +169,18 @@ function IPTKitAssembly({ socket }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white mb-3">
-            <Boxes className="w-8 h-8" />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-800">IPT Kit Assembly</h1>
-          <p className="text-sm text-gray-500 mt-2">Record which component serials went into each IPT Kit</p>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow p-4 mb-4 flex items-center gap-3">
+    <div className="max-w-7xl mx-auto space-y-4">
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-4 flex items-center gap-3">
           <div className="text-sm text-gray-600"><strong>{total}</strong> total kits</div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow p-4 mb-4 flex flex-col sm:flex-row gap-3 items-center">
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-4 flex flex-col sm:flex-row gap-3 items-center">
           <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Search by kit serial or any component serial..."
-              className="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-amber-300"
+              className="w-full pl-9 pr-4 py-2 rounded-lg border border-navy-100 focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -191,63 +188,67 @@ function IPTKitAssembly({ socket }) {
           <button
             type="button"
             onClick={openCreateModal}
-            className="px-5 py-2 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-xl shadow flex items-center gap-2 font-medium whitespace-nowrap"
+            className="px-5 py-2 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors flex items-center gap-2 font-semibold whitespace-nowrap"
           >
             <Plus className="w-4 h-4" /> New Kit
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl shadow overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-amber-50 text-amber-900">
-              <tr>
-                <th className="px-4 py-3 text-left">Kit Serial</th>
-                {COMPONENT_FIELDS.map((c) => (
-                  <th key={c.key} className="px-4 py-3 text-left">{c.label}</th>
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
+          <table className="w-full text-sm text-left border-collapse">
+            <thead>
+              <tr className="bg-navy-50 text-navy-800 font-semibold">
+                <th className="px-4 py-3 text-left border-b border-navy-100">Kit Serial</th>
+                {VISIBLE_COMPONENT_FIELDS.map((c) => (
+                  <th key={c.key} className="px-4 py-3 text-left border-b border-navy-100">{c.label}</th>
                 ))}
-                <th className="px-4 py-3 text-left">Created By</th>
-                <th className="px-4 py-3 text-left">Date</th>
-                <th className="px-4 py-3 text-left">Actions</th>
+                <th className="px-4 py-3 text-left border-b border-navy-100">Created By</th>
+                <th className="px-4 py-3 text-left border-b border-navy-100">Date</th>
+                <th className="px-4 py-3 text-left border-b border-navy-100">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-navy-100">
               {kits.map((kit) => (
-                <tr key={kit.kit_id} className="border-t border-gray-100">
-                  <td className="px-4 py-3 font-mono font-semibold">{kit.kit_serial}</td>
-                  {COMPONENT_FIELDS.map((c) => (
-                    <td key={c.key} className="px-4 py-3 font-mono">{kit[c.key]}</td>
+                <tr key={kit.kit_id} className="hover:bg-navy-50/60 transition-colors">
+                  <td className="px-4 py-3 font-mono font-semibold text-navy-800">{kit.kit_serial}</td>
+                  {VISIBLE_COMPONENT_FIELDS.map((c) => (
+                    <td key={c.key} className="px-4 py-3 font-mono text-gray-600">{kit[c.key]}</td>
                   ))}
-                  <td className="px-4 py-3">{kit.created_by_name || '—'}</td>
-                  <td className="px-4 py-3">{String(kit.created_at).slice(0, 10)}</td>
+                  <td className="px-4 py-3 text-gray-600">{kit.created_by_name || '—'}</td>
+                  <td className="px-4 py-3 text-gray-600">{String(kit.created_at).slice(0, 10)}</td>
                   <td className="px-4 py-3">
-                    <button onClick={() => openEditModal(kit)} title="Edit" className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg">
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDelete(kit)} title="Delete" className="p-2 text-red-500 hover:bg-red-50 rounded-lg">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => setViewingKit(kit)} title="View" className="p-2 text-navy-600 hover:bg-navy-50 rounded-lg transition-colors">
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => openEditModal(kit)} title="Edit" className="p-2 text-navy-600 hover:bg-navy-50 rounded-lg transition-colors">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete(kit)} title="Delete" className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
               {!loading && kits.length === 0 && (
-                <tr><td colSpan={COMPONENT_FIELDS.length + 4} className="px-4 py-12 text-center text-gray-400">No kits found</td></tr>
+                <tr><td colSpan={VISIBLE_COMPONENT_FIELDS.length + 4} className="px-4 py-12 text-center text-gray-400">No kits found</td></tr>
               )}
             </tbody>
           </table>
           {cursor && (
             <div className="p-4 text-center">
-              <button onClick={() => fetchKits(false)} disabled={loading} className="px-4 py-2 text-amber-700 hover:bg-amber-50 rounded-lg text-sm font-medium">
+              <button onClick={() => fetchKits(false)} disabled={loading} className="px-4 py-2 text-navy-700 hover:bg-navy-50 rounded-lg text-sm font-medium transition-colors">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Load more'}
               </button>
             </div>
           )}
         </div>
-      </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8">
-            <h2 className="text-2xl font-bold text-gray-800 mb-1 text-center">
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="font-display text-xl font-bold text-navy-800 text-center mb-1">
               {editingId ? 'Edit Kit' : 'New Kit'}
             </h2>
             <div className="text-center text-sm text-gray-500 mb-2 font-mono flex items-center justify-center gap-2">
@@ -257,14 +258,14 @@ function IPTKitAssembly({ socket }) {
                   type="button"
                   onClick={() => { setEditingSerial(true); setNextSerialInput(''); setSerialSetError(''); }}
                   title="Set starting number"
-                  className="text-amber-600 hover:text-amber-800"
+                  className="text-navy-600 hover:text-navy-800 transition-colors"
                 >
                   <Settings2 className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
             {!editingId && editingSerial && (
-              <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <div className="mb-6 bg-navy-50 border border-navy-100 rounded-lg p-4">
                 <form onSubmit={handleSetNextSerial} className="flex items-center gap-2">
                   <span className="text-sm text-gray-600 font-mono">IPT</span>
                   <input
@@ -272,8 +273,8 @@ function IPTKitAssembly({ socket }) {
                     min="1"
                     autoFocus
                     placeholder="e.g. 1"
-                    className={`w-24 px-3 py-1.5 rounded-lg border font-mono text-sm focus:ring-2 ${
-                      serialSetError ? 'border-red-400 focus:ring-red-200' : 'border-amber-300 focus:ring-amber-200'
+                    className={`w-24 px-3 py-1.5 rounded-lg border font-mono text-sm focus:outline-none focus:ring-2 ${
+                      serialSetError ? 'border-red-400 focus:ring-red-200' : 'border-navy-100 focus:ring-gold-400'
                     }`}
                     value={nextSerialInput}
                     onChange={(e) => { setNextSerialInput(e.target.value); setSerialSetError(''); }}
@@ -281,14 +282,14 @@ function IPTKitAssembly({ socket }) {
                   <button
                     type="submit"
                     disabled={settingSerial || !nextSerialInput}
-                    className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                    className="px-3 py-1.5 bg-navy-800 text-white rounded-lg text-sm font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
                   >
                     {settingSerial ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Set'}
                   </button>
                   <button
                     type="button"
                     onClick={() => { setEditingSerial(false); setSerialSetError(''); }}
-                    className="px-3 py-1.5 text-gray-500 text-sm"
+                    className="px-3 py-1.5 text-gray-500 hover:text-gray-700 text-sm transition-colors"
                   >
                     Cancel
                   </button>
@@ -305,8 +306,8 @@ function IPTKitAssembly({ socket }) {
                   <input
                     type="text"
                     required
-                    className={`w-full px-4 py-2 rounded-xl border font-mono focus:ring-2 ${
-                      fieldError.field === c.key ? 'border-red-400 focus:ring-red-200' : 'border-gray-200 focus:ring-amber-300'
+                    className={`w-full px-4 py-2 rounded-lg border font-mono focus:outline-none focus:ring-2 ${
+                      fieldError.field === c.key ? 'border-red-400 focus:ring-red-200' : 'border-navy-100 focus:ring-gold-400'
                     }`}
                     value={form[c.key]}
                     onChange={(e) => {
@@ -320,18 +321,59 @@ function IPTKitAssembly({ socket }) {
                 </div>
               ))}
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={closeModal} className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 text-sm font-medium">
+                <button type="button" onClick={closeModal} className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium">
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-xl shadow flex items-center gap-2 text-sm font-medium disabled:opacity-70"
+                  className={`px-5 py-2.5 rounded-lg flex items-center gap-2 text-sm font-semibold transition-colors disabled:opacity-70 ${
+                    editingId
+                      ? 'bg-navy-800 text-white hover:bg-navy-700'
+                      : 'bg-gold-500 text-navy-900 hover:bg-gold-400'
+                  }`}
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingId ? 'Save Changes' : 'Create Kit')}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {viewingKit && (
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto relative">
+            <button
+              onClick={() => setViewingKit(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+            <h2 className="font-display text-xl font-bold text-navy-800 mb-5">
+              {viewingKit.kit_serial || 'Kit Details'}
+            </h2>
+            <dl className="space-y-4">
+              {[
+                ...COMPONENT_FIELDS.map((c) => ({ label: `${c.label} Serial`, value: viewingKit[c.key] })),
+                { label: 'Created By', value: viewingKit.created_by_name },
+                { label: 'Date', value: viewingKit.created_at ? String(viewingKit.created_at).slice(0, 10) : null },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</dt>
+                  <dd className="text-navy-800 mt-0.5 font-mono">{value || 'N/A'}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setViewingKit(null)}
+                className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -208,18 +208,18 @@ export default function ProformaForm() {
   if (socketStatus === 'error' || fetchError) return <ConnectionError onRetry={() => setFetchError(null)} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
+    <div className="pb-6">
       <div className="max-w-4xl mx-auto">
 
         {/* ── Page header ── */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5 mb-8">
           <div>
-            <div className="inline-flex items-center gap-2 bg-amber-100 border border-amber-200 rounded-full px-3 py-1 mb-3">
-              <FileText size={12} className="text-amber-700" />
-              <span className="text-amber-700 text-xs font-semibold tracking-wide">Pre-Payment Billing</span>
+            <div className="inline-flex items-center gap-2 bg-gold-400/25 border border-gold-400/40 rounded-full px-3 py-1 mb-3">
+              <FileText size={12} className="text-gold-600" />
+              <span className="text-gold-600 text-xs font-semibold tracking-wide">Pre-Payment Billing</span>
             </div>
-            <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Proforma Invoice</h1>
-            <p className="text-gray-600 text-sm mt-1.5">Generate invoices with RTGS payment details for advance billing</p>
+            <h1 className="font-display text-2xl font-bold text-navy-800 tracking-tight">Proforma Invoice</h1>
+            <p className="text-gray-500 text-sm mt-1.5">Generate invoices with RTGS payment details for advance billing</p>
           </div>
           <button
             onClick={() => setIsOpen(true)}
@@ -231,16 +231,16 @@ export default function ProformaForm() {
 
         {/* ── Hero card ── */}
         <div
-          className="bg-gradient-to-br from-amber-100 to-amber-50 rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer border border-amber-200"
+          className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer border border-navy-100"
           onClick={() => setIsOpen(true)}
         >
           <div className="h-1.5 bg-gradient-to-r from-blue-500 to-indigo-600" />
           <div className="p-7">
             <div className="flex items-start justify-between mb-6">
-              <div className="bg-white p-3.5 rounded-xl border border-amber-100 shadow-sm">
-                <FileText size={26} className="text-gray-700" />
+              <div className="bg-navy-50 p-3.5 rounded-xl border border-navy-100">
+                <FileText size={26} className="text-navy-800" />
               </div>
-              <span className="bg-amber-200 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-300">
+              <span className="bg-gold-400/25 text-gold-600 text-xs font-bold px-3 py-1.5 rounded-full border border-gold-400/40">
                 AXIS BANK
               </span>
             </div>
@@ -255,7 +255,7 @@ export default function ProformaForm() {
                 { label: 'Branch',      value: FIXED_RTGS.branch                      },
                 { label: 'IFSC',        value: FIXED_RTGS.ifsc                        },
               ].map(({ label, value }) => (
-                <div key={label} className="bg-white rounded-xl p-3 border border-amber-100">
+                <div key={label} className="bg-navy-50 rounded-xl p-3 border border-navy-100">
                   <p className="text-xs text-gray-500 mb-0.5">{label}</p>
                   <p className="font-semibold text-gray-700 text-xs truncate">{value}</p>
                 </div>
@@ -279,8 +279,8 @@ export default function ProformaForm() {
       <Modal
         isOpen={isOpen}
         onRequestClose={() => setIsOpen(false)}
-        className="max-w-4xl mx-auto mt-8 bg-white rounded-xl p-6 outline-none shadow-xl"
-        overlayClassName="fixed inset-0 bg-black bg-opacity-40 flex items-start justify-center z-50 overflow-y-auto"
+        className="w-full md:w-auto max-w-4xl mx-auto mt-8 mb-4 md:mb-0 bg-white rounded-xl p-6 outline-none shadow-xl"
+        overlayClassName="fixed inset-0 bg-navy-900/50 flex items-start justify-center z-50 overflow-y-auto p-3 lg:p-0"
       >
         <h3 className="text-xl font-semibold mb-2 text-gray-800">Create Proforma Invoice</h3>
 
@@ -293,7 +293,7 @@ export default function ProformaForm() {
         <form onSubmit={handleGenerate} className="space-y-4">
 
           {/* Top fields */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm text-gray-600">Proforma No *</label>
               <input
@@ -327,7 +327,7 @@ export default function ProformaForm() {
           </div>
 
           {/* To Section */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-600">To (Name)</label>
               <input
@@ -367,19 +367,19 @@ export default function ProformaForm() {
               <button
                 type="button"
                 onClick={addItem}
-                className="text-green-600 flex items-center gap-2"
+                className="text-green-600 flex items-center gap-2 py-1.5 -my-1.5"
               >
                 <Plus className="w-4 h-4" /> Add
               </button>
             </div>
 
             {form.items.map((it, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2 items-start mb-2">
-                <div className="col-span-1 text-center pt-2">{idx + 1}</div>
+              <div key={idx} className="grid grid-cols-6 md:grid-cols-12 gap-2 items-start mb-2 max-md:pb-3 max-md:border-b max-md:border-gray-200">
+                <div className="col-span-3 md:col-span-1 order-1 md:order-none text-left md:text-center pt-2">{idx + 1}</div>
 
                 <textarea
                   rows={2}
-                  className="col-span-6 border rounded px-2 py-1"
+                  className="col-span-6 order-3 md:order-none border rounded px-2 py-1"
                   value={it.description}
                   onChange={(e) => updateItem(idx, 'description', e.target.value)}
                   placeholder="Description — e.g. Servo Motor-125/5D SPM"
@@ -387,7 +387,7 @@ export default function ProformaForm() {
 
                 <input
                   type="number"
-                  className="col-span-1 border rounded px-2 py-1"
+                  className="col-span-2 md:col-span-1 order-3 md:order-none max-md:min-w-0 border rounded px-2 py-1"
                   value={it.qty}
                   onChange={(e) => updateItem(idx, 'qty', e.target.value)}
                   placeholder="Qty (e.g. 1)"
@@ -395,7 +395,7 @@ export default function ProformaForm() {
 
                 <input
                   type="number"
-                  className="col-span-2 border rounded px-2 py-1"
+                  className="col-span-2 order-3 md:order-none max-md:min-w-0 border rounded px-2 py-1"
                   value={it.rate}
                   onChange={(e) => updateItem(idx, 'rate', e.target.value)}
                   placeholder="Rate (e.g. 75000)"
@@ -403,13 +403,13 @@ export default function ProformaForm() {
 
                 <input
                   type="number"
-                  className="col-span-2 border rounded px-2 py-1"
+                  className="col-span-2 order-3 md:order-none max-md:min-w-0 border rounded px-2 py-1"
                   value={it.total_price}
                   onChange={(e) => updateItem(idx, 'total_price', e.target.value)}
                   placeholder="Total (auto-calculated)"
                 />
 
-                <div className="col-span-1 text-right pt-2">
+                <div className="col-span-3 md:col-span-1 order-2 md:order-none text-right pt-2">
                   {form.items.length > 1 && (
                     <button type="button" onClick={() => removeItem(idx)} className="text-red-600">
                       <Trash2 />
@@ -443,7 +443,7 @@ export default function ProformaForm() {
           {/* RTGS Box */}
           <div className="bg-white border rounded p-3">
             <div className="font-semibold mb-2">RTGS Details (Fixed)</div>
-            <div className="grid grid-cols-4 gap-2 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
               <div>
                 <div className="text-xs text-gray-500">Account Number</div>
                 <div className="font-medium">{FIXED_RTGS.account}</div>
@@ -464,7 +464,7 @@ export default function ProformaForm() {
           </div>
 
           {/* Buttons */}
-          <div className="flex justify-end gap-3 mt-4">
+          <div className="flex flex-wrap justify-end gap-3 mt-4">
             <button type="button" onClick={() => setIsOpen(false)} className="px-4 py-2 border rounded">Cancel</button>
 
             <button type="submit" disabled={loading} className="px-4 py-2 bg-green-600 text-white rounded shadow flex items-center">

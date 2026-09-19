@@ -13,6 +13,7 @@ import debounce from 'lodash.debounce';
 import Modal from 'react-modal';
 import { toWords } from 'number-to-words';
 import { useNotify } from '../../hooks/useNotify';
+import PeoplePage from '../shared/PeoplePage';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 const MAX_CACHED = 200;
@@ -375,55 +376,36 @@ function IAInvoiceForm({ socket }) {
 
   // ────── RENDER ──────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-25 to-gray-100 relative overflow-hidden p-6">
-      <div className="absolute top-0 left-0 w-96 h-96 bg-amber-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
-      <div className="absolute top-0 right-0 w-96 h-96 bg-orange-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000"></div>
-      <div className="absolute -bottom-32 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
-
-      <div className="relative z-10">
-        <div className="text-center mb-10 mt-8">
-          <div className="inline-flex items-center justify-center mb-4">
-            <div className="p-3 bg-gradient-to-r from-amber-400 to-orange-400 rounded-2xl shadow-lg">
-              <FileText className="w-8 h-8 text-white animate-bounce" />
-            </div>
-          </div>
-          <div className="flex justify-center mb-3">
-            <span className="inline-flex items-center bg-white border border-amber-200 text-amber-700 text-xs font-semibold uppercase tracking-widest px-4 py-1.5 rounded-full shadow-sm">
-              INTUTE AI
-            </span>
-          </div>
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-gray-800 via-gray-700 to-amber-700 bg-clip-text text-transparent mb-4 tracking-tight">
-            Invoice Generator
-          </h1>
-          <p className="text-sm text-gray-500 mt-2">Manual Entry • Auto GST + Totals • Saved History • PDF Download</p>
-        </div>
-
+    <PeoplePage
+      title="Invoice Generator"
+      subtitle="Manual Entry • Auto GST + Totals • Saved History • PDF Download"
+    >
         {/* Stats */}
-        <div className="max-w-7xl mx-auto mb-6 grid grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl shadow-sm border border-amber-100 px-5 py-4 flex items-center gap-4">
-            <div className="p-2.5 rounded-xl text-amber-700 bg-amber-100"><FileText className="w-5 h-5" /></div>
+        <div className="mb-5 grid grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl shadow-sm border border-navy-100 px-5 py-4 flex items-center gap-4">
+            <div className="p-2.5 rounded-xl text-gold-600 bg-gold-400/25"><FileText className="w-5 h-5" /></div>
             <div>
-              <p className="text-2xl font-bold text-gray-800">{total}</p>
+              <p className="text-2xl font-bold text-navy-800">{total}</p>
               <p className="text-xs text-gray-500 font-medium">Total Invoices</p>
             </div>
           </div>
-          <div className="bg-white rounded-2xl shadow-sm border border-amber-100 px-5 py-4 flex items-center gap-4">
-            <div className="p-2.5 rounded-xl text-green-700 bg-green-100"><Package className="w-5 h-5" /></div>
+          <div className="bg-white rounded-xl shadow-sm border border-navy-100 px-5 py-4 flex items-center gap-4">
+            <div className="p-2.5 rounded-xl text-emerald-700 bg-emerald-100"><Package className="w-5 h-5" /></div>
             <div>
-              <p className="text-2xl font-bold text-gray-800">{invoices.length}</p>
+              <p className="text-2xl font-bold text-navy-800">{invoices.length}</p>
               <p className="text-xs text-gray-500 font-medium">Shown</p>
             </div>
           </div>
         </div>
 
         {/* Search + New Invoice */}
-        <div className="max-w-7xl mx-auto mb-4 flex flex-col sm:flex-row gap-3">
+        <div className="mb-4 flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-[17px] h-[17px]" />
             <input
               type="text"
               placeholder="Search by invoice number or customer name..."
-              className="w-full pl-10 pr-10 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 focus:outline-none text-sm"
+              className="w-full pl-11 pr-10 py-3 rounded-lg border border-navy-100 bg-white shadow-sm focus:ring-2 focus:ring-gold-400 focus:outline-none text-sm"
               value={searchInput}
               onChange={(e) => { setSearchInput(e.target.value); debouncedSearch(e.target.value); }}
             />
@@ -435,56 +417,56 @@ function IAInvoiceForm({ socket }) {
           </div>
           <button
             onClick={openUploadModal}
-            className="px-6 py-3 bg-white border border-amber-300 text-amber-700 font-medium rounded-xl shadow-sm hover:bg-amber-50 flex items-center gap-2 transition-all whitespace-nowrap"
+            className="px-5 py-3 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 flex items-center gap-2 transition-colors whitespace-nowrap"
           >
-            <Upload className="w-5 h-5" /> Upload Old Invoice
+            <Upload className="w-4 h-4" /> Upload Old Invoice
           </button>
           <button
             onClick={openModal}
-            className="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-white font-medium rounded-xl shadow-lg hover:shadow-xl flex items-center gap-2 transition-all whitespace-nowrap"
+            className="px-5 py-3 bg-gold-500 text-navy-900 font-semibold rounded-lg hover:bg-gold-400 flex items-center gap-2 transition-colors whitespace-nowrap"
           >
-            <Plus className="w-5 h-5" /> New Invoice
+            <Plus className="w-4 h-4" /> New Invoice
           </button>
         </div>
 
         {/* History table */}
-        <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gradient-to-r from-amber-100 to-orange-50 border-b border-amber-200">
+              <thead className="bg-navy-50 border-b border-navy-100">
                 <tr>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-navy-800 whitespace-nowrap">
                     <div className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5 text-gray-400" /> Invoice No.</div>
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-navy-800 whitespace-nowrap">
                     <div className="flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-gray-400" /> Customer</div>
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-navy-800 whitespace-nowrap">
                     <div className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-gray-400" /> Date</div>
                   </th>
-                  <th className="px-4 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Grand Total</th>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Created By</th>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-navy-800 whitespace-nowrap">Grand Total</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-navy-800 whitespace-nowrap">Created By</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-navy-800 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-navy-100">
                 {invoices.length === 0 && !listLoading ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-16 text-center">
-                      <FileText className="w-12 h-12 text-amber-200 mx-auto mb-3" />
-                      <p className="text-gray-500 font-medium">No invoices found</p>
+                      <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-400 font-medium">No invoices found</p>
                       {search && (
-                        <button onClick={resetSearch} className="mt-2 text-sm text-amber-600 hover:text-amber-800 underline flex items-center gap-1 mx-auto">
+                        <button onClick={resetSearch} className="mt-2 text-sm text-gold-600 hover:text-gold-600 underline flex items-center gap-1 mx-auto">
                           <RotateCcw className="w-3.5 h-3.5" /> Clear search
                         </button>
                       )}
                     </td>
                   </tr>
                 ) : invoices.map((inv) => (
-                  <tr key={inv.invoiceId} className="hover:bg-amber-50/50 transition-colors group">
-                    <td className="px-4 py-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-amber-700 font-semibold">{inv.invoiceNumber}</span>
+                  <tr key={inv.invoiceId} className="hover:bg-navy-50/50 transition-colors group">
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        <span className="font-mono text-gold-600 font-semibold">{inv.invoiceNumber}</span>
                         {inv.source === 'uploaded' && (
                           <span className="inline-flex items-center bg-purple-100 text-purple-700 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full">
                             Uploaded
@@ -492,13 +474,13 @@ function IAInvoiceForm({ socket }) {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-800">{inv.billing?.name}</td>
-                    <td className="px-4 py-4 text-sm text-gray-600">{formatDate(inv.date)}</td>
-                    <td className="px-4 py-4 text-sm text-right font-semibold text-gray-800">
+                    <td className="px-4 py-3.5 text-gray-800">{inv.billing?.name}</td>
+                    <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{formatDate(inv.date)}</td>
+                    <td className="px-4 py-3.5 text-right font-semibold text-gray-800 whitespace-nowrap">
                       ₹{Number(inv.grandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
-                    <td className="px-4 py-4 text-sm text-gray-500">{inv.createdByName || '—'}</td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-3.5 text-gray-500">{inv.createdByName || '—'}</td>
+                    <td className="px-4 py-3.5">
                       <div className="flex gap-1.5 opacity-70 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => handleView(inv)}
@@ -511,7 +493,7 @@ function IAInvoiceForm({ socket }) {
                         <button
                           onClick={() => handleDownload(inv)}
                           disabled={downloadingId === inv.invoiceId}
-                          className="p-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-all disabled:opacity-50"
+                          className="p-2 text-gold-600 hover:bg-navy-50 rounded-lg transition-all disabled:opacity-50"
                           title="Download PDF"
                         >
                           {downloadingId === inv.invoiceId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
@@ -528,85 +510,84 @@ function IAInvoiceForm({ socket }) {
           </div>
 
           {listLoading && invoices.length === 0 && (
-            <div className="p-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-amber-500 mx-auto" /></div>
+            <div className="p-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-gold-600 mx-auto" /></div>
           )}
 
           {hasMore && (
-            <div className="p-4 text-center border-t border-amber-100">
+            <div className="p-4 text-center border-t border-navy-100">
               <button onClick={debouncedLoadMore} disabled={listLoading}
-                className="px-6 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 font-medium rounded-xl border border-amber-200 disabled:opacity-50 flex items-center gap-2 mx-auto transition-all text-sm">
+                className="px-6 py-2.5 bg-navy-50 hover:bg-gold-400/25 text-gold-600 font-medium rounded-xl border border-navy-100 disabled:opacity-50 flex items-center gap-2 mx-auto transition-all text-sm">
                 {listLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Loading...</> : 'Load More Invoices'}
               </button>
             </div>
           )}
         </div>
-      </div>
 
       <Modal
         isOpen={isModalOpen}
         onRequestClose={closeModal}
-        className="bg-white rounded-2xl p-8 max-w-5xl mx-auto mt-10 shadow-2xl outline-none overflow-y-auto max-h-screen"
-        overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        className="bg-white rounded-xl p-4 sm:p-6 max-w-5xl mx-auto mt-0 sm:mt-10 shadow-2xl outline-none overflow-y-auto max-h-[90vh] sm:max-h-screen w-[calc(100vw-2rem)] sm:w-auto"
+        overlayClassName="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50"
       >
-        <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">Generate Invoice</h2>
+        <h2 className="font-display text-xl font-bold text-navy-800 mb-5">Generate Invoice</h2>
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Invoice Meta */}
-          <div className="bg-amber-50 rounded-xl p-6 space-y-4">
-            <h3 className="font-semibold text-amber-800 flex items-center gap-2">
+          <div className="bg-navy-50 rounded-xl p-4 sm:p-6 space-y-4">
+            <h3 className="font-semibold text-gold-600 flex items-center gap-2">
               <FileText className="w-5 h-5" /> Invoice Details
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice No. *</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Invoice No. *</label>
                 <input
                   type="text" required placeholder="e.g. 2026-27/Ak/009"
-                  className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 font-mono"
+                  className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400 font-mono"
                   value={form.invoiceNumber}
                   onChange={(e) => setForm({ ...form, invoiceNumber: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Date</label>
                 <input
                   type="date"
-                  className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+                  className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400"
                   value={toYMD(form.date)}
                   onChange={(e) => setForm({ ...form, date: toYMD(e.target.value) })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Order No. <span className="text-gray-400 font-normal">(optional)</span></label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Order No. <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input
                   type="text"
-                  className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+                  className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400"
                   value={form.orderNo}
                   onChange={(e) => setForm({ ...form, orderNo: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Order Date <span className="text-gray-400 font-normal">(optional)</span></label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Order Date <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input
                   type="date"
-                  className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+                  className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400"
                   value={toYMD(form.orderDate)}
                   onChange={(e) => setForm({ ...form, orderDate: toYMD(e.target.value) })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">HSN</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">HSN</label>
                 <input
                   type="text"
-                  className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 font-mono"
+                  className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400 font-mono"
                   value={form.hsn}
                   onChange={(e) => setForm({ ...form, hsn: e.target.value })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Vendor Code <span className="text-gray-400 font-normal">(optional)</span></label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Vendor Code <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input
                   type="text"
-                  className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+                  className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400"
                   value={form.vendorCode}
                   onChange={(e) => setForm({ ...form, vendorCode: e.target.value })}
                 />
@@ -615,52 +596,52 @@ function IAInvoiceForm({ socket }) {
           </div>
 
           {/* Billing Details */}
-          <div className="bg-orange-50 rounded-xl p-6 space-y-4">
-            <h3 className="font-semibold text-orange-800 flex items-center gap-2">
+          <div className="bg-blue-50 rounded-xl p-4 sm:p-6 space-y-4">
+            <h3 className="font-semibold text-blue-800 flex items-center gap-2">
               <Building2 className="w-5 h-5" /> Billing / Customer Details
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Company / Customer Name *</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Company / Customer Name *</label>
                 <input
                   type="text" required placeholder="e.g. Fluisys Technologies"
-                  className="w-full px-4 py-3 rounded-xl border border-orange-200 focus:ring-4 focus:ring-orange-300"
+                  className="w-full px-4 py-3 rounded-lg border border-blue-200 bg-white focus:ring-2 focus:ring-gold-400 focus:outline-none"
                   value={form.billing.name}
                   onChange={(e) => setForm({ ...form, billing: { ...form.billing, name: e.target.value } })}
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Billing Address</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Billing Address</label>
                 <textarea
                   rows={2}
-                  className="w-full px-4 py-3 rounded-xl border border-orange-200 focus:ring-4 focus:ring-orange-300 resize-none"
+                  className="w-full px-4 py-3 rounded-lg border border-blue-200 bg-white focus:ring-2 focus:ring-gold-400 focus:outline-none resize-none"
                   value={form.billing.address}
                   onChange={(e) => setForm({ ...form, billing: { ...form.billing, address: e.target.value } })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Phone</label>
                 <input
                   type="text"
-                  className="w-full px-4 py-3 rounded-xl border border-orange-200 focus:ring-4 focus:ring-orange-300"
+                  className="w-full px-4 py-3 rounded-lg border border-blue-200 bg-white focus:ring-2 focus:ring-gold-400 focus:outline-none"
                   value={form.billing.phone}
                   onChange={(e) => setForm({ ...form, billing: { ...form.billing, phone: e.target.value } })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Email</label>
                 <input
                   type="text"
-                  className="w-full px-4 py-3 rounded-xl border border-orange-200 focus:ring-4 focus:ring-orange-300"
+                  className="w-full px-4 py-3 rounded-lg border border-blue-200 bg-white focus:ring-2 focus:ring-gold-400 focus:outline-none"
                   value={form.billing.email}
                   onChange={(e) => setForm({ ...form, billing: { ...form.billing, email: e.target.value } })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">GST Number</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">GST Number</label>
                 <input
                   type="text"
-                  className="w-full px-4 py-3 rounded-xl border border-orange-200 focus:ring-4 focus:ring-orange-300 font-mono"
+                  className="w-full px-4 py-3 rounded-lg border border-blue-200 bg-white focus:ring-2 focus:ring-gold-400 focus:outline-none font-mono"
                   value={form.billing.gst}
                   onChange={(e) => setForm({ ...form, billing: { ...form.billing, gst: e.target.value } })}
                 />
@@ -669,7 +650,7 @@ function IAInvoiceForm({ socket }) {
           </div>
 
           {/* Items */}
-          <div className="bg-green-50 rounded-xl p-6 space-y-4">
+          <div className="bg-green-50 rounded-xl p-4 sm:p-6 space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="font-semibold text-green-800 flex items-center gap-2">
                 <Package className="w-5 h-5" /> Items
@@ -681,26 +662,26 @@ function IAInvoiceForm({ socket }) {
             {form.items.map((item, i) => {
               const lineTotal = (Number(item.qty) || 0) * (Number(item.rate) || 0);
               return (
-                <div key={i} className="flex gap-2 items-center">
+                <div key={i} className="flex flex-wrap gap-2 items-center">
                   <input
                     type="text" placeholder="Description"
-                    className="flex-1 px-4 py-2 rounded-lg border border-green-200 focus:ring-2 focus:ring-green-300"
+                    className="w-full sm:w-auto sm:flex-1 min-w-0 px-4 py-2 rounded-lg border border-green-200 focus:ring-2 focus:ring-green-300"
                     value={item.description}
                     onChange={(e) => setItemField(i, 'description', e.target.value)}
                   />
                   <input
                     type="number" min="0" step="1" placeholder="Qty"
-                    className="w-20 px-4 py-2 rounded-lg border border-green-200 focus:ring-2 focus:ring-green-300"
+                    className="flex-1 min-w-[4rem] sm:flex-none sm:w-20 px-4 py-2 rounded-lg border border-green-200 focus:ring-2 focus:ring-green-300"
                     value={item.qty}
                     onChange={(e) => setItemField(i, 'qty', Number(e.target.value) || 0)}
                   />
                   <input
                     type="number" min="0" step="0.01" placeholder="Rate"
-                    className="w-28 px-4 py-2 rounded-lg border border-green-200 focus:ring-2 focus:ring-green-300"
+                    className="flex-1 min-w-[5rem] sm:flex-none sm:w-28 px-4 py-2 rounded-lg border border-green-200 focus:ring-2 focus:ring-green-300"
                     value={item.rate}
                     onChange={(e) => setItemField(i, 'rate', Number(e.target.value) || 0)}
                   />
-                  <div className="w-28 px-3 py-2 text-right text-sm font-medium text-green-900">
+                  <div className="w-24 sm:w-28 px-3 py-2 text-right text-sm font-medium text-green-900">
                     ₹{lineTotal.toFixed(2)}
                   </div>
                   {form.items.length > 1 && (
@@ -714,14 +695,14 @@ function IAInvoiceForm({ socket }) {
           </div>
 
           {/* Totals */}
-          <div className="bg-gradient-to-r from-amber-100 to-orange-100 rounded-xl p-6 space-y-4">
+          <div className="bg-gold-400/20 border border-gold-400/40 rounded-xl p-4 sm:p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-amber-900">Totals</h3>
+              <h3 className="font-bold text-navy-800">Totals</h3>
               <label className="flex items-center gap-2">
-                <span className="text-sm text-amber-700">GST %</span>
+                <span className="text-sm text-gold-600">GST %</span>
                 <input
                   type="number" min="0" max="100" step="0.01"
-                  className="w-20 px-3 py-2 rounded-lg border border-amber-300 bg-white text-amber-900 focus:ring-4 focus:ring-amber-400"
+                  className="w-20 px-3 py-2 rounded-lg border border-gold-400/60 bg-white text-navy-800 focus:ring-2 focus:ring-gold-400 focus:outline-none"
                   value={form.gstPercent}
                   onChange={(e) => setForm({ ...form, gstPercent: Number(e.target.value) || 0 })}
                 />
@@ -729,35 +710,35 @@ function IAInvoiceForm({ socket }) {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-right">
               <div>
-                <p className="text-xs text-amber-700 uppercase tracking-wide">Total Amount</p>
-                <p className="text-lg font-bold text-amber-900">₹{totalAmount.toFixed(2)}</p>
+                <p className="text-xs text-gold-600 uppercase tracking-wide">Total Amount</p>
+                <p className="text-lg font-bold text-navy-800">₹{totalAmount.toFixed(2)}</p>
               </div>
               <div>
-                <p className="text-xs text-amber-700 uppercase tracking-wide">GST ({form.gstPercent || 0}%)</p>
-                <p className="text-lg font-bold text-amber-900">₹{gstAmount.toFixed(2)}</p>
+                <p className="text-xs text-gold-600 uppercase tracking-wide">GST ({form.gstPercent || 0}%)</p>
+                <p className="text-lg font-bold text-navy-800">₹{gstAmount.toFixed(2)}</p>
               </div>
               <div>
-                <p className="text-xs text-amber-700 uppercase tracking-wide">Grand Total</p>
-                <p className="text-lg font-bold text-amber-900">₹{grandTotal.toFixed(2)}</p>
+                <p className="text-xs text-gold-600 uppercase tracking-wide">Grand Total</p>
+                <p className="text-lg font-bold text-navy-800">₹{grandTotal.toFixed(2)}</p>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount in Words</label>
-              <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-800 italic">
+              <label className="block text-sm font-medium text-navy-800 mb-1">Amount in Words</label>
+              <div className="px-4 py-3 rounded-xl bg-navy-50 border border-gold-400 text-gold-600 italic">
                 {amountInWords}
               </div>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-4 pt-2">
-            <button type="button" onClick={closeModal} className="px-8 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-all">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-2">
+            <button type="button" onClick={closeModal} className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-8 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded-xl shadow-lg hover:shadow-xl flex items-center gap-3 transition-all disabled:opacity-70"
+              className="px-6 py-3 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 flex items-center justify-center gap-2 transition-colors disabled:opacity-70"
             >
               {loading ? (
                 <><Loader2 className="w-5 h-5 animate-spin" /> Saving...</>
@@ -772,41 +753,41 @@ function IAInvoiceForm({ socket }) {
       <Modal
         isOpen={isUploadModalOpen}
         onRequestClose={closeUploadModal}
-        className="bg-white rounded-2xl p-8 max-w-lg mx-auto mt-24 shadow-2xl outline-none"
-        overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+        className="bg-white rounded-xl p-6 max-w-lg mx-auto mt-0 sm:mt-24 shadow-2xl outline-none max-h-[90vh] overflow-y-auto"
+        overlayClassName="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4"
       >
-        <h2 className="text-2xl font-bold text-gray-800 mb-2 text-center">Upload Old Invoice</h2>
+        <h2 className="font-display text-xl font-bold text-navy-800 mb-2">Upload Old Invoice</h2>
         <p className="text-sm text-gray-500 mb-6 text-center">
           For invoices generated before this system existed. No line-item breakdown needed — just the file and basic details.
         </p>
 
         <form onSubmit={handleUploadSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Invoice No. *</label>
+            <label className="block text-sm font-medium text-navy-800 mb-1">Invoice No. *</label>
             <input
               type="text" required placeholder="e.g. 2023-24/Ak/042"
-              className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 font-mono"
+              className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400 font-mono"
               value={uploadForm.invoiceNumber}
               onChange={(e) => setUploadForm({ ...uploadForm, invoiceNumber: e.target.value })}
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+              <label className="block text-sm font-medium text-navy-800 mb-1">Date *</label>
               <input
                 type="date" required
-                className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+                className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400"
                 value={uploadForm.date}
                 onChange={(e) => setUploadForm({ ...uploadForm, date: e.target.value })}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Total Amount *</label>
+              <label className="block text-sm font-medium text-navy-800 mb-1">Total Amount *</label>
               <div className="relative">
                 <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="number" required min="0.01" step="0.01" placeholder="0.00"
-                  className="w-full pl-9 pr-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+                  className="w-full pl-9 pr-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400"
                   value={uploadForm.grandTotal}
                   onChange={(e) => setUploadForm({ ...uploadForm, grandTotal: e.target.value })}
                 />
@@ -814,18 +795,18 @@ function IAInvoiceForm({ socket }) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
+            <label className="block text-sm font-medium text-navy-800 mb-1">Customer Name *</label>
             <input
               type="text" required placeholder="e.g. Fluisys Technologies"
-              className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+              className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400"
               value={uploadForm.customerName}
               onChange={(e) => setUploadForm({ ...uploadForm, customerName: e.target.value })}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">PDF File *</label>
-            <label className="flex items-center justify-center gap-2 w-full px-4 py-6 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/50 hover:bg-amber-50 cursor-pointer text-sm text-amber-700 transition-all">
-              <Upload className="w-5 h-5" />
+            <label className="block text-sm font-medium text-navy-800 mb-1">PDF File *</label>
+            <label className="flex items-center justify-center gap-2 w-full px-4 py-6 rounded-xl border-2 border-dashed border-gold-400 bg-navy-50/50 hover:bg-navy-50 cursor-pointer text-sm text-gold-600 transition-all">
+              <Upload className="w-4 h-4" />
               {uploadForm.file ? uploadForm.file.name : 'Click to select a PDF file'}
               <input
                 type="file" accept="application/pdf" className="hidden" required
@@ -841,7 +822,7 @@ function IAInvoiceForm({ socket }) {
             <button
               type="submit"
               disabled={uploadLoading}
-              className="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded-xl shadow-lg hover:shadow-xl flex items-center gap-2 transition-all text-sm font-medium disabled:opacity-70"
+              className="px-5 py-3 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 flex items-center gap-2 transition-colors text-sm disabled:opacity-70"
             >
               {uploadLoading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>) : (<><Upload className="w-4 h-4" /> Upload</>)}
             </button>
@@ -849,7 +830,7 @@ function IAInvoiceForm({ socket }) {
         </form>
       </Modal>
 
-</div>
+    </PeoplePage>
   );
 }
 

@@ -8,7 +8,7 @@ import { askChatbot } from './chatbotApi';
 
 // ── Module metadata ───────────────────────────────────────────────────────────
 const MODULE_META = {
-  orders:              { icon: ShoppingCart, bg: 'bg-amber-500'   },
+  orders:              { icon: ShoppingCart, bg: 'bg-gold-500'   },
   'customer-invoices': { icon: FileText,     bg: 'bg-blue-500'    },
   customers:           { icon: Users,        bg: 'bg-emerald-500' },
   inventory:           { icon: Package,      bg: 'bg-violet-500'  },
@@ -60,7 +60,7 @@ function FormattedText({ text }) {
         <ul key={`ul-${i}`} className="mt-1 space-y-1.5">
           {items.map((item, j) => (
             <li key={j} className="flex items-start gap-2">
-              <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400" />
+              <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gold-400" />
               <span className="text-sm leading-relaxed text-gray-700">{parseInline(item)}</span>
             </li>
           ))}
@@ -80,7 +80,7 @@ function FormattedText({ text }) {
         <ol key={`ol-${i}`} className="mt-1 space-y-1.5">
           {items.map((item, j) => (
             <li key={j} className="flex items-start gap-2.5">
-              <span className="flex-shrink-0 min-w-[16px] text-xs font-bold text-amber-500">{j + 1}.</span>
+              <span className="flex-shrink-0 min-w-[16px] text-xs font-bold text-gold-500">{j + 1}.</span>
               <span className="text-sm leading-relaxed text-gray-700">{parseInline(item)}</span>
             </li>
           ))}
@@ -116,8 +116,8 @@ function FormattedText({ text }) {
 function TypingDots() {
   return (
     <div className="flex items-end gap-2.5 px-4 pt-2 pb-1">
-      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-slate-800">
-        <Bot className="h-3.5 w-3.5 text-amber-400" />
+      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-navy-700">
+        <Bot className="h-3.5 w-3.5 text-gold-400" />
       </div>
       <div className="rounded-2xl rounded-bl-sm border border-gray-100 bg-white px-4 py-3 shadow-sm">
         <div className="flex items-center gap-1.5">
@@ -140,15 +140,15 @@ function DataTable({ data }) {
   const columns = Object.keys(data[0]);
   return (
     <div className="mt-3 overflow-hidden rounded-xl border border-gray-100 shadow-sm">
-      <div className="flex items-center justify-between bg-slate-800 px-3 py-2">
+      <div className="flex items-center justify-between bg-navy-700 px-3 py-2">
         <span className="text-xs font-semibold tracking-wide text-gray-300">Query Results</span>
-        <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-400 ring-1 ring-amber-500/30">
+        <span className="rounded-full bg-gold-500/20 px-2 py-0.5 text-xs font-semibold text-gold-400 ring-1 ring-gold-500/30">
           {data.length} {data.length === 1 ? 'record' : 'records'}
         </span>
       </div>
       <div className="overflow-x-auto" style={{ maxHeight: '180px', overflowY: 'auto' }}>
         <table className="min-w-full text-xs">
-          <thead className="sticky top-0 bg-slate-700">
+          <thead className="sticky top-0 bg-navy-600">
             <tr>
               {columns.map((col) => (
                 <th key={col} className="whitespace-nowrap px-3 py-2 text-left font-medium uppercase tracking-wider text-gray-300">
@@ -159,7 +159,7 @@ function DataTable({ data }) {
           </thead>
           <tbody>
             {data.map((row, i) => (
-              <tr key={i} className={`transition-colors hover:bg-amber-50/40 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}>
+              <tr key={i} className={`transition-colors hover:bg-navy-50/60 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}>
                 {columns.map((col) => (
                   <td key={col} className="whitespace-nowrap px-3 py-2 text-gray-700">
                     {String(row[col] ?? '')}
@@ -178,8 +178,8 @@ function DataTable({ data }) {
 function BotMessage({ msg }) {
   return (
     <div className="flex items-end gap-2.5 px-4 pt-2 pb-1">
-      <div className="mb-5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-slate-800 shadow-sm">
-        <Bot className="h-3.5 w-3.5 text-amber-400" />
+      <div className="mb-5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-navy-700 shadow-sm">
+        <Bot className="h-3.5 w-3.5 text-gold-400" />
       </div>
       <div className="flex-1" style={{ maxWidth: '85%' }}>
         <div className="rounded-2xl rounded-bl-sm border border-gray-100 bg-white px-4 py-3 shadow-sm">
@@ -197,7 +197,7 @@ function UserMessage({ msg }) {
   return (
     <div className="flex items-end justify-end gap-2.5 px-4 pt-2 pb-1">
       <div style={{ maxWidth: '80%' }}>
-        <div className="rounded-2xl rounded-br-sm bg-gradient-to-br from-amber-500 to-orange-500 px-4 py-3 shadow-sm">
+        <div className="rounded-2xl rounded-br-sm bg-navy-800 px-4 py-3 shadow-sm">
           <p className="text-sm leading-relaxed text-white">{msg.text}</p>
         </div>
         <p className="mr-1 mt-1 text-right text-xs text-gray-400">{formatTime(msg.timestamp)}</p>
@@ -213,7 +213,7 @@ function QuestionsPanel({ module, loading, onSelect }) {
     return (
       <div className="flex-shrink-0 border-t border-gray-100 bg-white px-4 py-5">
         <div className="flex flex-col items-center gap-2 text-center">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-navy-50">
             <MessageSquare className="h-4 w-4 text-slate-400" />
           </div>
           <p className="text-xs font-medium text-gray-500">Select a module above</p>
@@ -265,7 +265,7 @@ function QuestionsPanel({ module, loading, onSelect }) {
               key={q.value}
               onClick={() => onSelect(q.value)}
               disabled={loading}
-              className="group flex w-full items-center gap-2.5 rounded-xl border border-gray-100 bg-gray-50/80 px-3 py-2.5 text-left text-xs font-medium text-gray-700 transition-all duration-150 hover:border-amber-200 hover:bg-amber-50 hover:text-amber-800 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+              className="group flex w-full items-center gap-2.5 rounded-xl border border-gray-100 bg-gray-50/80 px-3 py-2.5 text-left text-xs font-medium text-gray-700 transition-all duration-150 hover:border-gold-400 hover:bg-gold-400/15 hover:text-navy-800 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${meta.bg} opacity-50 group-hover:opacity-100 transition-opacity`} />
               {q.label}
@@ -363,9 +363,9 @@ function ChatbotWidget() {
           aria-label="Open ERP Assistant"
           className="fixed bottom-6 right-6 z-50 group focus:outline-none"
         >
-          <span className="absolute inset-0 rounded-full bg-amber-400/30 animate-ping" />
-          <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-slate-900 shadow-2xl shadow-slate-900/50 ring-1 ring-white/10 transition-all duration-200 group-hover:scale-110">
-            <Bot className="h-6 w-6 text-amber-400" />
+          <span className="absolute inset-0 rounded-full bg-gold-400/30 animate-ping" />
+          <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-navy-800 shadow-2xl shadow-navy-900/50 ring-1 ring-white/10 transition-all duration-200 group-hover:scale-110">
+            <Bot className="h-6 w-6 text-gold-400" />
           </span>
         </button>
       )}
@@ -378,18 +378,18 @@ function ChatbotWidget() {
         >
           {/* ── Dark robot header ── */}
           <div
-            className="relative flex-shrink-0 overflow-hidden bg-slate-900 px-5 py-4"
+            className="relative flex-shrink-0 overflow-hidden bg-navy-800 px-5 py-4"
             style={{
-              backgroundImage: 'radial-gradient(circle, rgba(251,191,36,0.07) 1px, transparent 1px)',
+              backgroundImage: 'radial-gradient(circle, rgba(242,193,78,0.08) 1px, transparent 1px)',
               backgroundSize: '20px 20px',
             }}
           >
-            <div className="pointer-events-none absolute -right-4 -top-6 h-28 w-28 rounded-full bg-amber-500/15 blur-2xl" />
+            <div className="pointer-events-none absolute -right-4 -top-6 h-28 w-28 rounded-full bg-gold-500/15 blur-2xl" />
             <div className="relative flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/15 ring-1 ring-amber-500/25">
-                    <Bot className="h-6 w-6 text-amber-400" />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gold-500/15 ring-1 ring-gold-500/25">
+                    <Bot className="h-6 w-6 text-gold-400" />
                   </div>
                   <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3 items-center justify-center">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50" />
@@ -399,7 +399,7 @@ function ChatbotWidget() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-sm font-bold text-white">ERP Assistant</h2>
-                    <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-amber-400 ring-1 ring-amber-500/30">
+                    <span className="rounded-full bg-gold-500/20 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-gold-400 ring-1 ring-gold-500/30">
                       AI
                     </span>
                   </div>
@@ -410,14 +410,14 @@ function ChatbotWidget() {
                 <button
                   onClick={handleReset}
                   aria-label="Reset chat"
-                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-white"
+                  className="rounded-lg p-3 sm:p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-white"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => setIsOpen(false)}
                   aria-label="Close"
-                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-white"
+                  className="rounded-lg p-3 sm:p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-white"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -426,7 +426,7 @@ function ChatbotWidget() {
           </div>
 
           {/* ── Module selector strip ── */}
-          <div className="flex-shrink-0 border-b border-gray-100 bg-slate-50 px-3 py-2">
+          <div className="flex-shrink-0 border-b border-gray-100 bg-navy-50 px-3 py-2">
             <div className="flex items-center gap-2" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
               <span className="flex-shrink-0 text-xs font-semibold text-gray-400">Module</span>
               <span className="flex-shrink-0 text-gray-300">·</span>
@@ -439,7 +439,7 @@ function ChatbotWidget() {
                     <button
                       key={module.key}
                       onClick={() => handleModuleSelect(module.key)}
-                      className={`flex flex-shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-150
+                      className={`flex flex-shrink-0 items-center gap-1.5 rounded-full px-3 py-2.5 sm:py-1.5 text-xs font-medium transition-all duration-150
                         ${isSelected
                           ? `${m.bg} text-white shadow-sm`
                           : 'border border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-700'

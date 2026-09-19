@@ -47,10 +47,10 @@ const getStageStatus = (stageDate) => {
 const statusToBadgeClass = (status) => {
   switch (status) {
     case "Completed":
-      return "bg-green-600 text-white";
+      return "bg-emerald-100 text-emerald-700";
     case "Pending":
     default:
-      return "bg-gray-300 text-gray-800";
+      return "bg-gray-100 text-gray-600";
   }
 };
 
@@ -63,20 +63,18 @@ const statusToLabel = (status, date) => {
 
 /* ---------- generic modal ---------- */
 const Modal = ({ title, onClose, children, widthClass = "max-w-2xl" }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/50 p-4">
     <div className={`w-full ${widthClass}`}>
-      <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto p-6">
         <button
           onClick={onClose}
-          className="sticky top-4 right-4 float-right text-gray-500 hover:text-gray-700 z-10"
+          className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
           aria-label="Close"
         >
-          <X size={22} />
+          <X size={20} />
         </button>
-        <div className="p-6 border-b">
-          <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
-        </div>
-        <div className="p-6">{children}</div>
+        <h3 className="font-display text-xl font-bold text-navy-800 mb-5 pr-8">{title}</h3>
+        {children}
       </div>
     </div>
   </div>
@@ -257,25 +255,25 @@ function ComponentEditorModal({ nonMotor, workOrder, onClose, onAfterChange }) {
           </p>
         </div>
 
-        <div className="border rounded-lg p-4 bg-gray-50">
-          <h5 className="font-medium text-gray-700 mb-3">Add New Component</h5>
+        <div className="border border-navy-100 rounded-lg p-4 bg-gray-50">
+          <h5 className="font-medium text-navy-800 mb-3">Add New Component</h5>
           <div className="space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-navy-800 mb-1">
                 Component Name *
               </label>
               <input
                 type="text"
                 value={componentName}
                 onChange={(e) => setComponentName(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+                className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                 placeholder="e.g. Main Control Unit, Terminal Block..."
                 disabled={adding}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-navy-800 mb-1">
                 Quantity *
               </label>
               <input
@@ -284,7 +282,7 @@ function ComponentEditorModal({ nonMotor, workOrder, onClose, onAfterChange }) {
                 step="1"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+                className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                 disabled={adding}
               />
             </div>
@@ -292,7 +290,7 @@ function ComponentEditorModal({ nonMotor, workOrder, onClose, onAfterChange }) {
             <button
               onClick={handleAddComponent}
               disabled={adding || !componentName.trim()}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {adding ? "Adding..." : "Add Component"}
             </button>
@@ -300,12 +298,12 @@ function ComponentEditorModal({ nonMotor, workOrder, onClose, onAfterChange }) {
         </div>
 
         <div>
-          <h5 className="font-medium text-gray-700 mb-3">
+          <h5 className="font-medium text-navy-800 mb-3">
             Attached Components ({components.length})
           </h5>
 
           {components.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 border-2 border-dashed rounded-lg">
+            <div className="text-center py-8 text-gray-500 border-2 border-dashed border-navy-100 rounded-lg">
               No components added yet
             </div>
           ) : (
@@ -313,10 +311,10 @@ function ComponentEditorModal({ nonMotor, workOrder, onClose, onAfterChange }) {
               {components.map((comp, idx) => (
                 <div
                   key={comp.id || comp.workOrderComponentId || idx}
-                  className="flex items-center justify-between p-3 border rounded-lg bg-white"
+                  className="flex items-center justify-between p-3 border border-navy-100 rounded-lg bg-white"
                 >
                   <div>
-                    <div className="font-medium text-gray-800">
+                    <div className="font-medium text-navy-800">
                       {comp.componentName}
                     </div>
                     <div className="text-sm text-gray-600">
@@ -351,22 +349,22 @@ function StageDateEditorModal({ workOrder, stageName, currentDate, onClose, onSa
       widthClass="max-w-md"
     >
       <div className="space-y-5">
-        <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg text-sm">
-          <p className="font-medium text-amber-800">
+        <div className="bg-navy-50 border border-navy-100 p-4 rounded-lg text-sm">
+          <p className="font-medium text-navy-800">
             Assembly: {workOrder?.instanceName || "—"}
           </p>
-          <p className="mt-1 text-amber-700">
+          <p className="mt-1 text-navy-600">
             This date is recorded only for this specific assembly.
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-navy-800 mb-1">
             Completion Date
           </label>
           <input
             type="date"
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-300"
+            className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
             value={targetDate}
             onChange={(e) => setTargetDate(e.target.value)}
           />
@@ -378,13 +376,13 @@ function StageDateEditorModal({ workOrder, stageName, currentDate, onClose, onSa
         <div className="flex justify-end gap-3 pt-2">
           <button
             onClick={onClose}
-            className="px-5 py-2 border rounded-lg hover:bg-gray-50"
+            className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={() => onSave(targetDate || null)}
-            className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-5 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors"
           >
             Save
           </button>
@@ -584,58 +582,60 @@ export default function CreateNonMotorProcess({ socket }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-600">
-        Loading non-motor assemblies…
+      <div className="flex items-center justify-center py-24">
+        <div className="text-gray-500 text-lg animate-pulse">
+          Loading non-motor assemblies…
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 p-6 md:p-8">
-      <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-8 md:mb-10 text-center">
-        Non-Motor Assemblies — Order #{orderId} — {customerName}
-      </h1>
+    <div className="max-w-7xl mx-auto space-y-4">
+      <p className="text-sm text-gray-500">
+        Order #{orderId} — {customerName}
+      </p>
 
-      <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row gap-4 md:gap-6">
+      <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-grow">
           <input
             type="text"
             placeholder="Search assemblies by name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full p-4 pl-12 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white shadow-sm"
+            className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
           />
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
         </div>
 
         <div className="flex gap-3 flex-wrap">
           <button
             onClick={refetchAll}
             disabled={loadingList}
-            className="px-5 py-3 bg-blue-100 text-blue-800 rounded-xl hover:bg-blue-200 flex items-center gap-2 shadow-sm"
+            className="flex items-center gap-2 px-4 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
           >
-            <RefreshCw className={loadingList ? "animate-spin" : ""} size={18} />
+            <RefreshCw className={loadingList ? "animate-spin" : ""} size={16} />
             Refresh
           </button>
           <button
             onClick={() => setShowAddNonMotor(true)}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 flex items-center gap-2 shadow-md"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors"
           >
-            <PlusCircle size={18} /> Add Non-Motor
+            <PlusCircle size={16} /> Add Non-Motor
           </button>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow overflow-x-auto">
+      <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-gradient-to-r from-blue-100 to-blue-50">
-              <th className="py-5 px-4 font-semibold text-gray-800">Assembly</th>
-              <th className="py-5 px-4 font-semibold text-gray-800">Components</th>
+            <tr className="bg-navy-50">
+              <th className="py-3 px-4 text-sm font-semibold text-navy-800">Assembly</th>
+              <th className="py-3 px-4 text-sm font-semibold text-navy-800">Components</th>
               {STAGE_LIST.map((stage) => (
                 <th
                   key={stage}
-                  className="py-5 px-4 font-semibold text-gray-800 whitespace-nowrap"
+                  className="py-3 px-4 text-sm font-semibold text-navy-800 whitespace-nowrap"
                 >
                   {stage}
                 </th>
@@ -647,7 +647,7 @@ export default function CreateNonMotorProcess({ socket }) {
               <tr>
                 <td
                   colSpan={2 + STAGE_LIST.length}
-                  className="py-12 text-center text-gray-500"
+                  className="py-12 text-center text-gray-400"
                 >
                   No non-motor assemblies found. Add one to begin.
                 </td>
@@ -660,10 +660,10 @@ export default function CreateNonMotorProcess({ socket }) {
                 return (
                   <tr
                     key={nonMotor.instance_group_id}
-                    className="border-t hover:bg-blue-50/60 transition-colors"
+                    className="border-t border-navy-100 hover:bg-navy-50/60 transition-colors"
                   >
-                    <td className="py-5 px-4">
-                      <div className="font-semibold">
+                    <td className="py-3.5 px-4">
+                      <div className="font-medium text-navy-800">
                         {nonMotor.instance_name || "(unnamed)"}
                       </div>
                       {nonMotor.instance_type && (
@@ -673,7 +673,7 @@ export default function CreateNonMotorProcess({ socket }) {
                       )}
                     </td>
 
-                    <td className="py-5 px-4">
+                    <td className="py-3.5 px-4">
                       <button
                         onClick={() =>
                           setOpenComponentEditor({
@@ -682,7 +682,7 @@ export default function CreateNonMotorProcess({ socket }) {
                             workOrder: wo,
                           })
                         }
-                        className="text-blue-600 hover:underline flex items-center gap-2"
+                        className="text-navy-700 hover:text-navy-600 transition-colors flex items-center gap-2"
                       >
                         <Package size={16} />
                         {componentCount === 0
@@ -696,7 +696,7 @@ export default function CreateNonMotorProcess({ socket }) {
                         const testingEntries = wo?.testing || [];
 
                         return (
-                          <td key="Testing" className="py-5 px-4">
+                          <td key="Testing" className="py-3.5 px-4">
                             {wo ? (
                               ["Primary", "Final"].map((type) => {
                                 const entry = testingEntries.find((t) => t.testingType === type);
@@ -706,7 +706,7 @@ export default function CreateNonMotorProcess({ socket }) {
                                     <span className="text-gray-600">{entry?.testDate || "—"}</span>
                                     <button
                                       onClick={() => handleEditTesting(nonMotor, type)}
-                                      className="text-blue-600 hover:underline"
+                                      className="text-navy-700 hover:text-navy-600 transition-colors"
                                     >
                                       {entry?.testDate ? "edit" : "add"}
                                     </button>
@@ -727,12 +727,12 @@ export default function CreateNonMotorProcess({ socket }) {
                       const displayText = statusToLabel(status, stageData?.stageDate);
 
                       return (
-                        <td key={stageName} className="py-5 px-4">
+                        <td key={stageName} className="py-3.5 px-4">
                           {wo ? (
                             <div className="flex items-center gap-3">
                               <button
                                 onClick={() => handleEditStageDate(nonMotor, stageName)}
-                                className={`px-3.5 py-1.5 rounded-full text-xs font-medium ${statusToBadgeClass(
+                                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${statusToBadgeClass(
                                   status
                                 )}`}
                                 title="Click to set or change date"
@@ -743,7 +743,7 @@ export default function CreateNonMotorProcess({ socket }) {
                               {stageData?.stageDate && (
                                 <button
                                   onClick={() => handleEditStageDate(nonMotor, stageName)}
-                                  className="text-blue-600 hover:underline text-xs"
+                                  className="text-navy-700 hover:text-navy-600 transition-colors text-xs"
                                 >
                                   edit
                                 </button>

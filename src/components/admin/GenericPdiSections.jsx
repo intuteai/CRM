@@ -4,8 +4,8 @@ import { Plus, Trash2 } from 'lucide-react';
 import { ImageUploadCard } from '../shared/PdiImageUpload';
 
 export const INPUT_CLS =
-  'w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400';
-const TH_CLS = 'py-3 px-3 text-xs font-semibold text-gray-700 bg-amber-100 border border-gray-200 whitespace-nowrap';
+  'w-full border border-navy-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400';
+const TH_CLS = 'py-3 px-3 text-xs font-semibold text-navy-800 bg-navy-50 border border-navy-100 whitespace-nowrap';
 
 // Same ceilings as PDIGeneratorForm.jsx, for the same reason: server.js's
 // express.json({ limit: '25mb' }) caps the request body Save/Finalize send.
@@ -100,7 +100,7 @@ function EditableCellInput({ value, format, options, onChange }) {
 
 function HeaderSection({ section, form, setField }) {
   return (
-    <div className="grid grid-cols-2 gap-4 mb-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
       {section.infoFields.map((f, i) => (
         <Fragment key={i}>
           {f.leftKey && (
@@ -142,7 +142,7 @@ function RepeatableTableSection({ section, form, addRow, removeRow, setCell }) {
           type="button"
           onClick={() => addRow(section.dataKey, cols)}
           disabled={rows.length >= MAX_ROWS}
-          className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium"
+          className="flex items-center gap-1 px-3 py-2 sm:py-1.5 border border-navy-100 text-navy-800 rounded-lg hover:bg-navy-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium"
         >
           <Plus size={14} /> Add Row
         </button>
@@ -183,7 +183,7 @@ function RepeatableTableSection({ section, form, addRow, removeRow, setCell }) {
                   );
                 })}
                 <td className="py-2 px-2 border border-gray-100 text-center">
-                  <button type="button" onClick={() => removeRow(section.dataKey, idx)} className="text-gray-400 hover:text-red-500">
+                  <button type="button" onClick={() => removeRow(section.dataKey, idx)} className="p-2 sm:p-0 text-gray-400 hover:text-red-500">
                     <Trash2 size={16} />
                   </button>
                 </td>
@@ -231,7 +231,7 @@ function FixedTableSection({ section, form, setCell }) {
                                 type="button"
                                 aria-pressed={active}
                                 onClick={() => setCell(section.dataKey, row.key, c.cell.subfield, o)}
-                                className={`px-3 py-1.5 text-xs font-semibold transition-colors ${active ? activeCls : 'bg-white text-gray-500 hover:bg-gray-50'} ${o !== 'GO' ? 'border-l border-gray-300' : ''}`}
+                                className={`px-3 py-2 sm:py-1.5 text-xs font-semibold transition-colors ${active ? activeCls : 'bg-white text-gray-500 hover:bg-gray-50'} ${o !== 'GO' ? 'border-l border-gray-300' : ''}`}
                               >
                                 {o}
                               </button>
@@ -268,12 +268,12 @@ function FreeformPhotoSection({ section, form, addPhoto, removePhoto, setLabel, 
           type="button"
           onClick={() => addPhoto(section.dataKey)}
           disabled={photos.length >= MAX_PHOTOS}
-          className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium"
+          className="flex items-center gap-1 px-3 py-2 sm:py-1.5 border border-navy-100 text-navy-800 rounded-lg hover:bg-navy-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium"
         >
           <Plus size={14} /> Add Photo
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {photos.map((photo, idx) => (
           // Keyed and labeled by display position (idx) — fine for React's
           // own diffing and for the human-facing "Photo N" label since this
@@ -286,7 +286,7 @@ function FreeformPhotoSection({ section, form, addPhoto, removePhoto, setLabel, 
           <div key={photo.id} className="space-y-1.5">
             <div className="flex items-center gap-2">
               <input className={INPUT_CLS} value={photo.label} onChange={(e) => setLabel(section.dataKey, photo.id, e.target.value)} placeholder={`Photo ${idx + 1} label`} />
-              <button type="button" onClick={() => removePhoto(section.dataKey, photo.id)} className="shrink-0 p-1.5 text-gray-400 hover:text-red-500">
+              <button type="button" onClick={() => removePhoto(section.dataKey, photo.id)} className="shrink-0 p-2 sm:p-1.5 text-gray-400 hover:text-red-500">
                 <Trash2 size={16} />
               </button>
             </div>
@@ -308,7 +308,7 @@ function FixedSlotPhotoSection({ section, form, handleFilesChosen, addSlotImage,
   return (
     <div className="mb-6">
       <h3 className="text-sm font-semibold text-gray-700 mb-2">Photos</h3>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {section.slots.map((slot) => (
           <ImageUploadCard
             key={slot.key}
@@ -341,7 +341,7 @@ function ImageSection({ section, form, handleFilesChosen, setImageField }) {
 
 function SignatureSection({ section, form, setField }) {
   return (
-    <div className="grid gap-4 mb-6" style={{ gridTemplateColumns: `repeat(${section.roles.length}, 1fr)` }}>
+    <div className="grid gap-4 mb-6 grid-cols-1 sm:[grid-template-columns:var(--sig-cols)]" style={{ '--sig-cols': `repeat(${section.roles.length}, 1fr)` }}>
       {section.roles.map((role) => (
         <div key={role.key}>
           <label className="block text-sm font-medium text-gray-700 mb-1">{role.label}</label>

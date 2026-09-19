@@ -15,11 +15,56 @@ import {
   MoreVertical,
   RefreshCw,
   Edit2,
+  Eye,
 } from "lucide-react";
 import { useNotify } from '../../hooks/useNotify';
 import ConnectionError from '../pages/ConnectionError.jsx';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+
+// ----------------------------
+// Row actions dropdown (top-level component, not recreated on every render)
+// ----------------------------
+function ActionsDropdown({ part, onEdit }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="p-2 rounded-full hover:bg-navy-50 transition-colors"
+        aria-label={`Actions for part ${part.partCode}`}
+      >
+        <MoreVertical size={18} className="text-gray-500" />
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-40 bg-white border border-navy-100 rounded-lg shadow-lg z-20 py-1">
+          <button
+            onClick={() => {
+              onEdit(part);
+              setOpen(false);
+            }}
+            className="w-full flex items-center px-3 py-2 text-sm text-navy-800 hover:bg-navy-50 transition-colors"
+          >
+            <Edit2 size={16} className="mr-2" /> Revise Part
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DesignPartCreation() {
   const [parts, setParts] = useState([]);
@@ -48,6 +93,7 @@ function DesignPartCreation() {
     supplierPartNo: "",
   });
   const [formErrors, setFormErrors] = useState({});
+  const [viewingPart, setViewingPart] = useState(null);
 
   const modalRef = useRef(null);
   const { notifySuccess, notifyError } = useNotify();
@@ -383,81 +429,16 @@ function DesignPartCreation() {
   };
 
   // ----------------------------
-  // Delete part
-  // ----------------------------
-//   const handleDelete = async (part) => {
-//     if (!window.confirm(`Delete part ${part.partCode}?`)) return;
-
-//     try {
-//       const headers = getAuthHeaders();
-//       const res = await fetch(`${BASE_URL}/api/parts/${part.id}`, {
-//         method: "DELETE",
-//         headers,
-//       });
-
-//       if (!res.ok && res.status !== 204) {
-//         const err = await res.json().catch(() => ({}));
-//         throw new Error(err.error || "Failed to delete part");
-//       }
-
-//       notifySuccess(`Part ${part.partCode} deleted`);
-//       await fetchParts();
-//     } catch (err) {
-//       console.error("Delete part error:", err);
-//       notifyError(err.message || "Failed to delete part");
-//     }
-//   };
-
-  // ----------------------------
-  // Actions menu component
-  // ----------------------------
-  const ActionsDropdown = ({ part }) => {
-    const [open, setOpen] = useState(false);
-    const ref = useRef(null);
-
-    useEffect(() => {
-      const handler = (e) => {
-        if (ref.current && !ref.current.contains(e.target)) {
-          setOpen(false);
-        }
-      };
-      document.addEventListener("mousedown", handler);
-      return () => document.removeEventListener("mousedown", handler);
-    }, []);
-
-    return (
-      <div className="relative" ref={ref}>
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="p-2 rounded-full hover:bg-gray-100"
-        >
-          <MoreVertical size={18} />
-        </button>
-        {open && (
-          <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-xl shadow-lg z-20">
-            <button
-              onClick={() => {
-                openEditModal(part);
-                setOpen(false);
-              }}
-              className="w-full flex items-center px-3 py-2 text-sm hover:bg-gray-50 text-gray-700"
-            >
-              <Edit2 size={16} className="mr-2" /> Revise Part
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // ----------------------------
   // Render
   // ----------------------------
   if (isLoading && !parts.length) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
-        <div className="text-gray-600 text-xl animate-pulse">
+      <div className="flex items-center justify-center py-24">
+        <div className="flex items-center gap-3 text-gray-500 text-lg">
+          <svg className="animate-spin h-6 w-6 text-gold-500" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
           Loading Parts...
         </div>
       </div>
@@ -467,216 +448,205 @@ function DesignPartCreation() {
   if (fetchError) return <ConnectionError onRetry={fetchParts} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-        Part Master
-      </h1>
-
-      <div className="max-w-6xl mx-auto">
-        {/* Toolbar */}
-        <div className="flex mb-8 gap-4 flex-wrap">
-          <div className="relative flex-grow">
-            <input
-              type="text"
-              placeholder="Search by code, name, description..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
-            />
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm("")}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <XCircle size={20} />
-              </button>
-            )}
-          </div>
-
-          <button
-            onClick={openCreateModal}
-            className="p-4 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center shadow-md"
-          >
-            <Plus size={20} className="mr-2" /> Create Part
-          </button>
-
-          <button
-            onClick={fetchParts}
-            disabled={isLoading}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 flex items-center shadow-md disabled:opacity-60"
-          >
-            <RefreshCw size={20} className="mr-2" />
-            {isLoading ? "Refreshing..." : "Refresh"}
-          </button>
+    <div className="max-w-7xl mx-auto space-y-4">
+      {/* Toolbar */}
+      <div className="flex gap-4 flex-wrap">
+        <div className="relative flex-grow min-w-[220px]">
+          <input
+            type="text"
+            placeholder="Search by code, name, description..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
+          />
+          <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-navy-800 transition-colors"
+              aria-label="Clear search"
+            >
+              <XCircle size={18} />
+            </button>
+          )}
         </div>
 
-        {/* Table */}
-        {filteredParts.length === 0 && !isLoading ? (
-          <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
-            <Search className="mx-auto mb-4 text-gray-400" size={48} />
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">
-              No Parts Found
-            </h2>
-            <p className="text-gray-600 mb-6">
-              {searchTerm
-                ? "Try adjusting your search."
-                : "Start by creating a part!"}
-            </p>
-            {!searchTerm && (
-              <button
-                onClick={openCreateModal}
-                className="p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto"
-              >
-                <Plus className="mr-2" /> Create First Part
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50">
-                  {[
-                    { key: "partCode", label: "Part Code" },
-                    { key: "name", label: "Part Name" },
-                    { key: "description", label: "Description" },
-                    { key: "drawingNo", label: "Drawing No" },
-                    { key: "customerPartNo", label: "Customer Part No" },
-                    { key: "supplierPartNo", label: "Supplier Part No" },
-                    { key: "createdAt", label: "Created At" },
-                    { key: "actions", label: "Actions" },
-                  ].map(({ key, label }) => (
-                    <th
-                      key={key}
-                      className={`py-4 px-3 text-gray-800 font-semibold text-sm ${
-                        key !== "actions"
-                          ? "cursor-pointer hover:bg-amber-300"
-                          : ""
-                      }`}
-                      onClick={() =>
-                        key !== "actions" && sortData(key)
-                      }
-                    >
-                      <div className="flex items-center justify-between">
-                        {label}
-                        {key !== "actions" && (
-                          <ArrowDownUp
-                            size={14}
-                            className={`ml-2 text-gray-600 ${
-                              sortConfig.key === key
-                                ? "text-gray-900"
-                                : "opacity-50"
-                            }`}
-                          />
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedParts.map((part) => (
-                  <tr
-                    key={part.id}
-                    className="border-t hover:bg-amber-50 transition"
-                  >
-                    <td className="py-3 px-3 text-gray-700 font-mono">
-                      {part.partCode}
-                    </td>
-                    <td className="py-3 px-3 text-gray-700 font-medium">
-                      {part.name}
-                    </td>
-                    <td className="py-3 px-3 text-gray-600 max-w-xs truncate">
-                      {part.description}
-                    </td>
-                    <td className="py-3 px-3 text-gray-700">
-                      {part.drawingNo || (
-                        <span className="text-gray-400 italic">
-                          Not set
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-gray-700">
-                      {part.customerPartNo || (
-                        <span className="text-gray-400 italic">
-                          Not set
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-gray-700">
-                      {part.supplierPartNo || (
-                        <span className="text-gray-400 italic">
-                          Not set
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-gray-600 text-sm">
-                      {formatDate(part.createdAt)}
-                    </td>
-                    <td className="py-3 px-3">
-                      <ActionsDropdown part={part} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <button
+          onClick={fetchParts}
+          disabled={isLoading}
+          className="flex items-center gap-2 px-5 py-3 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={18} />
+          {isLoading ? "Refreshing..." : "Refresh"}
+        </button>
 
-            {/* Footer / Pagination */}
-            <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600 text-sm">
-                Showing {paginatedParts.length} of {filteredParts.length} (
-                Total: {total})
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() =>
-                    setPage((p) => Math.max(0, p - 1))
-                  }
-                  disabled={page === 0}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
+        <button
+          onClick={openCreateModal}
+          className="flex items-center gap-2 px-5 py-3 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors"
+        >
+          <Plus size={18} /> Create Part
+        </button>
+      </div>
+
+      {/* Table */}
+      {filteredParts.length === 0 && !isLoading ? (
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-navy-100 text-center">
+          <Search className="mx-auto mb-4 text-gray-300" size={40} />
+          <h2 className="font-display text-xl font-bold text-navy-800 mb-2">
+            No Parts Found
+          </h2>
+          <p className="text-gray-500 mb-6">
+            {searchTerm
+              ? "Try adjusting your search."
+              : "Start by creating a part!"}
+          </p>
+          {!searchTerm && (
+            <button
+              onClick={openCreateModal}
+              className="px-5 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center gap-2 mx-auto"
+            >
+              <Plus size={18} /> Create First Part
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-navy-50 text-navy-800">
+                {[
+                  { key: "partCode", label: "Part Code" },
+                  { key: "name", label: "Part Name" },
+                  { key: "drawingNo", label: "Drawing No" },
+                  { key: "createdAt", label: "Created At" },
+                  { key: "details", label: "Details" },
+                  { key: "actions", label: "Actions" },
+                ].map(({ key, label }) => (
+                  <th
+                    key={key}
+                    className={`py-3 px-3 font-semibold text-sm ${
+                      key !== "actions" && key !== "details"
+                        ? "cursor-pointer hover:bg-navy-100"
+                        : ""
+                    } transition-colors whitespace-nowrap`}
+                    onClick={() =>
+                      key !== "actions" && key !== "details" && sortData(key)
+                    }
+                  >
+                    <div className="flex items-center justify-between">
+                      {label}
+                      {key !== "actions" && key !== "details" && (
+                        <ArrowDownUp
+                          size={14}
+                          className={`ml-2 ${
+                            sortConfig.key === key
+                              ? "text-gold-500"
+                              : "text-navy-400/50"
+                          }`}
+                        />
+                      )}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-navy-100">
+              {paginatedParts.map((part) => (
+                <tr
+                  key={part.id}
+                  className="hover:bg-navy-50/60 transition-colors"
                 >
-                  <ChevronLeft size={18} />
-                </button>
-                <span className="text-gray-700 text-sm">
-                  Page {page + 1}
-                </span>
-                <button
-                  onClick={() =>
-                    setPage((p) =>
-                      (p + 1) * itemsPerPage >= filteredParts.length
-                        ? p
-                        : p + 1
-                    )
-                  }
-                  disabled={
-                    (page + 1) * itemsPerPage >= filteredParts.length
-                  }
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </div>
+                  <td className="py-3.5 px-3 text-navy-800 font-medium font-mono">
+                    {part.partCode}
+                  </td>
+                  <td className="py-3.5 px-3 text-gray-600">
+                    {part.name}
+                  </td>
+                  <td className="py-3.5 px-3 text-gray-600">
+                    {part.drawingNo || (
+                      <span className="text-gray-400 italic">Not set</span>
+                    )}
+                  </td>
+                  <td className="py-3.5 px-3 text-gray-600 text-sm">
+                    {formatDate(part.createdAt)}
+                  </td>
+                  <td className="py-3.5 px-3">
+                    <button
+                      onClick={() => setViewingPart(part)}
+                      className="flex items-center gap-1.5 text-navy-800 hover:text-navy-600 font-medium text-sm transition-colors"
+                      aria-label={`View details for ${part.partCode}`}
+                    >
+                      <Eye size={15} />
+                      View
+                    </button>
+                  </td>
+                  <td className="py-3.5 px-3">
+                    <ActionsDropdown
+                      part={part}
+                      onEdit={openEditModal}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Footer / Pagination */}
+          <div className="flex flex-wrap gap-2 justify-between items-center p-4 bg-navy-50 border-t border-navy-100">
+            <div className="text-gray-500 text-sm">
+              Showing {paginatedParts.length} of {filteredParts.length} (Total: {total})
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() =>
+                  setPage((p) => Math.max(0, p - 1))
+                }
+                disabled={page === 0}
+                className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
+                aria-label="Previous page"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="text-gray-600 text-sm">
+                Page {page + 1}
+              </span>
+              <button
+                onClick={() =>
+                  setPage((p) =>
+                    (p + 1) * itemsPerPage >= filteredParts.length
+                      ? p
+                      : p + 1
+                  )
+                }
+                disabled={
+                  (page + 1) * itemsPerPage >= filteredParts.length
+                }
+                className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
+                aria-label="Next page"
+              >
+                <ChevronRight size={18} />
+              </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Create / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
           <div
             ref={modalRef}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-8 relative"
+            className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 relative"
           >
             <button
               onClick={closeModal}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+              className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
+              aria-label="Close"
             >
-              <XCircle size={24} />
+              <XCircle size={22} />
             </button>
 
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">
+            <h2 className="font-display text-xl font-bold text-navy-800 mb-5">
               {modalMode === "create"
                 ? "Create Part"
                 : `Edit Part ${selectedPart?.partCode}`}
@@ -687,7 +657,7 @@ function DesignPartCreation() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {modalMode === "create" && (
                   <div>
-                    <label className="block text-gray-700 font-medium mb-1">
+                    <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                       Part Type *
                     </label>
                     <select
@@ -703,8 +673,8 @@ function DesignPartCreation() {
                           await fetchNextCode(Number(val));
                         }
                       }}
-                      className={`w-full p-3 border rounded-lg ${
-                        formErrors.partTypeId ? "border-red-500" : ""
+                      className={`w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${
+                        formErrors.partTypeId ? "border-red-500" : "border-navy-100"
                       }`}
                       required
                     >
@@ -716,7 +686,7 @@ function DesignPartCreation() {
                       ))}
                     </select>
                     {formErrors.partTypeId && (
-                      <p className="text-red-500 text-sm mt-1">
+                      <p className="text-red-600 text-sm mt-1">
                         {formErrors.partTypeId}
                       </p>
                     )}
@@ -724,7 +694,7 @@ function DesignPartCreation() {
                 )}
 
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Part Code
                   </label>
                   <input
@@ -735,19 +705,14 @@ function DesignPartCreation() {
                         ? previewCode || "Will be generated"
                         : selectedPart?.partCode || ""
                     }
-                    className="w-full p-3 border rounded-lg bg-gray-50 text-gray-700"
+                    className="w-full p-2.5 border border-navy-100 rounded-lg bg-gray-50 text-gray-700"
                   />
-                  {/* {modalMode === "create" && previewCode && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Preview only – final code generated by backend.
-                    </p>
-                  )} */}
                 </div>
               </div>
 
               {/* Name */}
               <div>
-                <label className="block text-gray-700 font-medium mb-1">
+                <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                   Part Name *
                 </label>
                 <input
@@ -759,13 +724,13 @@ function DesignPartCreation() {
                       name: e.target.value,
                     }))
                   }
-                  className={`w-full p-3 border rounded-lg ${
-                    formErrors.name ? "border-red-500" : ""
+                  className={`w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${
+                    formErrors.name ? "border-red-500" : "border-navy-100"
                   }`}
                   required
                 />
                 {formErrors.name && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-red-600 text-sm mt-1">
                     {formErrors.name}
                   </p>
                 )}
@@ -773,7 +738,7 @@ function DesignPartCreation() {
 
               {/* Description */}
               <div>
-                <label className="block text-gray-700 font-medium mb-1">
+                <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                   Description *
                 </label>
                 <textarea
@@ -785,13 +750,13 @@ function DesignPartCreation() {
                       description: e.target.value,
                     }))
                   }
-                  className={`w-full p-3 border rounded-lg ${
-                    formErrors.description ? "border-red-500" : ""
+                  className={`w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${
+                    formErrors.description ? "border-red-500" : "border-navy-100"
                   }`}
                   required
                 />
                 {formErrors.description && (
-                  <p className="text-red-500 text-sm mt-1">
+                  <p className="text-red-600 text-sm mt-1">
                     {formErrors.description}
                   </p>
                 )}
@@ -800,7 +765,7 @@ function DesignPartCreation() {
               {/* Drawing + Customer + Supplier */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Drawing No *
                   </label>
                   <input
@@ -812,19 +777,19 @@ function DesignPartCreation() {
                         drawingNo: e.target.value,
                       }))
                     }
-                    className={`w-full p-3 border rounded-lg ${
-                      formErrors.drawingNo ? "border-red-500" : ""
+                    className={`w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${
+                      formErrors.drawingNo ? "border-red-500" : "border-navy-100"
                     }`}
                     required
                   />
                   {formErrors.drawingNo && (
-                    <p className="text-red-500 text-sm mt-1">
+                    <p className="text-red-600 text-sm mt-1">
                       {formErrors.drawingNo}
                     </p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Customer Part Number
                   </label>
                   <input
@@ -836,12 +801,12 @@ function DesignPartCreation() {
                         customerPartNo: e.target.value,
                       }))
                     }
-                    className="w-full p-3 border rounded-lg"
+                    className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                     placeholder="Optional"
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Supplier Part Number
                   </label>
                   <input
@@ -853,7 +818,7 @@ function DesignPartCreation() {
                         supplierPartNo: e.target.value,
                       }))
                     }
-                    className="w-full p-3 border rounded-lg"
+                    className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                     placeholder="Optional"
                   />
                 </div>
@@ -863,13 +828,13 @@ function DesignPartCreation() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                  className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold"
+                  className="px-5 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors"
                 >
                   {modalMode === "create" ? "Create Part" : "Update Part"}
                 </button>
@@ -879,7 +844,47 @@ function DesignPartCreation() {
         </div>
       )}
 
-</div>
+      {/* View Details Modal */}
+      {viewingPart && (
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto relative">
+            <button
+              onClick={() => setViewingPart(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
+              aria-label="Close"
+            >
+              <XCircle size={20} />
+            </button>
+            <h2 className="font-display text-xl font-bold text-navy-800 mb-5">
+              {viewingPart.partCode || "Part Details"}
+            </h2>
+            <dl className="space-y-4">
+              {[
+                { label: "Part Name", value: viewingPart.name },
+                { label: "Description", value: viewingPart.description },
+                { label: "Drawing No", value: viewingPart.drawingNo },
+                { label: "Customer Part No", value: viewingPart.customerPartNo },
+                { label: "Supplier Part No", value: viewingPart.supplierPartNo },
+                { label: "Created At", value: formatDate(viewingPart.createdAt) },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</dt>
+                  <dd className="text-navy-800 mt-0.5">{value || "N/A"}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setViewingPart(null)}
+                className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

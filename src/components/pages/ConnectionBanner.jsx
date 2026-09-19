@@ -2,11 +2,10 @@ export default function ConnectionBanner({ onReconnect, onDismiss }) {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:wght@400;500;600&display=swap');
 
         .cb-topbar {
           height: 3px;
-          background: linear-gradient(90deg, #fbbf24, #f59e0b, #d97706, #f59e0b, #fbbf24);
+          background: linear-gradient(90deg, #f2c14e, #e0a92e, #b8841c, #e0a92e, #f2c14e);
           background-size: 300% 100%;
           animation: cbShimmer 3s linear infinite;
         }
@@ -30,11 +29,11 @@ export default function ConnectionBanner({ onReconnect, onDismiss }) {
 
         .cb-btn-primary {
           position: relative; overflow: hidden;
-          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-          color: #111827;
-          font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 13px;
+          background: linear-gradient(135deg, #e0a92e 0%, #b8841c 100%);
+          color: #081328;
+          font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif; font-weight: 600; font-size: 13px;
           padding: 10px 20px; border-radius: 12px; border: none; cursor: pointer;
-          box-shadow: 0 4px 16px rgba(245,158,11,0.38), inset 0 1px 0 rgba(255,255,255,0.28);
+          box-shadow: 0 4px 16px rgba(224,169,46,0.38), inset 0 1px 0 rgba(255,255,255,0.28);
           transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
           display: inline-flex; align-items: center; gap: 6px;
           letter-spacing: 0.01em; white-space: nowrap;
@@ -46,7 +45,7 @@ export default function ConnectionBanner({ onReconnect, onDismiss }) {
         }
         .cb-btn-primary:hover {
           transform: translateY(-2px);
-          box-shadow: 0 10px 28px rgba(245,158,11,0.48);
+          box-shadow: 0 10px 28px rgba(224,169,46,0.48);
         }
         .cb-btn-primary:active { transform: translateY(0); }
 
@@ -66,20 +65,20 @@ export default function ConnectionBanner({ onReconnect, onDismiss }) {
           width: '100%', maxWidth: '430px',
           padding: '0 16px',
           zIndex: 40,
-          fontFamily: "'DM Sans', sans-serif",
+          fontFamily: "'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif",
         }}
       >
         <div style={{
           borderRadius: '24px',
           background: 'rgba(255,255,255,0.97)',
           backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(245,158,11,0.14)',
+          border: '1px solid rgba(224,169,46,0.14)',
           boxShadow:
-            '0 32px 80px rgba(0,0,0,0.11), 0 8px 24px rgba(245,158,11,0.09), inset 0 0 0 1px rgba(255,255,255,0.9)',
+            '0 32px 80px rgba(0,0,0,0.11), 0 8px 24px rgba(224,169,46,0.09), inset 0 0 0 1px rgba(255,255,255,0.9)',
           overflow: 'hidden',
         }}>
 
-          {/* Amber shimmer bar */}
+          {/* Gold shimmer bar */}
           <div className="cb-topbar" />
 
           <div style={{ padding: '20px 22px 22px' }}>
@@ -91,13 +90,13 @@ export default function ConnectionBanner({ onReconnect, onDismiss }) {
               <div style={{ position: 'relative', flexShrink: 0 }}>
                 <div style={{
                   width: '42px', height: '42px', borderRadius: '13px',
-                  background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
-                  border: '1px solid rgba(245,158,11,0.18)',
+                  background: 'linear-gradient(135deg, #fdf3d6, #f6d989)',
+                  border: '1px solid rgba(224,169,46,0.18)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 2px 8px rgba(245,158,11,0.18)',
+                  boxShadow: '0 2px 8px rgba(224,169,46,0.18)',
                 }}>
                   {/* WiFi-off SVG */}
-                  <svg width="17" height="17" fill="none" stroke="#d97706" strokeWidth="2"
+                  <svg width="17" height="17" fill="none" stroke="#b8841c" strokeWidth="2"
                     strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                     <line x1="1" y1="1" x2="23" y2="23"/>
                     <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
@@ -121,7 +120,7 @@ export default function ConnectionBanner({ onReconnect, onDismiss }) {
               {/* Title + status */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h3 style={{
-                  fontFamily: "'Cormorant Garamond', serif",
+                  fontFamily: "'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif",
                   fontSize: '19px', fontWeight: 600,
                   color: '#111827', letterSpacing: '-0.02em',
                   lineHeight: 1.15, margin: 0,
@@ -155,13 +154,13 @@ export default function ConnectionBanner({ onReconnect, onDismiss }) {
             {/* Divider */}
             <div style={{
               height: '1px', margin: '14px 0',
-              background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.2), transparent)',
+              background: 'linear-gradient(90deg, transparent, rgba(224,169,46,0.2), transparent)',
             }} />
 
             {/* Body */}
             <p style={{
               color: '#6b7280', fontSize: '13px', lineHeight: 1.65,
-              margin: '0 0 16px', fontFamily: "'DM Sans', sans-serif",
+              margin: '0 0 16px', fontFamily: "'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif",
             }}>
               Your session may have expired or the connection was interrupted.
               Sign out and sign back in to restore live updates across all modules.

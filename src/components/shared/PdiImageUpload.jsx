@@ -55,7 +55,7 @@ export function ImageUploadCard({ label, hint, images = [], onFilesSelected, onR
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} overflow-hidden ${
-          dragActive ? 'border-amber-400 bg-amber-50' : images.length ? 'border-gray-200' : 'border-gray-300'
+          dragActive ? 'border-gold-400 bg-gold-400/10' : images.length ? 'border-navy-100' : 'border-navy-100'
         }`}
       >
         {images.length > 0 ? (
@@ -78,7 +78,7 @@ export function ImageUploadCard({ label, hint, images = [], onFilesSelected, onR
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="aspect-square rounded border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:text-amber-500 hover:border-amber-300"
+                className="aspect-square rounded border-2 border-dashed border-navy-100 flex items-center justify-center text-gray-400 hover:text-gold-600 hover:border-gold-400"
                 title="Add more photos"
                 aria-label="Add more photos"
               >
@@ -92,7 +92,7 @@ export function ImageUploadCard({ label, hint, images = [], onFilesSelected, onR
               <button
                 type="button"
                 onClick={() => cameraInputRef.current?.click()}
-                className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+                className="flex flex-col items-center gap-1.5 hover:text-gold-600 transition-colors"
               >
                 <Camera size={26} />
                 <span className="text-xs font-medium">Take Photo</span>
@@ -101,7 +101,7 @@ export function ImageUploadCard({ label, hint, images = [], onFilesSelected, onR
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+                className="flex flex-col items-center gap-1.5 hover:text-gold-600 transition-colors"
               >
                 <ImageIcon size={26} />
                 <span className="text-xs font-medium">Choose Files</span>
@@ -164,7 +164,7 @@ export function CropModal({ imageSrc, onCancel, onApply }) {
       isOpen
       onRequestClose={onCancel}
       overlayClassName="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-[60] p-4"
-      className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-auto outline-none"
+      className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-auto outline-none max-h-[95vh] overflow-y-auto"
       contentLabel="Crop Image"
     >
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -203,7 +203,7 @@ export function CropModal({ imageSrc, onCancel, onApply }) {
             type="button"
             onClick={handleApply}
             disabled={busy || !croppedAreaPixels}
-            className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+            className="px-4 py-2 bg-navy-800 text-white rounded-lg hover:bg-navy-700 transition-colors disabled:opacity-50 text-sm font-semibold"
           >
             {busy ? 'Processing...' : 'Apply'}
           </button>

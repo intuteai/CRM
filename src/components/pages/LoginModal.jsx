@@ -408,9 +408,10 @@ function LoginModal({ onClose, onSubmit }) {
         }
       `}</style>
 
-      <div className="lm-root lm-bg" style={{ position: 'fixed', inset: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <div className="lm-root lm-bg" style={{ position: 'fixed', inset: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', overflowX: 'hidden', overflowY: 'auto' }}>
 
-        {/* Blobs */}
+        {/* Blobs (clipped in their own layer so they never create scroll overflow) */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
         <div style={{
           position: 'absolute', width: '560px', height: '560px', borderRadius: '50%',
           background: 'radial-gradient(circle, rgba(253,230,138,0.5), rgba(251,191,36,0.2))',
@@ -423,6 +424,7 @@ function LoginModal({ onClose, onSubmit }) {
           filter: 'blur(80px)', bottom: '-100px', right: '-80px', opacity: 0.5,
           animation: 'blobDrift2 12s ease-in-out infinite alternate',
         }} />
+        </div>
 
         {/* Floating squares — landing only */}
         {view === "landing" && <FloatingSquares />}
@@ -434,7 +436,7 @@ function LoginModal({ onClose, onSubmit }) {
             style={{
               position: 'relative', zIndex: 10,
               display: 'flex', flexDirection: 'column', alignItems: 'center',
-              textAlign: 'center', padding: '0 24px', maxWidth: '680px', width: '100%',
+              textAlign: 'center', padding: '0 24px', maxWidth: '680px', width: '100%', margin: 'auto',
             }}
           >
             {/* Logo */}
@@ -492,7 +494,7 @@ function LoginModal({ onClose, onSubmit }) {
             className="lm-form-enter"
             style={{
               position: 'relative', zIndex: 10,
-              width: '460px', maxWidth: 'calc(100vw - 32px)',
+              width: '460px', maxWidth: 'calc(100vw - 32px)', margin: 'auto',
               borderRadius: '28px',
               background: 'rgba(255,255,255,0.96)',
               backdropFilter: 'blur(20px)',

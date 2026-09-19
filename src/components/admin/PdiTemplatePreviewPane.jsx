@@ -93,7 +93,7 @@ export default function PdiTemplatePreviewPane({ templateId, definition }) {
         {loading && <span className="normal-case text-gray-400">Updating…</span>}
       </div>
       {error && (
-        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mb-2 shrink-0">
+        <div className="text-xs text-gold-600 bg-gold-400/15 border border-gold-400/40 rounded px-2 py-1.5 mb-2 shrink-0">
           Can&apos;t preview — {error}
         </div>
       )}

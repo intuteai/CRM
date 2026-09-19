@@ -19,6 +19,45 @@ const formatDate = (dateString) => {
   }
 };
 
+function ActionsDropdown({ bom, onEdit }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target))
+        setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-2 hover:bg-gray-100 rounded-full"
+        aria-label={`Actions for BOM ${bom.bomId}`}
+      >
+        <MoreVertical size={20} />
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
+          <button
+            onClick={() => {
+              onEdit(bom);
+              setIsOpen(false);
+            }}
+            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            <Edit2 size={16} className="mr-2" /> Edit
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
   const [boms, setBoms] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -433,48 +472,6 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
     [formData, modalMode, selectedBom]
   );
 
-  const ActionsDropdown = useCallback(
-    ({ bom, onEdit }) => {
-      const [isOpen, setIsOpen] = useState(false);
-      const dropdownRef = useRef(null);
-
-      useEffect(() => {
-        const handleClickOutside = (event) => {
-          if (dropdownRef.current && !dropdownRef.current.contains(event.target))
-            setIsOpen(false);
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.addEventListener('mousedown', handleClickOutside);
-      }, []);
-
-      return (
-        <div ref={dropdownRef} className="relative">
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="p-2 hover:bg-gray-100 rounded-full"
-            aria-label={`Actions for BOM ${bom.bomId}`}
-          >
-            <MoreVertical size={20} />
-          </button>
-          {isOpen && (
-            <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
-              <button
-                onClick={() => {
-                  onEdit(bom);
-                  setIsOpen(false);
-                }}
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                <Edit2 size={16} className="mr-2" /> Edit
-              </button>
-            </div>
-          )}
-        </div>
-      );
-    },
-    []
-  );
-
   const handlePrevPage = useCallback(() => {
     if (page > 0) setPage((prev) => prev - 1);
   }, [page]);
@@ -615,10 +612,10 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
   if (isLoading && !boms.length) {
     return (
       <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
+        className="flex items-center justify-center py-24"
         aria-live="polite"
       >
-        <div className="text-gray-600 text-xl animate-pulse">Loading BOMs...</div>
+        <div className="text-gray-500 text-lg">Loading BOMs...</div>
       </div>
     );
   }
@@ -628,18 +625,18 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
   if (boms.length === 0 && !isLoading && !showModal) {
     return (
       <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
+        className="flex items-center justify-center py-24"
         role="status"
       >
-        <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
-          <RefreshCw className="mx-auto mb-4 text-gray-400" size={48} />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">No BOMs Yet</h2>
-          <p className="text-gray-600 mb-6">
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-navy-100 text-center">
+          <RefreshCw className="mx-auto mb-4 text-gray-300" size={40} />
+          <h2 className="font-display text-xl font-bold text-navy-800 mb-2">No BOMs Yet</h2>
+          <p className="text-gray-500 mb-6">
             Your database is empty. Create a new BOM to get started!
           </p>
           <button
             onClick={handleCreate}
-            className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300"
+            className="px-5 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors"
           >
             Create BOM
           </button>
@@ -649,12 +646,9 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-        Store Bill of Materials
-      </h1>
-      <div className="max-w-7xl mx-auto">
-        <div className="flex mb-8 gap-6 flex-wrap">
+    <div className="max-w-7xl mx-auto">
+      <div>
+        <div className="flex mb-6 gap-4 flex-wrap">
           <div className="relative flex-grow">
             <label htmlFor="search-boms" className="sr-only">
               Search BOMs
@@ -667,20 +661,20 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
+              className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
             />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <Search size={17} className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
           <button
             onClick={handleCreate}
-            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg flex items-center"
+            className="px-5 py-3 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center"
             aria-label="Create new BOM"
           >
-            <Plus size={20} className="mr-2" /> Create
+            <Plus size={18} className="mr-2" /> Create
           </button>
           <button
             onClick={handleRefresh}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
+            className="px-5 py-3 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
             disabled={isLoading}
             aria-label="Refresh BOMs"
           >
@@ -689,12 +683,12 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         </div>
 
         {isLoading && boms.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">
+          <div className="text-gray-500 text-sm mb-4 text-center" aria-live="polite">
             Refreshing data...
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
           <table
             className="w-full text-left border-collapse"
             role="grid"
@@ -703,10 +697,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
             tabIndex={0}
           >
             <thead>
-              <tr
-                className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50"
-                role="row"
-              >
+              <tr className="bg-navy-50" role="row">
                 {[
                   { key: '', label: '' },
                   { key: 'bomId', label: 'BOM ID' },
@@ -719,8 +710,8 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                 ].map(({ key, label }) => (
                   <th
                     key={key || label}
-                    className={`py-5 px-3 text-gray-800 text-base font-semibold ${key && key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''
-                      } transition-all duration-200`}
+                    className={`py-3 px-3 text-navy-800 text-sm font-semibold whitespace-nowrap ${key && key !== 'actions' ? 'cursor-pointer hover:bg-navy-100' : ''
+                      } transition-colors`}
                     onClick={() => key && key !== 'actions' && handleSort(key)}
                     aria-sort={
                       sortConfig.key === key
@@ -735,8 +726,8 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                       <span>{label}</span>
                       {key && key !== 'actions' && (
                         <ArrowDownUp
-                          size={16}
-                          className={`ml-2 text-gray-600 ${sortConfig.key === key ? 'text-gray-900' : 'opacity-50'
+                          size={15}
+                          className={`ml-2 ${sortConfig.key === key ? 'text-gold-500' : 'text-navy-400/50'
                             }`}
                           aria-hidden="true"
                         />
@@ -750,11 +741,12 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
               {sortedBoms.map((bom) => (
                 <React.Fragment key={bom.bomId}>
                   <tr
-                    className="border-t hover:bg-amber-50 transition-all duration-200"
+                    className="border-t border-navy-100 hover:bg-navy-50/60 transition-colors"
                     role="row"
                   >
-                    <td className="py-4 px-3">
+                    <td className="py-3.5 px-3">
                       <button
+                        className="p-2 -m-2 text-gray-400 hover:text-navy-800 transition-colors"
                         onClick={() => toggleRow(bom.bomId)}
                         aria-label={expandedRows.includes(bom.bomId) ? 'Collapse materials' : 'Expand materials'}
                       >
@@ -765,30 +757,30 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                         )}
                       </button>
                     </td>
-                    <td className="py-4 px-3 text-gray-600 text-base">{bom.bomId}</td>
-                    <td className="py-4 px-3 text-gray-600 text-base">{bom.productCode || 'N/A'}</td>
-                    <td className="py-4 px-3 text-gray-600 text-base">{bom.productName || 'N/A'}</td>
-                    <td className="py-4 px-3 text-gray-600 text-base">{bom.productDescription || 'No Description'}</td>
-                    <td className="py-4 px-3 text-gray-600 text-base">{formatDate(bom.createdAt)}</td>
-                    <td className="py-4 px-3 text-gray-600 text-base">{formatDate(bom.updatedAt)}</td>
-                    <td className="py-4 px-3 text-gray-600 text-base">
+                    <td className="py-3.5 px-3 text-gray-600">{bom.bomId}</td>
+                    <td className="py-3.5 px-3 text-gray-600">{bom.productCode || 'N/A'}</td>
+                    <td className="py-3.5 px-3 text-gray-600">{bom.productName || 'N/A'}</td>
+                    <td className="py-3.5 px-3 text-gray-600">{bom.productDescription || 'No Description'}</td>
+                    <td className="py-3.5 px-3 text-gray-600">{formatDate(bom.createdAt)}</td>
+                    <td className="py-3.5 px-3 text-gray-600">{formatDate(bom.updatedAt)}</td>
+                    <td className="py-3.5 px-3 text-gray-600">
                       <ActionsDropdown bom={bom} onEdit={handleEdit} />
                     </td>
                   </tr>
                   {expandedRows.includes(bom.bomId) && (
                     <tr>
                       <td colSpan="8" className="p-0">
-                        <table className="w-full bg-gray-50">
+                        <table className="w-full bg-navy-50/50">
                           <thead>
                             <tr>
-                              <th className="py-3 px-3 text-gray-700 text-sm font-semibold">Material ID</th>
-                              <th className="py-3 px-3 text-gray-700 text-sm font-semibold">Material Name</th>
-                              <th className="py-3 px-3 text-gray-700 text-sm font-semibold">Quantity Per Unit</th>
+                              <th className="py-2.5 px-3 text-navy-800 text-sm font-semibold text-left">Material ID</th>
+                              <th className="py-2.5 px-3 text-navy-800 text-sm font-semibold text-left">Material Name</th>
+                              <th className="py-2.5 px-3 text-navy-800 text-sm font-semibold text-left">Quantity Per Unit</th>
                             </tr>
                           </thead>
                           <tbody>
                             {bom.materials.map((material) => (
-                              <tr key={material.bomMaterialId} className="border-t">
+                              <tr key={material.bomMaterialId} className="border-t border-navy-100">
                                 <td className="py-3 px-3 text-gray-600 text-sm">{material.materialId}</td>
                                 <td className="py-3 px-3 text-gray-600 text-sm">{material.materialName || 'N/A'}</td>
                                 <td className="py-3 px-3 text-gray-600 text-sm">{material.quantityPerUnit}</td>
@@ -805,15 +797,15 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
           </table>
 
           {totalItems > 0 && (
-            <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600">
+            <div className="flex flex-wrap gap-2 justify-between items-center p-4 bg-navy-50 border-t border-navy-100">
+              <div className="text-gray-500 text-sm">
                 Showing {sortedBoms.length} of {totalItems} BOMs
               </div>
-              <div className="flex space-x-2">
+              <div className="flex gap-2">
                 <button
                   onClick={handlePrevPage}
                   disabled={page === 0}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                   aria-label="Previous page"
                 >
                   <ChevronLeft size={20} />
@@ -821,7 +813,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                 <button
                   onClick={handleNextPage}
                   disabled={(page + 1) * limit >= totalItems || isLoading}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                   aria-label="Next page"
                 >
                   <ChevronRight size={20} />
@@ -832,11 +824,11 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
 
           {sortedBoms.length === 0 && (
             <div
-              className="text-center py-12 text-gray-500 flex flex-col items-center"
+              className="text-center py-12 text-gray-400 flex flex-col items-center"
               role="alert"
             >
-              <Search className="mb-4 text-gray-400" size={48} />
-              <p className="text-lg">No BOMs found matching your search.</p>
+              <Search className="mb-4 text-gray-300" size={40} />
+              <p>No BOMs found matching your search.</p>
             </div>
           )}
         </div>
@@ -844,27 +836,27 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
 
       {showModal && (
         <div
-          className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4"
           role="dialog"
           aria-labelledby="bom-modal-title"
         >
-          <div className="bg-white p-8 rounded-2xl shadow-2xl w-[600px] relative max-h-[80vh] overflow-y-auto">
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-2xl w-[600px] max-w-full relative max-h-[80vh] overflow-y-auto">
             <button
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+              className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
               aria-label="Close modal"
             >
-              <XCircle size={24} />
+              <XCircle size={20} />
             </button>
             <h2
               id="bom-modal-title"
-              className="text-2xl font-bold text-gray-800 mb-6"
+              className="font-display text-xl font-bold text-navy-800 mb-5 pr-8"
             >
               {modalMode === 'create' ? 'Create BOM' : `Edit BOM #${selectedBom?.bomId}`}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="product-autocomplete relative">
-                <label className="block text-gray-700 font-semibold mb-2">Product</label>
+                <label className="block text-navy-800 text-sm font-semibold mb-1.5">Product</label>
                 <input
                   type="text"
                   value={productQuery}
@@ -873,38 +865,38 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                   onFocus={() => setIsProductDropdownOpen(true)}
                   disabled={!isDataLoaded}
                   placeholder={isDataLoaded ? 'Type to search products...' : 'Loading products...'}
-                  className="w-full p-3 border border-gray-200 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all duration-300 placeholder-gray-400 font-medium disabled:bg-gray-100 disabled:cursor-wait"
+                  className="w-full p-3 border border-navy-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors placeholder-gray-400 font-medium disabled:bg-gray-100 disabled:cursor-wait"
                 />
                 {isProductDropdownOpen && filteredProducts.length > 0 && (
-                  <ul className="absolute z-10 w-full mt-1 bg-gradient-to-b from-white to-amber-50 rounded-lg shadow-xl border border-amber-100 overflow-y-auto max-h-48 transform transition-all duration-300 ease-in-out">
+                  <ul className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-navy-100 overflow-y-auto max-h-48">
                     {filteredProducts.map((product, index) => (
                       <li
                         key={product.productId || `no-match-${index}`}
                         onClick={() => product.productId !== null && handleProductSelect(product)}
                         onMouseEnter={() => setSelectedIndex(index)}
-                        className={`px-5 py-3 cursor-pointer hover:bg-amber-100 transition-colors duration-300 flex items-center justify-between ${
-                          index === selectedIndex ? 'bg-amber-200 text-amber-900 font-semibold' : 'text-gray-800'
-                        } ${product.productId === null ? 'cursor-default bg-amber-50 text-gray-500' : ''}`}
+                        className={`px-5 py-3 cursor-pointer hover:bg-navy-50 transition-colors flex items-center justify-between ${
+                          index === selectedIndex ? 'bg-gold-400/25 text-navy-800 font-semibold' : 'text-gray-800'
+                        } ${product.productId === null ? 'cursor-default bg-navy-50 text-gray-500' : ''}`}
                       >
                         <span className="truncate">{product.productName}</span>
-                        {product.productId !== null && <Search size={16} className="text-amber-500 opacity-50" />}
+                        {product.productId !== null && <Search size={16} className="text-gold-600 opacity-50" />}
                       </li>
                     ))}
                   </ul>
                 )}
                 {isProductDropdownOpen && filteredProducts.length === 0 && (
-                  <ul className="absolute z-10 w-full mt-1 bg-gradient-to-b from-white to-amber-50 rounded-lg shadow-xl border border-amber-100">
-                    <li className="px-5 py-3 text-gray-500 bg-amber-50 rounded-lg flex items-center justify-center">
+                  <ul className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-navy-100">
+                    <li className="px-5 py-3 text-gray-500 bg-navy-50 rounded-lg flex items-center justify-center">
                       <span>No matches found</span>
                     </li>
                   </ul>
                 )}
               </div>
               <div>
-                <label className="block text-gray-700 font-semibold mb-2">Materials</label>
+                <label className="block text-navy-800 text-sm font-semibold mb-1.5">Materials</label>
                 {formData.materials.map((material, index) => (
-                  <div key={index} className="flex items-center space-x-4 mb-4">
-                    <div className="flex-1 relative">
+                  <div key={index} className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-4 mb-4">
+                    <div className="flex-1 basis-full sm:basis-0 relative">
                       <input
                         type="text"
                         value={materialQueries[index] || ''}
@@ -913,28 +905,28 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                         onFocus={() => setIsMaterialDropdownOpen(prev => ({ ...prev, [index]: true }))}
                         disabled={!isDataLoaded}
                         placeholder={isDataLoaded ? 'Type to search materials...' : 'Loading materials...'}
-                        className="w-full p-3 border border-gray-200 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition-all duration-300 placeholder-gray-400 font-medium disabled:bg-gray-100 disabled:cursor-wait"
+                        className="w-full p-3 border border-navy-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors placeholder-gray-400 font-medium disabled:bg-gray-100 disabled:cursor-wait"
                       />
                       {isMaterialDropdownOpen[index] && filteredMaterials[index]?.length > 0 && (
-                        <ul className="absolute z-10 w-full mt-1 bg-gradient-to-b from-white to-amber-50 rounded-lg shadow-xl border border-amber-100 overflow-y-auto max-h-48 transform transition-all duration-300 ease-in-out">
+                        <ul className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-navy-100 overflow-y-auto max-h-48">
                           {filteredMaterials[index].map((material, matIndex) => (
                             <li
                               key={material.materialId || `no-match-${index}-${matIndex}`}
                               onClick={() => material.materialId !== null && handleMaterialSelect(index, material)}
                               onMouseEnter={() => setSelectedMaterialIndices(prev => ({ ...prev, [index]: matIndex }))}
-                              className={`px-5 py-3 cursor-pointer hover:bg-amber-100 transition-colors duration-300 flex items-center justify-between ${
-                                matIndex === selectedMaterialIndices[index] ? 'bg-amber-200 text-amber-900 font-semibold' : 'text-gray-800'
-                              } ${material.materialId === null ? 'cursor-default bg-amber-50 text-gray-500' : ''}`}
+                              className={`px-5 py-3 cursor-pointer hover:bg-navy-50 transition-colors flex items-center justify-between ${
+                                matIndex === selectedMaterialIndices[index] ? 'bg-gold-400/25 text-navy-800 font-semibold' : 'text-gray-800'
+                              } ${material.materialId === null ? 'cursor-default bg-navy-50 text-gray-500' : ''}`}
                             >
                               <span className="truncate">{material.materialName}</span>
-                              {material.materialId !== null && <Search size={16} className="text-amber-500 opacity-50" />}
+                              {material.materialId !== null && <Search size={16} className="text-gold-600 opacity-50" />}
                             </li>
                           ))}
                         </ul>
                       )}
                       {isMaterialDropdownOpen[index] && (!filteredMaterials[index] || filteredMaterials[index].length === 0) && (
-                        <ul className="absolute z-10 w-full mt-1 bg-gradient-to-b from-white to-amber-50 rounded-lg shadow-xl border border-amber-100">
-                          <li className="px-5 py-3 text-gray-500 bg-amber-50 rounded-lg flex items-center justify-center">
+                        <ul className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg border border-navy-100">
+                          <li className="px-5 py-3 text-gray-500 bg-navy-50 rounded-lg flex items-center justify-center">
                             <span>No matches found</span>
                           </li>
                         </ul>
@@ -946,7 +938,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                         placeholder="Quantity Per Unit"
                         value={material.quantityPerUnit}
                         onChange={(e) => handleMaterialChange(index, 'quantityPerUnit', e.target.value)}
-                        className="w-full p-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-amber-300 focus:border-amber-300"
+                        className="w-full p-3 border border-navy-100 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
                         required
                         min="0.01"
                         step="0.01"
@@ -967,7 +959,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
                 <button
                   type="button"
                   onClick={handleAddMaterial}
-                  className="mt-2 flex items-center text-amber-600 hover:text-amber-800"
+                  className="mt-2 flex items-center text-navy-800 hover:text-navy-600 font-medium text-sm transition-colors"
                 >
                   <Plus size={16} className="mr-1" /> Add Material
                 </button>
@@ -975,7 +967,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
               <button
                 type="submit"
                 disabled={uploading}
-                className="w-full bg-amber-500 text-white py-3 rounded-lg hover:bg-amber-600 transition-all duration-300 font-semibold"
+                className={`w-full py-3 rounded-lg font-semibold transition-colors disabled:opacity-50 ${modalMode === 'create' ? 'bg-gold-500 text-navy-900 hover:bg-gold-400' : 'bg-navy-800 text-white hover:bg-navy-700'}`}
               >
                 {uploading ? (modalMode === 'create' ? 'Creating...' : 'Updating...') : (modalMode === 'create' ? 'Create' : 'Update')}
               </button>
@@ -984,7 +976,7 @@ function StoreBOMPage({ socket: providedSocket, userRole: propUserRole }) {
         </div>
       )}
 
-</div>
+    </div>
   );
 }
 

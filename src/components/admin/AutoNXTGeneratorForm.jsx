@@ -143,18 +143,18 @@ const defaultForm = () => ({
 });
 
 const INPUT_CLS =
-  'w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400';
+  'w-full border border-navy-100 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400';
 const SELECT_CLS =
-  'border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400';
-const TH_CLS = 'py-2 px-2 text-xs font-semibold text-gray-700 bg-amber-100 border border-gray-200 whitespace-nowrap';
-const TD_CLS = 'py-1 px-1 border border-gray-100 text-sm text-gray-500 text-center';
+  'border border-navy-100 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400';
+const TH_CLS = 'py-2 px-2 text-xs font-semibold text-navy-800 bg-navy-50 border border-navy-100 whitespace-nowrap';
+const TD_CLS = 'py-1 px-1 border border-navy-100 text-sm text-gray-500 text-center';
 
 function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h-32' }) {
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
   return (
     <div>
-      {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+      {label && <label className="block text-sm font-medium text-navy-800 mb-1">{label}</label>}
       {hint && <p className="text-xs text-gray-400 mb-1.5">{hint}</p>}
       <div className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} flex items-center justify-center overflow-hidden ${value ? 'border-gray-200' : 'border-gray-300'}`}>
         {value ? (
@@ -163,7 +163,7 @@ function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h
             <button
               type="button"
               onClick={onClear}
-              className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow hover:bg-white text-gray-600 hover:text-red-500"
+              className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow hover:bg-white text-gray-600 hover:text-red-500 transition-colors"
               title="Remove image"
             >
               <X size={14} />
@@ -174,7 +174,7 @@ function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h
             <button
               type="button"
               onClick={() => cameraInputRef.current?.click()}
-              className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+              className="flex flex-col items-center gap-1.5 hover:text-gold-600 transition-colors"
             >
               <Camera size={22} />
               <span className="text-xs font-medium">Take Photo</span>
@@ -183,7 +183,7 @@ function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+              className="flex flex-col items-center gap-1.5 hover:text-gold-600 transition-colors"
             >
               <ImageIcon size={22} />
               <span className="text-xs font-medium">Choose File</span>
@@ -238,13 +238,13 @@ function CropModal({ imageSrc, onCancel, onApply }) {
     <Modal
       isOpen
       onRequestClose={onCancel}
-      overlayClassName="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-[60] p-4"
-      className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-auto outline-none"
+      overlayClassName="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-[60] p-4"
+      className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-auto outline-none max-h-[95vh] overflow-y-auto"
       contentLabel="Crop Image"
     >
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <h3 className="text-base font-semibold text-gray-800">Adjust photo</h3>
-        <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        <h3 className="font-display text-base font-semibold text-navy-800">Adjust photo</h3>
+        <button type="button" onClick={onCancel} className="text-gray-400 hover:text-navy-800 text-xl leading-none transition-colors">&times;</button>
       </div>
       <div className="relative bg-gray-900" style={{ height: 320 }}>
         <Cropper
@@ -271,14 +271,14 @@ function CropModal({ imageSrc, onCancel, onApply }) {
           />
         </div>
         <div className="flex justify-end gap-3">
-          <button type="button" onClick={onCancel} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm">
+          <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm">
             Cancel
           </button>
           <button
             type="button"
             onClick={handleApply}
             disabled={busy || !croppedAreaPixels}
-            className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+            className="px-4 py-2 bg-navy-800 text-white rounded-lg hover:bg-navy-700 transition-colors disabled:opacity-50 text-sm font-semibold"
           >
             {busy ? 'Processing...' : 'Apply'}
           </button>
@@ -522,25 +522,21 @@ export default function AutoNXTGeneratorForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">
-        AutoNXT PDI Generator
-      </h1>
-
+    <div className="max-w-7xl mx-auto space-y-4">
       <div className="max-w-3xl mx-auto">
         <div
           onClick={handleOpen}
-          className="bg-white rounded-2xl shadow-lg p-8 cursor-pointer hover:shadow-xl transition-shadow border-2 border-dashed border-amber-300 flex items-center gap-6"
+          className="bg-white rounded-xl shadow-sm p-5 sm:p-8 cursor-pointer border-2 border-dashed border-navy-100 hover:border-gold-400 transition-colors flex items-center gap-4 sm:gap-6"
         >
-          <div className="p-4 bg-amber-100 rounded-xl">
-            <ClipboardCheck size={40} className="text-amber-600" />
+          <div className="p-3 sm:p-4 bg-navy-50 rounded-xl shrink-0">
+            <ClipboardCheck size={40} className="text-gold-600" />
           </div>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">New AutoNXT Pre-Dispatch Inspection</h2>
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold text-navy-800">New AutoNXT Pre-Dispatch Inspection</h2>
             <p className="text-gray-500 mt-1">
               Fill in motor test data and generate a 3-page PDI report PDF (Format No: CASPL/QA/F/23)
             </p>
-            <span className="inline-block mt-3 px-4 py-1.5 bg-amber-500 text-white rounded-lg text-sm font-medium">
+            <span className="inline-block mt-3 px-4 py-1.5 bg-gold-500 text-navy-900 rounded-lg text-sm font-semibold">
               + Create PDI
             </span>
           </div>
@@ -554,62 +550,62 @@ export default function AutoNXTGeneratorForm() {
       <Modal
         isOpen={isOpen}
         onRequestClose={handleClose}
-        overlayClassName="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-start justify-center z-50 overflow-y-auto py-8"
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 outline-none"
+        overlayClassName="fixed inset-0 bg-navy-900/50 flex items-start justify-center z-50 overflow-y-auto py-4 sm:py-8"
+        className="bg-white rounded-2xl shadow-2xl w-full min-w-0 max-w-5xl mx-4 outline-none"
         contentLabel="AutoNXT PDI Generator Form"
       >
         <form onSubmit={handleFinalize}>
-          <div className="flex items-center justify-between px-8 py-5 border-b border-gray-100">
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-8 py-4 sm:py-5 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              <FileText className="text-amber-500" size={24} />
+              <FileText className="text-gold-600" size={24} />
               <div>
-                <h2 className="text-xl font-bold text-gray-800">Pre-Dispatch Inspection (PDI) — AutoNXT</h2>
+                <h2 className="font-display text-xl font-bold text-navy-800">Pre-Dispatch Inspection (PDI) — AutoNXT</h2>
                 <p className="text-xs text-gray-400">Format No: CASPL/QA/F/23 · Rev. No:00 · Eff. Dt:30/03/2024 · Rev Dt:11/10/2024</p>
               </div>
             </div>
-            <button type="button" onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            <button type="button" onClick={handleClose} className="shrink-0 px-2 text-gray-400 hover:text-navy-800 text-2xl leading-none transition-colors">&times;</button>
           </div>
 
-          <div className="px-8 py-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          <div className="px-4 sm:px-8 py-5 sm:py-6 space-y-6 max-h-[62vh] sm:max-h-[80vh] overflow-y-auto">
 
             {/* ── Header fields ── */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Customer Name <span className="text-red-500">*</span></label>
                 <input className={INPUT_CLS} value={form.customer_name} onChange={(e) => setField('customer_name', e.target.value)} placeholder="e.g. Autonxt" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Date</label>
                 <input type="date" className={INPUT_CLS} value={form.date} onChange={(e) => setField('date', e.target.value)} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Product ID</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Product ID</label>
                 <input className={INPUT_CLS} value={form.product_id} onChange={(e) => setField('product_id', e.target.value)} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Drawing No.</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Drawing No.</label>
                 <input className={INPUT_CLS} value={form.drawing_no} onChange={(e) => setField('drawing_no', e.target.value)} placeholder="e.g. CASPL-220/007-00" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Product Specifications</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Product Specifications</label>
                 <input className={INPUT_CLS} value={form.product_specifications} onChange={(e) => setField('product_specifications', e.target.value)} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">PDI No. <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">PDI No. <span className="text-red-500">*</span></label>
                 <input className={INPUT_CLS} value={form.pdi_no} onChange={(e) => setField('pdi_no', e.target.value)} placeholder="e.g. CASPL-QA-PDI-001" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Motor Sr.No</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Motor Sr.No</label>
                 <input className={INPUT_CLS} value={form.motor_sr_no} onChange={(e) => setField('motor_sr_no', e.target.value)} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Controller Type</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Controller Type</label>
                 <input className={INPUT_CLS} value={form.controller_type} onChange={(e) => setField('controller_type', e.target.value)} />
               </div>
             </div>
 
             {/* ── Tabs ── */}
-            <div className="border-b border-gray-200">
+            <div className="border-b border-navy-100">
               <nav className="flex gap-1">
                 {[
                   { key: 'performance', label: 'Performance & General Check (Pg 1)' },
@@ -622,8 +618,8 @@ export default function AutoNXTGeneratorForm() {
                     onClick={() => setActiveTab(tab.key)}
                     className={`px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
                       activeTab === tab.key
-                        ? 'border-amber-500 text-amber-600 bg-amber-50'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                        ? 'border-navy-800 text-navy-800 bg-navy-50'
+                        : 'border-transparent text-gray-500 hover:text-navy-700 hover:bg-navy-50/60'
                     }`}
                   >
                     {tab.label}
@@ -636,8 +632,8 @@ export default function AutoNXTGeneratorForm() {
             {activeTab === 'performance' && (
               <div className="space-y-5">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">A. Performance Test @ No Load</h3>
-                  <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <h3 className="text-sm font-semibold text-navy-800 mb-2">A. Performance Test @ No Load</h3>
+                  <div className="overflow-x-auto rounded-lg border border-navy-100">
                     <table className="w-full text-left">
                       <thead>
                         <tr>
@@ -655,7 +651,7 @@ export default function AutoNXTGeneratorForm() {
                             <td className={TD_CLS}>{row.rpm}</td>
                             <td className={TD_CLS}>{row.sourceVoltage}</td>
                             <td className={TD_CLS}>{row.bemfSpec}</td>
-                            <td className="py-1 px-1 border border-gray-100">
+                            <td className="py-1 px-1 border border-navy-100">
                               <input
                                 className={INPUT_CLS}
                                 value={form.performance_test[row.key].bemf_measured}
@@ -663,7 +659,7 @@ export default function AutoNXTGeneratorForm() {
                               />
                             </td>
                             <td className={TD_CLS}>{row.currentSpec}</td>
-                            <td className="py-1 px-1 border border-gray-100">
+                            <td className="py-1 px-1 border border-navy-100">
                               <input
                                 className={INPUT_CLS}
                                 value={form.performance_test[row.key].current_measured}
@@ -678,8 +674,8 @@ export default function AutoNXTGeneratorForm() {
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">B. General Check</h3>
-                  <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <h3 className="text-sm font-semibold text-navy-800 mb-2">B. General Check</h3>
+                  <div className="overflow-x-auto rounded-lg border border-navy-100">
                     <table className="w-full">
                       <thead>
                         <tr>
@@ -691,11 +687,11 @@ export default function AutoNXTGeneratorForm() {
                       </thead>
                       <tbody>
                         {GENERAL_CHECK_ROWS.map((row) => (
-                          <tr key={row.key} className="border-t border-gray-100">
+                          <tr key={row.key} className="border-t border-navy-100 hover:bg-navy-50/60 transition-colors">
                             <td className="py-2 px-3 text-sm text-gray-700">{row.label}</td>
                             <td className={TD_CLS}>{row.spec}</td>
                             <td className={TD_CLS}>{row.method}</td>
-                            <td className="py-1 px-2 border border-gray-100 text-center">
+                            <td className="py-1 px-2 border border-navy-100 text-center">
                               <select
                                 className={SELECT_CLS}
                                 value={form.general_check[row.key].measured}
@@ -712,7 +708,7 @@ export default function AutoNXTGeneratorForm() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Page 1 Remarks</label>
+                  <label className="block text-sm font-medium text-navy-800 mb-1">Page 1 Remarks</label>
                   <textarea
                     rows={2}
                     className={INPUT_CLS}
@@ -727,8 +723,8 @@ export default function AutoNXTGeneratorForm() {
             {activeTab === 'physical' && (
               <div className="space-y-5">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">C. Physical Parameters</h3>
-                  <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <h3 className="text-sm font-semibold text-navy-800 mb-2">C. Physical Parameters</h3>
+                  <div className="overflow-x-auto rounded-lg border border-navy-100">
                     <table className="w-full">
                       <thead>
                         <tr>
@@ -740,11 +736,11 @@ export default function AutoNXTGeneratorForm() {
                       </thead>
                       <tbody>
                         {PHYSICAL_PARAM_ROWS.map((row) => (
-                          <tr key={row.key} className="border-t border-gray-100">
+                          <tr key={row.key} className="border-t border-navy-100 hover:bg-navy-50/60 transition-colors">
                             <td className="py-2 px-3 text-sm text-gray-700">{row.label}</td>
                             <td className={TD_CLS}>{row.spec}</td>
                             <td className={TD_CLS}>{row.method}</td>
-                            <td className="py-1 px-2 border border-gray-100 text-center">
+                            <td className="py-1 px-2 border border-navy-100 text-center">
                               <select
                                 className={SELECT_CLS}
                                 value={form.physical_parameters[row.key].measured}
@@ -761,7 +757,7 @@ export default function AutoNXTGeneratorForm() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Page 2 Remarks</label>
+                  <label className="block text-sm font-medium text-navy-800 mb-1">Page 2 Remarks</label>
                   <textarea
                     rows={2}
                     className={INPUT_CLS}
@@ -776,7 +772,7 @@ export default function AutoNXTGeneratorForm() {
             {activeTab === 'photos' && (
               <div className="space-y-5">
                 <p className="text-xs text-gray-400">Tap a slot to take a photo or choose one — you&rsquo;ll crop it next.</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {PHOTO_SLOTS.map((slot) => (
                     <ImageUploadCard
                       key={slot.key}
@@ -791,39 +787,39 @@ export default function AutoNXTGeneratorForm() {
             )}
 
             {/* ── Signatures (3-way: Electrical + Mechanical preparers, one approver) ── */}
-            <div className="grid grid-cols-3 gap-4 border-t border-gray-100 pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-gray-100 pt-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Prepared By - Electrical</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Prepared By - Electrical</label>
                 <input className={INPUT_CLS} value={form.prepared_by_electrical} onChange={(e) => setField('prepared_by_electrical', e.target.value)} placeholder="Name" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Prepared By - Mechanical</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Prepared By - Mechanical</label>
                 <input className={INPUT_CLS} value={form.prepared_by_mechanical} onChange={(e) => setField('prepared_by_mechanical', e.target.value)} placeholder="Name" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Approved By</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Approved By</label>
                 <input className={INPUT_CLS} value={form.approved_by} onChange={(e) => setField('approved_by', e.target.value)} placeholder="Name" />
               </div>
             </div>
           </div>
 
-          <div className="flex justify-between gap-3 px-8 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+          <div className="grid grid-cols-2 sm:flex sm:justify-between gap-3 px-4 sm:px-8 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
             <button
               type="button"
               onClick={handleSave}
               disabled={saving || loading}
-              className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm font-semibold"
+              className="px-5 py-2.5 bg-navy-800 text-white rounded-lg hover:bg-navy-700 transition-colors disabled:opacity-50 text-sm font-semibold"
             >
               {saving ? 'Saving...' : 'Save'}
             </button>
-            <div className="flex gap-3">
-              <button type="button" onClick={handleClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm">
+            <div className="contents sm:flex sm:gap-3">
+              <button type="button" onClick={handleClose} className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm">
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+                className="col-span-2 sm:col-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-50 text-sm font-semibold"
               >
                 <Download size={16} />
                 {loading ? 'Finalizing...' : 'Finalize & Generate PDF'}

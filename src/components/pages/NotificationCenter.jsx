@@ -7,7 +7,7 @@ export default function NotificationCenter() {
   const dispatch = useDispatch();
 
   return (
-    <div className="fixed bottom-5 right-5 flex flex-col-reverse space-y-4 space-y-reverse z-50">
+    <div className="fixed bottom-5 right-5 max-w-[calc(100vw-2.5rem)] flex flex-col-reverse space-y-4 space-y-reverse z-50">
       {notifications.map((n) => (
         <NotificationItem
           key={n.id}
@@ -38,11 +38,11 @@ function NotificationItem({ notification, onClose }) {
         flex items-center justify-between
         bg-gradient-to-r ${colorMap[notification.type] || "from-gray-700 to-gray-800"} 
         border-l-4 border-opacity-90
-        text-white px-6 py-3 rounded-xl shadow-xl min-w-[280px] 
+        text-white px-6 py-3 rounded-xl shadow-xl min-w-[280px] max-w-full 
         animate-slide-in hover:scale-105 transform transition-all duration-300
       `}
     >
-      <div className="flex items-center space-x-3">
+      <div className="flex items-center space-x-3 min-w-0">
         {notification.type === "success" && (
           <svg
             className="w-5 h-5 text-white"
@@ -75,12 +75,12 @@ function NotificationItem({ notification, onClose }) {
             />
           </svg>
         )}
-        <span className="text-sm font-medium">{notification.message}</span>
+        <span className="text-sm font-medium break-words min-w-0">{notification.message}</span>
       </div>
 
       <button
         onClick={onClose}
-        className="ml-4 text-white opacity-70 hover:opacity-100 transition-opacity duration-200"
+        className="ml-4 px-1 text-white opacity-70 hover:opacity-100 transition-opacity duration-200 shrink-0"
       >
         &times;
       </button>

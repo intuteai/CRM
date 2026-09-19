@@ -371,9 +371,9 @@ export default function DeliveryChallanForm() {
     }) {
       const uid = it._uid;
       return (
-        <div className="grid grid-cols-12 gap-2 items-start mb-3">
-          <div className="col-span-1 text-center pt-2 text-sm">{index + 1}</div>
-          <div className="col-span-2">
+        <div className="grid grid-cols-2 md:grid-cols-12 gap-2 items-start mb-3">
+          <div className="col-span-2 md:col-span-1 text-left md:text-center pt-2 text-sm">{index + 1}</div>
+          <div className="col-span-1 md:col-span-2 order-2 md:order-none">
             <label className="text-xs text-gray-600">Source</label>
             <select
               value={it.source}
@@ -384,7 +384,7 @@ export default function DeliveryChallanForm() {
               <option value="raw">Raw Material</option>
             </select>
           </div>
-          <div className="col-span-4 relative">
+          <div className="col-span-2 md:col-span-4 order-1 md:order-none relative">
             <label className="text-xs text-gray-600">Product (select)</label>
             <div className="relative">
               <input
@@ -417,7 +417,7 @@ export default function DeliveryChallanForm() {
                     }}
                     onMouseEnter={() => setSelectedIndexMap((m) => ({ ...m, [uid]: pIndex }))}
                     className={`px-3 py-2 cursor-pointer flex justify-between items-center text-sm ${
-                      pIndex === selIdx ? "bg-amber-100 font-semibold" : "hover:bg-gray-50"
+                      pIndex === selIdx ? "bg-gold-400/25 font-semibold" : "hover:bg-navy-50"
                     } ${p.product_id == null ? "text-gray-400 cursor-default" : ""}`}
                   >
                     <span className="truncate">{p.product_name}</span>
@@ -427,7 +427,7 @@ export default function DeliveryChallanForm() {
               </ul>
             )}
           </div>
-          <div className="col-span-2">
+          <div className="col-span-1 md:col-span-2 order-2 md:order-none">
             <label className="text-xs text-gray-600">Qty</label>
             <input
               type="number"
@@ -438,7 +438,7 @@ export default function DeliveryChallanForm() {
               className="w-full border rounded px-2 py-1 text-sm"
             />
           </div>
-          <div className="col-span-1 flex flex-col items-center">
+          <div className="col-span-1 order-2 md:order-none flex flex-col items-start md:items-center">
             <label className="text-xs text-gray-600">Returnable</label>
             <input
               type="checkbox"
@@ -448,7 +448,7 @@ export default function DeliveryChallanForm() {
               aria-label={`Returnable for item ${uid}`}
             />
           </div>
-          <div className="col-span-2">
+          <div className="col-span-1 md:col-span-2 order-2 md:order-none">
             <label className="text-xs text-gray-600">Remarks</label>
             <input
               className="w-full border rounded px-2 py-1 text-sm"
@@ -457,8 +457,8 @@ export default function DeliveryChallanForm() {
               placeholder="Remarks"
             />
           </div>
-          <div className="col-span-12 text-right mt-1">
-            <button type="button" onClick={() => onRemove(uid)} className="text-red-600 text-xs flex items-center gap-1 ml-auto">
+          <div className="col-span-2 md:col-span-12 order-3 md:order-none text-right mt-1">
+            <button type="button" onClick={() => onRemove(uid)} className="text-red-600 text-xs flex items-center gap-1 ml-auto py-2 md:py-0">
               <Trash2 className="w-3 h-3" /> Remove row
             </button>
           </div>
@@ -494,18 +494,18 @@ export default function DeliveryChallanForm() {
   if (socketStatus === 'error' || fetchError) return <ConnectionError onRetry={() => setFetchError(null)} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
+    <div className="pb-6">
       <div className="max-w-4xl mx-auto">
 
         {/* ── Page header ── */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5 mb-8">
           <div>
-            <div className="inline-flex items-center gap-2 bg-amber-100 border border-amber-200 rounded-full px-3 py-1 mb-3">
-              <FileText size={12} className="text-amber-700" />
-              <span className="text-amber-700 text-xs font-semibold tracking-wide">Goods Dispatch</span>
+            <div className="inline-flex items-center gap-2 bg-gold-400/25 border border-gold-400/40 rounded-full px-3 py-1 mb-3">
+              <FileText size={12} className="text-gold-600" />
+              <span className="text-gold-600 text-xs font-semibold tracking-wide">Goods Dispatch</span>
             </div>
-            <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Delivery Challan</h1>
-            <p className="text-gray-600 text-sm mt-1.5">Create dispatch documents with smart inventory lookup</p>
+            <h1 className="font-display text-2xl font-bold text-navy-800 tracking-tight">Delivery Challan</h1>
+            <p className="text-gray-500 text-sm mt-1.5">Create dispatch documents with smart inventory lookup</p>
           </div>
           <button
             onClick={() => { setIsOpen(true); if (!inventoryList.length || !rawList.length) fetchLists(); }}
@@ -517,16 +517,16 @@ export default function DeliveryChallanForm() {
 
         {/* ── Hero card ── */}
         <div
-          className="bg-gradient-to-br from-amber-100 to-amber-50 rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer border border-amber-200"
+          className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer border border-navy-100"
           onClick={() => { setIsOpen(true); if (!inventoryList.length || !rawList.length) fetchLists(); }}
         >
           <div className="h-1.5 bg-gradient-to-r from-violet-500 to-purple-600" />
           <div className="p-7">
             <div className="flex items-start justify-between mb-6">
-              <div className="bg-white p-3.5 rounded-xl border border-amber-100 shadow-sm">
-                <FileText size={26} className="text-gray-700" />
+              <div className="bg-navy-50 p-3.5 rounded-xl border border-navy-100">
+                <FileText size={26} className="text-navy-800" />
               </div>
-              <span className="bg-amber-200 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-300">
+              <span className="bg-gold-400/25 text-gold-600 text-xs font-bold px-3 py-1.5 rounded-full border border-gold-400/40">
                 Dispatch
               </span>
             </div>
@@ -541,7 +541,7 @@ export default function DeliveryChallanForm() {
                 { label: 'Tracking',   value: 'Vehicle No.'    },
                 { label: 'Returnable', value: 'Flag per item'  },
               ].map(({ label, value }) => (
-                <div key={label} className="bg-white rounded-xl p-3 border border-amber-100">
+                <div key={label} className="bg-navy-50 rounded-xl p-3 border border-navy-100">
                   <p className="text-xs text-gray-500 mb-0.5">{label}</p>
                   <p className="font-semibold text-gray-700 text-xs">{value}</p>
                 </div>
@@ -567,8 +567,8 @@ export default function DeliveryChallanForm() {
       <Modal
         isOpen={isOpen}
         onRequestClose={() => setIsOpen(false)}
-        className="max-w-4xl mx-auto mt-8 bg-white rounded-2xl p-6 outline-none shadow-xl"
-        overlayClassName="fixed inset-0 bg-black bg-opacity-40 flex items-start justify-center z-50 overflow-y-auto"
+        className="w-full md:w-auto max-w-4xl mx-auto mt-8 mb-4 md:mb-0 bg-white rounded-2xl p-6 outline-none shadow-xl"
+        overlayClassName="fixed inset-0 bg-navy-900/50 flex items-start justify-center z-50 overflow-y-auto p-3 lg:p-0"
       >
         <h3 className="text-xl font-semibold mb-2 text-gray-800">Create Delivery Challan</h3>
         <div className="text-sm text-gray-600 mb-4">
@@ -578,7 +578,7 @@ export default function DeliveryChallanForm() {
           <span>Date: <strong>{formatDDMMYYYY(form.date || DEFAULT_DATE)}</strong></span>
         </div>
         <form onSubmit={handleGenerate} className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm text-gray-600">Challan No *</label>
               <input value={form.challan_no} onChange={(e) => setForm((p) => ({ ...p, challan_no: e.target.value }))} required className="w-full border rounded px-3 py-2 mt-1" />
@@ -592,7 +592,7 @@ export default function DeliveryChallanForm() {
               <input value={form.order_no} onChange={(e) => setForm((p) => ({ ...p, order_no: e.target.value }))} className="w-full border rounded px-3 py-2 mt-1" />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm text-gray-600">Order Date</label>
               <input type="date" value={form.order_date} onChange={(e) => setForm((p) => ({ ...p, order_date: e.target.value }))} className="w-full border rounded px-3 py-2 mt-1" />
@@ -606,12 +606,12 @@ export default function DeliveryChallanForm() {
               <input value={form.to_gst_number} onChange={(e) => setForm((p) => ({ ...p, to_gst_number: e.target.value }))} className="w-full border rounded px-3 py-2 mt-1" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-600">To (Name) / M/s.</label>
               <input value={form.to_name} onChange={(e) => setForm((p) => ({ ...p, to_name: e.target.value }))} className="w-full border rounded px-3 py-2 mt-1" />
             </div>
-            <div />
+            <div className="hidden sm:block" />
           </div>
           <div>
             <label className="block text-sm text-gray-600">To (Address)</label>
@@ -622,7 +622,7 @@ export default function DeliveryChallanForm() {
             <div className="flex justify-between items-center mb-2">
               <div className="font-semibold text-gray-800">Items</div>
               <div className="flex items-center gap-3">
-                <button type="button" onClick={addItem} className="text-blue-600 flex items-center gap-2 text-sm">
+                <button type="button" onClick={addItem} className="text-blue-600 flex items-center gap-2 text-sm py-1.5 -my-1.5">
                   <Plus className="w-4 h-4" /> Add
                 </button>
                 <button
@@ -634,13 +634,13 @@ export default function DeliveryChallanForm() {
                     setDropdownOpen({});
                     setSelectedIndexMap({});
                   }}
-                  className="text-sm text-gray-600"
+                  className="text-sm text-gray-600 py-1.5 -my-1.5"
                 >
                   Reset
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-gray-600 mb-1">
+            <div className="hidden md:grid grid-cols-12 gap-2 text-xs font-semibold text-gray-600 mb-1">
               <div className="col-span-1 text-center">No.</div>
               <div className="col-span-2">Source</div>
               <div className="col-span-4">Product</div>
@@ -669,7 +669,7 @@ export default function DeliveryChallanForm() {
             ))}
           </div>
 
-          <div className="flex justify-end gap-3 mt-4">
+          <div className="flex flex-wrap justify-end gap-3 mt-4">
             <button type="button" onClick={() => setIsOpen(false)} className="px-4 py-2 border rounded-lg text-gray-700">
               Cancel
             </button>

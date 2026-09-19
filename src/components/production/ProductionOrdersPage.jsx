@@ -41,14 +41,14 @@ const STATUS_RANK = {
 };
 
 const STATUS_COLORS = {
-  [STATUS.PENDING]:             "bg-amber-500",
-  [STATUS.PROCESSING]:          "bg-yellow-600",
-  [STATUS.TESTING]:             "bg-purple-600",
-  [STATUS.READY_FOR_SHIPMENT]:  "bg-teal-600",
-  [STATUS.SHIPPED]:             "bg-blue-600",
-  [STATUS.PARTIALLY_DELIVERED]: "bg-indigo-500",
-  [STATUS.DELIVERED]:           "bg-green-600",
-  [STATUS.CANCELLED]:           "bg-red-600",
+  [STATUS.PENDING]:             "bg-gold-400/25 text-gold-600",
+  [STATUS.PROCESSING]:          "bg-blue-100 text-blue-700",
+  [STATUS.TESTING]:             "bg-purple-100 text-purple-700",
+  [STATUS.READY_FOR_SHIPMENT]:  "bg-teal-100 text-teal-700",
+  [STATUS.SHIPPED]:             "bg-indigo-100 text-indigo-700",
+  [STATUS.PARTIALLY_DELIVERED]: "bg-violet-100 text-violet-700",
+  [STATUS.DELIVERED]:           "bg-emerald-100 text-emerald-700",
+  [STATUS.CANCELLED]:           "bg-red-100 text-red-700",
 };
 
 const formatDate = (dateString) =>
@@ -87,6 +87,7 @@ const getAvailableStatuses = (currentStatus) => {
 };
 
 const useFetchData = ({ userRole }) => {
+  const { notifyError } = useNotify();
   const [orders, setOrders] = useState([]);
   const [totalOrders, setTotalOrders] = useState(0);
   const [products, setProducts] = useState([]);
@@ -337,8 +338,8 @@ function ProductionOrdersPage({ socket, userRole }) {
 
   if (isLoading && !orders.length) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
-        <div className="text-gray-600 text-xl animate-pulse">
+      <div className="flex items-center justify-center py-24">
+        <div className="text-gray-500 text-lg">
           Loading orders...
         </div>
       </div>
@@ -347,13 +348,13 @@ function ProductionOrdersPage({ socket, userRole }) {
 
   if (isEmpty) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
+      <div className="flex items-center justify-center py-24">
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-navy-100 text-center">
           <ShoppingCart className="mx-auto mb-4 text-gray-400" size={48} />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+          <h2 className="font-display text-xl font-bold text-navy-800 mb-2">
             No Orders Yet
           </h2>
-          <p className="text-gray-600">
+          <p className="text-gray-500">
             No orders are available for your role.
           </p>
         </div>
@@ -364,13 +365,9 @@ function ProductionOrdersPage({ socket, userRole }) {
   if (error) return <ConnectionError onRetry={refetchData} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-        Production Orders
-      </h1>
-
-      <div className="max-w-7xl mx-auto">
-        <div className="flex mb-8 gap-4 flex-wrap items-center">
+    <div className="max-w-7xl mx-auto">
+      <div>
+        <div className="flex mb-6 gap-4 flex-wrap items-center">
           {/* Search Bar */}
           <div className="relative flex-grow min-w-[300px]">
             <input
@@ -378,16 +375,16 @@ function ProductionOrdersPage({ socket, userRole }) {
               placeholder="Search by Order ID or Customer Name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full p-3 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
+              className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
             />
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           </div>
 
           {/* Status Filter */}
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md min-w-[140px]"
+            className="p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm min-w-[140px]"
           >
             <option value="All">All Status</option>
             {Object.values(STATUS).map((s) => (
@@ -398,7 +395,7 @@ function ProductionOrdersPage({ socket, userRole }) {
           </select>
 
           {/* Month-Year Combined Filter */}
-          <div className="flex gap-2 items-center bg-white border border-gray-200 rounded-lg shadow-md p-2">
+          <div className="flex gap-2 items-center bg-white border border-navy-100 rounded-lg shadow-sm p-2">
             <Calendar size={18} className="text-gray-400 ml-1" />
             <select
               value={filterMonth}
@@ -459,7 +456,7 @@ function ProductionOrdersPage({ socket, userRole }) {
           <button
             onClick={refetchData}
             disabled={isLoading}
-            className="p-3 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all shadow-md text-lg font-medium disabled:opacity-50"
+            className="px-5 py-3 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
           >
             {isLoading ? "Refreshing..." : "Refresh"}
           </button>
@@ -469,14 +466,14 @@ function ProductionOrdersPage({ socket, userRole }) {
         {hasActiveFilters && (
           <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
             <Filter size={14} />
-            <span>Filtered by: <span className="font-medium text-amber-700">{getFilterText()}</span></span>
+            <span>Filtered by: <span className="font-medium text-gold-600">{getFilterText()}</span></span>
             <button
               onClick={() => {
                 setFilterStatus('All');
                 setFilterMonth('All');
                 setFilterYear('All');
               }}
-              className="text-amber-600 hover:text-amber-700 underline ml-1"
+              className="text-gold-600 hover:text-navy-800 underline ml-1"
             >
               Clear all
             </button>
@@ -484,15 +481,15 @@ function ProductionOrdersPage({ socket, userRole }) {
         )}
 
         {isLoading && orders.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center">
+          <div className="text-gray-500 text-sm mb-4 text-center">
             Refreshing data...
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
           <table className="w-full text-left border-collapse" ref={tableRef}>
             <thead>
-              <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50">
+              <tr className="bg-navy-50">
                 {[
                   { key: "id", label: "Order ID" },
                   { key: "customerName", label: "Customer Name" },
@@ -504,11 +501,11 @@ function ProductionOrdersPage({ socket, userRole }) {
                 ].map((item) => (
                   <th
                     key={item.key}
-                    className={`py-5 px-3 text-gray-800 text-base font-semibold ${
+                    className={`py-3 px-3 text-navy-800 text-sm font-semibold whitespace-nowrap ${
                       item.key !== "items"
-                        ? "cursor-pointer hover:bg-amber-300"
+                        ? "cursor-pointer hover:bg-navy-100"
                         : ""
-                    } transition-all duration-200`}
+                    } transition-colors`}
                     onClick={() => item.key !== "items" && handleSort(item.key)}
                   >
                     <div className="flex items-center justify-between">
@@ -516,7 +513,7 @@ function ProductionOrdersPage({ socket, userRole }) {
                       {item.key !== "items" && (
                         <ArrowDownUp
                           size={16}
-                          className={`ml-2 ${sortConfig.key === item.key ? "text-gray-900" : "opacity-50"}`}
+                          className={`ml-2 ${sortConfig.key === item.key ? "text-gold-500" : "text-navy-400/50"}`}
                         />
                       )}
                     </div>
@@ -531,15 +528,15 @@ function ProductionOrdersPage({ socket, userRole }) {
                 return (
                   <tr
                     key={order.id}
-                    className="border-t hover:bg-amber-50 transition-all duration-200"
+                    className="border-t border-navy-100 hover:bg-navy-50/60 transition-colors"
                   >
-                    <td className="py-4 px-3 text-gray-600 text-base">
+                    <td className="py-3.5 px-3 text-gray-600">
                       {order.id}
                     </td>
-                    <td className="py-4 px-3 text-gray-600 text-base">
+                    <td className="py-3.5 px-3 text-gray-600">
                       {order.customerName || "N/A"}
                     </td>
-                    <td className="py-4 px-3 text-gray-600 text-base">
+                    <td className="py-3.5 px-3 text-gray-600 min-w-[170px]">
                       <ul className="space-y-1">
                         {(order.items || []).map((item, i) => (
                           <li key={item.product_id || i} className="text-sm">
@@ -549,46 +546,45 @@ function ProductionOrdersPage({ socket, userRole }) {
                         ))}
                       </ul>
                     </td>
-                    <td className="py-4 px-3 text-base">
+                    <td className="py-3.5 px-3">
                       <div className="relative inline-block group">
                         <select
                           value={order.status}
                           onChange={(e) => onStatusSelectChange(order.id, e.target.value)}
                           className={`
-                            appearance-none px-4 py-1 pr-9 rounded-full text-white text-sm font-medium
-                            cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-400
-                            ${STATUS_COLORS[order.status] || "bg-gray-500"}
+                            appearance-none px-3 py-1 pr-8 rounded-full text-xs font-semibold
+                            cursor-pointer focus:outline-none focus:ring-2 focus:ring-gold-400
+                            ${STATUS_COLORS[order.status] || "bg-gray-100 text-gray-500"}
                           `}
-                          style={{ colorScheme: 'dark' }}
-                          disabled={isLoading}
+                                                    disabled={isLoading}
                         >
-                          <option value={order.status} disabled className="bg-gray-800">
+                          <option value={order.status} disabled className="bg-white text-navy-800">
                             {order.status}
                           </option>
                           {availableStatuses.map((s) => (
-                            <option key={s} value={s} className="bg-gray-800">
+                            <option key={s} value={s} className="bg-white text-navy-800">
                               {s}
                             </option>
                           ))}
                         </select>
                         <Edit2
                           size={14}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-white/80 pointer-events-none"
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-60 pointer-events-none"
                         />
                       </div>
                       {order.statusReason && (
                         <p className="text-xs text-gray-500 italic mt-1 max-w-[180px]">{order.statusReason}</p>
                       )}
                     </td>
-                    <td className="py-4 px-3 text-gray-600 text-base">
+                    <td className="py-3.5 px-3 text-gray-600">
                       {order.targetDeliveryDate
                         ? formatDate(order.targetDeliveryDate)
                         : "Not Set"}
                     </td>
-                    <td className="py-4 px-3 text-gray-600 text-base">
+                    <td className="py-3.5 px-3 text-gray-600">
                       {order.paymentStatus || "N/A"}
                     </td>
-                    <td className="py-4 px-3 text-gray-600 text-base">
+                    <td className="py-3.5 px-3 text-gray-600">
                       <div className="flex flex-col">
                         <span>
                           {order.createdAt
@@ -597,7 +593,7 @@ function ProductionOrdersPage({ socket, userRole }) {
                               )
                             : "N/A"}
                         </span>
-                        <span className="text-sm text-gray-500">
+                        <span className="text-xs text-gray-400">
                           {order.createdAt
                             ? new Date(order.createdAt).toLocaleTimeString(
                                 "en-IN",
@@ -613,22 +609,22 @@ function ProductionOrdersPage({ socket, userRole }) {
           </table>
 
           {totalOrders > 0 && (
-            <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600">
+            <div className="flex justify-between items-center p-4 bg-navy-50 border-t border-navy-100">
+              <div className="text-gray-500 text-sm">
                 Showing {paginatedOrders.length} of {filteredOrders.length} filtered orders (Total: {totalOrders})
               </div>
-              <div className="flex space-x-2">
+              <div className="flex gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
                   disabled={page === 0}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                 >
                   <ChevronLeft size={20} />
                 </button>
                 <button
                   onClick={() => setPage((p) => p + 1)}
                   disabled={(page + 1) * ordersPerPage >= filteredOrders.length}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                 >
                   <ChevronRight size={20} />
                 </button>
@@ -637,9 +633,9 @@ function ProductionOrdersPage({ socket, userRole }) {
           )}
 
           {filteredOrders.length === 0 && !isLoading && (
-            <div className="text-center py-12 text-gray-500">
-              <Filter className="mx-auto mb-4 text-gray-400" size={48} />
-              <p className="text-lg">No orders match your current filters</p>
+            <div className="text-center py-12 text-gray-400">
+              <Filter className="mx-auto mb-4 text-gray-300" size={40} />
+              <p>No orders match your current filters</p>
             </div>
           )}
         </div>
@@ -647,14 +643,14 @@ function ProductionOrdersPage({ socket, userRole }) {
 
       {/* ── Status reason modal ── */}
       {reasonModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
-            <h3 className="text-base font-bold text-gray-900 mb-1">
-              Change Status → <span className={`px-2 py-0.5 rounded-full text-white text-sm ${STATUS_COLORS[reasonModal.newStatus] || 'bg-gray-500'}`}>{reasonModal.newStatus}</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/50 px-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto">
+            <h3 className="font-display text-base font-bold text-navy-800 mb-1">
+              Change Status → <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[reasonModal.newStatus] || 'bg-gray-100 text-gray-500'}`}>{reasonModal.newStatus}</span>
             </h3>
             <p className="text-xs text-gray-500 mb-4">Order #{reasonModal.orderId}</p>
 
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+            <label className="block text-sm font-semibold text-navy-800 mb-1.5">
               Reason / Note
               {reasonModal.newStatus === STATUS.PARTIALLY_DELIVERED && (
                 <span className="text-red-500 ml-1">* required</span>
@@ -670,19 +666,19 @@ function ProductionOrdersPage({ socket, userRole }) {
                   ? "Explain what was delivered and what remains…"
                   : "Optional — add a note about this status change"
               }
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none mb-4"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gold-400 resize-none mb-4"
             />
 
             <div className="flex gap-3">
               <button
                 onClick={() => setReasonModal(null)}
-                className="flex-1 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium hover:bg-gray-50 transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmStatusChange}
-                className="flex-1 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg bg-navy-800 hover:bg-navy-700 text-white text-sm font-semibold transition-colors"
               >
                 Confirm
               </button>

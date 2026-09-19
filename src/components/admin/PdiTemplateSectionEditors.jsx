@@ -127,15 +127,15 @@ export function ListEditor({ items, onChange, renderRow, newRow, addLabel, hideA
             onDrop={handleDrop(i)}
             onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
             className={`flex items-center gap-2 border rounded p-2 transition-colors ${
-              overIndex === i ? 'border-amber-400 bg-amber-50' : 'border-gray-200'
+              overIndex === i ? 'border-gold-400 bg-gold-400/10' : 'border-navy-100'
             } ${dragIndex === i ? 'opacity-40' : ''}`}
           >
-            <span className="text-gray-300 cursor-grab shrink-0" title="Drag to reorder">
+            <span className="hidden sm:inline text-gray-300 cursor-grab shrink-0" title="Drag to reorder">
               <GripVertical size={14} />
             </span>
-            <div className="flex-1">{renderRow(item, (updated) => onChange(items.map((it, idx) => (idx === i ? updated : it))))}</div>
+            <div className="flex-1 min-w-0">{renderRow(item, (updated) => onChange(items.map((it, idx) => (idx === i ? updated : it))))}</div>
             {removable && (
-              <button type="button" onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-700 shrink-0">
+              <button type="button" onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="p-1.5 sm:p-0 text-red-500 hover:text-red-700 shrink-0">
                 <Trash2 size={16} />
               </button>
             )}
@@ -146,7 +146,7 @@ export function ListEditor({ items, onChange, renderRow, newRow, addLabel, hideA
         <button
           type="button"
           onClick={() => onChange([...items, newRow()])}
-          className="flex items-center gap-1 text-xs font-medium text-amber-700 border border-amber-300 rounded px-2 py-1 hover:bg-amber-50"
+          className="flex items-center gap-1 text-xs font-medium text-navy-800 border border-navy-100 rounded px-2 py-1 hover:bg-navy-50 transition-colors"
         >
           <Plus size={14} /> {addLabel}
         </button>
@@ -168,7 +168,7 @@ export function HeaderSectionEditor({ section, onChange, definition }) {
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <input className={FIELD_CLS} placeholder="Company name" value={section.companyName} onChange={(e) => onChange({ ...section, companyName: e.target.value })} />
         <input className={FIELD_CLS} placeholder="Document Number (e.g. FMT-QA-01)" value={section.formatNo} onChange={(e) => onChange({ ...section, formatNo: e.target.value })} />
         <input className={FIELD_CLS} placeholder="Revision Number (e.g. 1)" value={section.revNo} onChange={(e) => onChange({ ...section, revNo: e.target.value })} />
@@ -207,9 +207,9 @@ export function HeaderSectionEditor({ section, onChange, definition }) {
             // down to a few pixels (found live in the Task 6 browser pass —
             // no lint/build/unit-level check catches a CSS cascade fight).
             return (
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="flex gap-1 items-start">
-                  <div className="flex-1">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 text-xs">
+                <div className="flex flex-col sm:flex-row gap-1 items-stretch sm:items-start">
+                  <div className="flex-1 min-w-0">
                     <LabeledKeyField
                       label={row.leftLabel}
                       keyValue={row.leftKey}
@@ -218,12 +218,12 @@ export function HeaderSectionEditor({ section, onChange, definition }) {
                       onChange={({ label, key }) => update({ ...row, leftLabel: label, leftKey: key })}
                     />
                   </div>
-                  <select className={FIELD_CLS + ' !w-20'} value={row.leftFormat} onChange={(e) => update({ ...row, leftFormat: e.target.value })}>
+                  <select className={FIELD_CLS + ' !w-full sm:!w-20'} value={row.leftFormat} onChange={(e) => update({ ...row, leftFormat: e.target.value })}>
                     <option value="text">text</option><option value="date">date</option>
                   </select>
                 </div>
-                <div className="flex gap-1 items-start">
-                  <div className="flex-1">
+                <div className="flex flex-col sm:flex-row gap-1 items-stretch sm:items-start">
+                  <div className="flex-1 min-w-0">
                     <LabeledKeyField
                       label={row.rightLabel}
                       keyValue={row.rightKey}
@@ -232,7 +232,7 @@ export function HeaderSectionEditor({ section, onChange, definition }) {
                       onChange={({ label, key }) => update({ ...row, rightLabel: label, rightKey: key })}
                     />
                   </div>
-                  <select className={FIELD_CLS + ' !w-20'} value={row.rightFormat} onChange={(e) => update({ ...row, rightFormat: e.target.value })}>
+                  <select className={FIELD_CLS + ' !w-full sm:!w-20'} value={row.rightFormat} onChange={(e) => update({ ...row, rightFormat: e.target.value })}>
                     <option value="text">text</option><option value="date">date</option>
                   </select>
                 </div>
@@ -769,7 +769,7 @@ export function AddSectionPicker({ onAdd }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full border-2 border-dashed border-gray-300 rounded-lg py-3 text-sm text-gray-400 hover:border-amber-300 hover:text-amber-600 transition-colors"
+        className="w-full border-2 border-dashed border-navy-100 rounded-lg py-3 text-sm text-gray-400 hover:border-gold-400 hover:text-gold-600 transition-colors"
       >
         + Add section
       </button>
@@ -784,9 +784,9 @@ export function AddSectionPicker({ onAdd }) {
             key={opt.value}
             type="button"
             onClick={() => { onAdd(opt.build()); setOpen(false); }}
-            className="w-full text-left px-3 py-2 rounded hover:bg-amber-50 flex items-center gap-3"
+            className="w-full text-left px-3 py-2 rounded hover:bg-navy-50 transition-colors flex items-center gap-3"
           >
-            <span className="shrink-0 w-8 h-8 rounded bg-amber-100 text-amber-700 flex items-center justify-center">
+            <span className="shrink-0 w-8 h-8 rounded bg-gold-400/25 text-gold-600 flex items-center justify-center">
               <Icon size={16} />
             </span>
             <span className="flex flex-col">

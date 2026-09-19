@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 class ErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
@@ -14,17 +15,22 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 flex flex-col items-center justify-center p-8 text-center" role="alert">
-          <h1 className="text-4xl font-bold text-red-700 mb-4 tracking-tight">Something went wrong!</h1>
-          <p className="text-lg text-gray-700 mb-6">
-            {this.state.error?.message || 'An unexpected error occurred. Please try again.'}
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-amber-500 text-white rounded-lg shadow-md hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 font-semibold"
-          >
-            Reload Page
-          </button>
+        <div className="min-h-[60vh] flex items-center justify-center p-4 sm:p-8" role="alert">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-navy-100 p-6 sm:p-8 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+              <AlertTriangle className="h-6 w-6 text-red-600" aria-hidden="true" />
+            </div>
+            <h1 className="font-display text-xl font-bold text-navy-800 mb-2">Something went wrong</h1>
+            <p className="text-sm text-gray-500 mb-6 break-words max-w-full">
+              {this.state.error?.message || 'An unexpected error occurred. Please try again.'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-5 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
+            >
+              Reload Page
+            </button>
+          </div>
         </div>
       );
     }

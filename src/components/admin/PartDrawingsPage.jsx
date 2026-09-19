@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { formatDate as importedFormatDate } from '../../utils/helpers';
-import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle, X } from 'lucide-react';
+import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, X, Eye } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { useNotify } from '../../hooks/useNotify';
@@ -41,7 +41,7 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="text-center py-12 text-red-600 text-xl font-medium max-w-4xl mx-auto bg-red-50 rounded-2xl shadow-lg">
+        <div className="text-center py-12 text-red-600 text-xl font-medium max-w-4xl mx-auto bg-red-50 rounded-xl shadow-sm">
           Something went wrong: {this.state.error?.message || 'Unknown error'}
         </div>
       );
@@ -65,6 +65,45 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
+function ActionsDropdown({ drawing, onEdit }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target))
+        setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-2 hover:bg-navy-50 rounded-full transition-colors"
+        aria-label={`Actions for drawing ${drawing.srNo}`}
+      >
+        <MoreVertical size={18} className="text-gray-500" />
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 z-10 mt-2 w-40 bg-white shadow-lg rounded-lg border border-navy-100 py-1">
+          <button
+            onClick={() => {
+              onEdit(drawing);
+              setIsOpen(false);
+            }}
+            className="flex items-center w-full px-4 py-2 text-sm text-navy-800 hover:bg-navy-50 transition-colors"
+          >
+            <Edit2 size={16} className="mr-2" /> Edit
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PartDrawingsPage({ socket: providedSocket }) {
   const [drawings, setDrawings] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -74,6 +113,7 @@ function PartDrawingsPage({ socket: providedSocket }) {
   const [showModal, setShowModal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedDrawing, setSelectedDrawing] = useState(null);
+  const [viewingDrawing, setViewingDrawing] = useState(null);
   const [formData, setFormData] = useState({ drawingLink: '' });
   const [sortConfig, setSortConfig] = useState({ key: 'updatedAt', direction: 'desc' });
   const [page, setPage] = useState(0);
@@ -312,48 +352,6 @@ function PartDrawingsPage({ socket: providedSocket }) {
     [selectedDrawing, formData, page, debouncedSearch, fetchDrawings]
   );
 
-  const ActionsDropdown = useCallback(
-    ({ drawing, onEdit }) => {
-      const [isOpen, setIsOpen] = useState(false);
-      const dropdownRef = useRef(null);
-
-      useEffect(() => {
-        const handleClickOutside = (event) => {
-          if (dropdownRef.current && !dropdownRef.current.contains(event.target))
-            setIsOpen(false);
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-      }, []);
-
-      return (
-        <div ref={dropdownRef} className="relative">
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="p-2 hover:bg-gray-100 rounded-full"
-            aria-label={`Actions for drawing ${drawing.srNo}`}
-          >
-            <MoreVertical size={20} />
-          </button>
-          {isOpen && (
-            <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
-              <button
-                onClick={() => {
-                  onEdit(drawing);
-                  setIsOpen(false);
-                }}
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                <Edit2 size={16} className="mr-2" /> Edit
-              </button>
-            </div>
-          )}
-        </div>
-      );
-    },
-    []
-  );
-
   const handlePrevPage = useCallback(() => {
     if (page > 0) {
       setPage((prev) => prev - 1);
@@ -375,11 +373,14 @@ function PartDrawingsPage({ socket: providedSocket }) {
   if (isLoading && !drawings.length) {
     return (
       <ErrorBoundary>
-        <div
-          className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
-          aria-live="polite"
-        >
-          <div className="text-gray-600 text-xl animate-pulse">Loading Part Drawings...</div>
+        <div className="flex items-center justify-center py-24" aria-live="polite">
+          <div className="flex items-center gap-3 text-gray-500 text-lg">
+            <svg className="animate-spin h-6 w-6 text-gold-500" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Loading Part Drawings...
+          </div>
         </div>
       </ErrorBoundary>
     );
@@ -389,230 +390,210 @@ function PartDrawingsPage({ socket: providedSocket }) {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-        <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-          Finished Goods Drawings
-        </h1>
-        <div className="max-w-7xl mx-auto">
-          <div className="flex mb-8 gap-6 flex-wrap">
-            <div className="relative flex-grow">
-              <label htmlFor="search-drawings" className="sr-only">
-                Search Part Drawings
-              </label>
-              <input
-                id="search-drawings"
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search by Sr. No., Drawing ID, Product Name, Item Name, or Product ID..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
-              />
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              {searchInput && (
-                <button
-                  onClick={() => setSearchInput('')}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  aria-label="Clear search"
-                >
-                  <X size={20} />
-                </button>
-              )}
-            </div>
-            <button
-              onClick={handleRefresh}
-              className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg flex items-center"
-              disabled={isLoading}
-              aria-label="Refresh part drawings"
-            >
-              <RefreshCw size={20} className="mr-2" />
-              {isLoading && drawings.length > 0 ? 'Refreshing...' : 'Refresh'}
-            </button>
-          </div>
-
-          {isLoading && drawings.length > 0 && (
-            <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">
-              Refreshing data...
-            </div>
-          )}
-
-          {sortedDrawings.length === 0 && !isLoading ? (
-            <div
-              className="bg-white p-8 rounded-2xl shadow-lg text-center"
-              role="status"
-            >
-              <Search className="mx-auto mb-4 text-gray-400" size={48} />
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">No Part Drawings Found</h2>
-              <p className="text-gray-600 mb-6">
-                No drawings match your search or filters.
-              </p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
-              <table
-                className="w-full text-left border-collapse"
-                role="grid"
-                aria-label="Part Drawings table"
-                ref={tableRef}
-                tabIndex={0}
+      <div className="max-w-7xl mx-auto space-y-4">
+        <div className="flex gap-3 flex-wrap items-center">
+          <div className="relative flex-grow min-w-[220px]">
+            <label htmlFor="search-drawings" className="sr-only">
+              Search Part Drawings
+            </label>
+            <input
+              id="search-drawings"
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search by Sr. No., Drawing ID, Product Name, Item Name, or Product ID..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
+            />
+            <Search size={17} className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            {searchInput && (
+              <button
+                onClick={() => setSearchInput('')}
+                className="absolute right-3.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-navy-800 transition-colors"
+                aria-label="Clear search"
               >
-                <thead>
-                  <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50" role="row">
-                    {[
-                      { key: 'srNo', label: 'Sr. No.' },
-                      { key: 'drawingId', label: 'Drawing ID' },
-                      { key: 'productName', label: 'Product Name' },
-                      { key: 'itemName', label: 'Item Name' },
-                      { key: 'productId', label: 'Product ID' },
-                      { key: 'drawingLink', label: 'Drawing Link' },
-                      { key: 'updatedAt', label: 'Updated At' },
-                      { key: 'actions', label: 'Actions' },
-                    ].map(({ key, label }) => (
-                      <th
-                        key={key}
-                        className={`py-5 px-3 text-gray-800 text-base font-semibold ${
-                          key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''
-                        } transition-all duration-200`}
-                        onClick={() => key !== 'actions' && handleSort(key)}
-                        onKeyDown={(e) =>
-                          key !== 'actions' &&
-                          (e.key === 'Enter' || e.key === ' ') &&
-                          (e.preventDefault(), handleSort(key))
-                        }
-                        tabIndex={key !== 'actions' ? 0 : undefined}
-                        aria-sort={
-                          sortConfig.key === key
-                            ? sortConfig.direction === 'asc'
-                              ? 'ascending'
-                              : 'descending'
-                            : 'none'
-                        }
-                        scope="col"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span>{label}</span>
-                          {key !== 'actions' && (
-                            <ArrowDownUp
-                              size={16}
-                              className={`ml-2 text-gray-600 ${
-                                sortConfig.key === key ? 'text-gray-900' : 'opacity-50'
-                              }`}
-                              aria-hidden="true"
-                            />
-                          )}
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedDrawings.map((drawing) => (
-                    <tr
-                      key={drawing.srNo}
-                      className="border-t hover:bg-amber-50 transition-all duration-200"
-                      role="row"
-                    >
-                      <td className="py-4 px-3 text-gray-600 text-base">{drawing.srNo || 'N/A'}</td>
-                      <td className="py-4 px-3 text-gray-600 text-base">{drawing.drawingId || 'N/A'}</td>
-                      <td className="py-4 px-3 text-gray-600 text-base">{drawing.productName}</td>
-                      <td className="py-4 px-3 text-gray-600 text-base">{drawing.itemName}</td>
-                      <td className="py-4 px-3 text-gray-600 text-base">{drawing.productId || 'N/A'}</td>
-                      <td className="py-4 px-3 text-gray-600 text-base">
-                        {drawing.drawingLink ? (
-                          <a
-                            href={drawing.drawingLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 underline hover:text-blue-800"
-                            aria-label={`View drawing for ${drawing.productName}`}
-                          >
-                            View Drawing
-                          </a>
-                        ) : (
-                          'N/A'
-                        )}
-                      </td>
-                      <td className="py-4 px-3 text-gray-600 text-base">
-                        {drawing.updatedAt ? formatDate(drawing.updatedAt) : 'N/A'}
-                      </td>
-                      <td className="py-4 px-3 text-gray-600 text-base">
-                        <ActionsDropdown drawing={drawing} onEdit={handleEdit} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {totalItems > 0 && (
-                <div className="flex justify-between items-center p-4 bg-gray-50">
-                  <div className="text-gray-600">
-                    Showing {(page * limit) + 1}–{Math.min((page + 1) * limit, totalItems)} of {totalItems} drawings
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={handlePrevPage}
-                      disabled={page === 0}
-                      className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                      aria-label="Previous page"
-                    >
-                      <ChevronLeft size={20} />
-                    </button>
-                    <button
-                      onClick={handleNextPage}
-                      disabled={(page + 1) * limit >= totalItems || isLoading}
-                      className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                      aria-label="Next page"
-                    >
-                      <ChevronRight size={20} />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={handleRefresh}
+            className="flex items-center gap-2 px-4 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
+            disabled={isLoading}
+            aria-label="Refresh part drawings"
+          >
+            <RefreshCw size={16} />
+            {isLoading && drawings.length > 0 ? 'Refreshing...' : 'Refresh'}
+          </button>
         </div>
+
+        {isLoading && drawings.length > 0 && (
+          <div className="text-gray-500 text-sm text-center" aria-live="polite">
+            Refreshing data...
+          </div>
+        )}
+
+        {sortedDrawings.length === 0 && !isLoading ? (
+          <div className="bg-white p-8 rounded-xl shadow-sm border border-navy-100 text-center" role="status">
+            <Search className="mx-auto mb-4 text-gray-300" size={40} />
+            <h2 className="font-display text-xl font-bold text-navy-800 mb-2">No Part Drawings Found</h2>
+            <p className="text-gray-500 mb-6">
+              No drawings match your search or filters.
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
+            <table
+              className="w-full text-left border-collapse"
+              role="grid"
+              aria-label="Part Drawings table"
+              ref={tableRef}
+              tabIndex={0}
+            >
+              <thead>
+                <tr className="bg-navy-50 text-navy-800" role="row">
+                  {[
+                    { key: 'drawingId', label: 'Drawing ID' },
+                    { key: 'productName', label: 'Product Name' },
+                    { key: 'itemName', label: 'Item Name' },
+                    { key: 'updatedAt', label: 'Updated At' },
+                    { key: 'actions', label: 'Actions' },
+                  ].map(({ key, label }) => (
+                    <th
+                      key={key}
+                      className={`px-5 py-3 text-sm font-semibold ${
+                        key !== 'actions' ? 'cursor-pointer hover:bg-navy-100' : ''
+                      } transition-colors whitespace-nowrap border-b border-navy-100`}
+                      onClick={() => key !== 'actions' && handleSort(key)}
+                      onKeyDown={(e) =>
+                        key !== 'actions' &&
+                        (e.key === 'Enter' || e.key === ' ') &&
+                        (e.preventDefault(), handleSort(key))
+                      }
+                      tabIndex={key !== 'actions' ? 0 : undefined}
+                      aria-sort={
+                        sortConfig.key === key
+                          ? sortConfig.direction === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                          : 'none'
+                      }
+                      scope="col"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span>{label}</span>
+                        {key !== 'actions' && (
+                          <ArrowDownUp
+                            size={15}
+                            className={`ml-2 ${sortConfig.key === key ? 'text-gold-500' : 'text-navy-400/50'}`}
+                            aria-hidden="true"
+                          />
+                        )}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-navy-100">
+                {sortedDrawings.map((drawing) => (
+                  <tr
+                    key={drawing.srNo}
+                    className="hover:bg-navy-50/60 transition-colors"
+                    role="row"
+                  >
+                    <td className="px-5 py-3.5 text-navy-800 font-medium">{drawing.drawingId || 'N/A'}</td>
+                    <td className="px-5 py-3.5 text-gray-600">{drawing.productName}</td>
+                    <td className="px-5 py-3.5 text-gray-600">{drawing.itemName}</td>
+                    <td className="px-5 py-3.5 text-gray-600">
+                      {drawing.updatedAt ? formatDate(drawing.updatedAt) : 'N/A'}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setViewingDrawing(drawing)}
+                          className="flex items-center gap-1.5 text-navy-800 hover:text-navy-600 font-medium text-sm transition-colors"
+                          aria-label={`View details for drawing ${drawing.drawingId}`}
+                        >
+                          <Eye size={15} />
+                          View
+                        </button>
+                        <ActionsDropdown drawing={drawing} onEdit={handleEdit} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {totalItems > 0 && (
+              <div className="flex flex-wrap gap-2 justify-between items-center p-4 bg-navy-50 border-t border-navy-100">
+                <div className="text-gray-500 text-sm">
+                  Showing {(page * limit) + 1}–{Math.min((page + 1) * limit, totalItems)} of {totalItems} drawings
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handlePrevPage}
+                    disabled={page === 0}
+                    className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    onClick={handleNextPage}
+                    disabled={(page + 1) * limit >= totalItems || isLoading}
+                    className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
+                    aria-label="Next page"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {showModal && selectedDrawing && (
           <div
-            className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4"
             role="dialog"
             aria-labelledby="edit-drawing-title"
             ref={modalRef}
           >
-            <div className="bg-white p-8 rounded-2xl shadow-2xl w-[600px] relative">
+            <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto relative">
               <button
                 onClick={() => setShowModal(false)}
-                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
                 aria-label="Close edit modal"
               >
-                <XCircle size={24} />
+                <X size={18} />
               </button>
-              <h2 id="edit-drawing-title" className="text-2xl font-bold text-gray-800 mb-6">
+              <h2 id="edit-drawing-title" className="font-display text-xl font-bold text-navy-800 mb-5">
                 Edit Drawing #{selectedDrawing.srNo}
               </h2>
               <form onSubmit={handleUpdate} className="space-y-4">
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">Drawing Link</label>
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">Drawing Link</label>
                   <input
                     type="url"
                     placeholder="Enter drawing link"
                     value={formData.drawingLink}
                     onChange={(e) => setFormData({ ...formData, drawingLink: e.target.value })}
-                    className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    className="w-full p-3 border border-navy-100 rounded-lg bg-white text-navy-800 focus:outline-none focus:ring-2 focus:ring-gold-400 placeholder-gray-400"
                   />
                 </div>
-                <div className="flex justify-end gap-4">
+                <div className="flex justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => setShowModal(false)}
-                    className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-300"
+                    className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={uploading}
-                    className="px-6 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-all duration-300 font-semibold"
+                    className="px-5 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
                   >
                     {uploading ? 'Updating...' : 'Update'}
                   </button>
@@ -622,7 +603,72 @@ function PartDrawingsPage({ socket: providedSocket }) {
           </div>
         )}
 
-</div>
+        {viewingDrawing && (
+          <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto relative">
+              <button
+                onClick={() => setViewingDrawing(null)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+              <h2 className="font-display text-xl font-bold text-navy-800 mb-5">
+                Drawing #{viewingDrawing.drawingId}
+              </h2>
+              <dl className="space-y-4">
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Sr. No.</dt>
+                  <dd className="text-navy-800 mt-0.5 break-words">{viewingDrawing.srNo || 'N/A'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Product Name</dt>
+                  <dd className="text-navy-800 mt-0.5 break-words">{viewingDrawing.productName || 'N/A'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Item Name</dt>
+                  <dd className="text-navy-800 mt-0.5 break-words">{viewingDrawing.itemName || 'N/A'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Product ID</dt>
+                  <dd className="text-navy-800 mt-0.5 break-words">{viewingDrawing.productId || 'N/A'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Drawing Link</dt>
+                  <dd className="text-navy-800 mt-0.5 break-words">
+                    {viewingDrawing.drawingLink ? (
+                      <a
+                        href={viewingDrawing.drawingLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-gold-600 hover:text-gold-500 underline transition-colors"
+                      >
+                        View Drawing
+                      </a>
+                    ) : (
+                      'N/A'
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Updated At</dt>
+                  <dd className="text-navy-800 mt-0.5 break-words">
+                    {viewingDrawing.updatedAt ? formatDate(viewingDrawing.updatedAt) : 'N/A'}
+                  </dd>
+                </div>
+              </dl>
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => setViewingDrawing(null)}
+                  className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </ErrorBoundary>
   );
 }

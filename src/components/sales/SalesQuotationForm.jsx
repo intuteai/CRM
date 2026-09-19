@@ -272,23 +272,23 @@ export default function QuotationForm() {
   if (socketStatus === 'error' || fetchError) return <ConnectionError onRetry={() => setFetchError(null)} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
+    <div className="pb-6">
       <div className="max-w-4xl mx-auto">
 
         {/* ── Page header ── */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5 mb-8">
           <div>
-            <div className="inline-flex items-center gap-2 bg-amber-100 border border-amber-200 rounded-full px-3 py-1 mb-3">
-              <FileText size={12} className="text-amber-700" />
-              <span className="text-amber-700 text-xs font-semibold tracking-wide">FY 2025-26</span>
+            <div className="inline-flex items-center gap-2 bg-gold-400/25 border border-gold-400/40 rounded-full px-3 py-1 mb-3">
+              <FileText size={12} className="text-gold-600" />
+              <span className="text-gold-600 text-xs font-semibold tracking-wide">FY 2025-26</span>
             </div>
-            <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Quotations</h1>
-            <p className="text-gray-600 text-sm mt-1.5">Create professional sales proposals with instant PDF export</p>
+            <h1 className="font-display text-2xl font-bold text-navy-800 tracking-tight">Quotations</h1>
+            <p className="text-gray-500 text-sm mt-1.5">Create professional sales proposals with instant PDF export</p>
           </div>
           <div className="flex gap-2.5 shrink-0">
             <button
               onClick={() => setPreviewOpen(true)}
-              className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-xl flex items-center gap-2 hover:shadow-sm transition-all text-sm font-medium"
+              className="px-4 py-2.5 bg-white border border-navy-100 text-navy-800 rounded-xl flex items-center gap-2 hover:bg-navy-50 transition-colors text-sm font-medium"
             >
               <Eye size={15} /> Preview
             </button>
@@ -304,7 +304,7 @@ export default function QuotationForm() {
 
         {/* ── Summary card ── */}
         <div
-          className="bg-gradient-to-br from-amber-100 to-amber-50 rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer border border-amber-200"
+          className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer border border-navy-100"
           onClick={openModal}
         >
           <div className="h-1.5 bg-gradient-to-r from-emerald-500 to-teal-600" />
@@ -314,7 +314,7 @@ export default function QuotationForm() {
                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.15em] mb-1">Current Draft</p>
                 <h2 className="text-xl font-bold text-gray-800">{form.quotation_no}</h2>
               </div>
-              <span className="bg-amber-200 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-300">
+              <span className="bg-gold-400/25 text-gold-600 text-xs font-bold px-3 py-1.5 rounded-full border border-gold-400/40">
                 Draft
               </span>
             </div>
@@ -325,18 +325,18 @@ export default function QuotationForm() {
                 { label: 'Date',          value: form.date         },
                 { label: 'To',            value: form.to_address || '—' },
               ].map(({ label, value }) => (
-                <div key={label} className="bg-white rounded-xl p-4 border border-amber-100">
+                <div key={label} className="bg-navy-50 rounded-xl p-4 border border-navy-100">
                   <p className="text-xs text-gray-500 mb-1">{label}</p>
                   <p className="font-semibold text-gray-800 text-sm truncate">{value}</p>
                 </div>
               ))}
-              <div className="bg-white rounded-xl p-4 border border-amber-100">
+              <div className="bg-navy-50 rounded-xl p-4 border border-navy-100">
                 <p className="text-xs text-gray-500 mb-1">Grand Total</p>
                 <p className="font-bold text-lg" style={primaryStyle}>₹ {formatINR(grandTotal)}</p>
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-amber-200">
+            <div className="flex items-center justify-between pt-4 border-t border-navy-100">
               <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
                 <span>{form.items.length} item{form.items.length !== 1 ? 's' : ''}</span>
                 <span>·</span>
@@ -363,8 +363,8 @@ export default function QuotationForm() {
         <Modal
           isOpen={isOpen}
           onRequestClose={closeModal}
-          className="max-w-4xl mx-auto mt-8 bg-white rounded-xl p-6 outline-none shadow-xl"
-          overlayClassName="fixed inset-0 bg-black bg-opacity-40 flex items-start justify-center z-50 overflow-y-auto"
+          className="w-full md:w-auto max-w-4xl mx-auto mt-8 mb-4 md:mb-0 bg-white rounded-xl p-6 outline-none shadow-xl"
+          overlayClassName="fixed inset-0 bg-navy-900/50 flex items-start justify-center z-50 overflow-y-auto p-3 lg:p-0"
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-semibold" style={primaryStyle}>Quotation Details</h3>
@@ -424,7 +424,7 @@ export default function QuotationForm() {
             <div className="bg-gray-50 rounded p-4" style={cardBorder}>
               <div className="flex justify-between items-center mb-3">
                 <div className="font-semibold">Items</div>
-                <button type="button" onClick={addItem} className="text-green-600 flex items-center gap-2">
+                <button type="button" onClick={addItem} className="text-green-600 flex items-center gap-2 py-1.5 -my-1.5">
                   <Plus className="w-4 h-4" /> Add Item
                 </button>
               </div>
@@ -446,7 +446,7 @@ export default function QuotationForm() {
                       <tr key={idx} className="align-top">
                         <td className="py-2">{idx + 1}</td>
                         <td className="py-2">
-                          <textarea rows={2} className="w-full border rounded px-2 py-1"
+                          <textarea rows={2} className="w-full min-w-[10rem] border rounded px-2 py-1"
                             value={it.description}
                             onChange={e => updateItem(idx, 'description', e.target.value)} />
                         </td>
@@ -480,7 +480,7 @@ export default function QuotationForm() {
               </div>
 
               {/* totals */}
-              <div className="flex justify-end gap-6 mt-4 items-end">
+              <div className="flex flex-wrap justify-end gap-x-6 gap-y-3 mt-4 items-end">
                 <div className="text-right">
                   <div className="text-sm" style={{ color: THEME.muted }}>Subtotal</div>
                   <div className="font-medium">₹ {formatINR(subtotal)}</div>
@@ -502,13 +502,13 @@ export default function QuotationForm() {
                 <div className="text-sm" style={{ color: THEME.muted }}>Terms & Conditions</div>
                 <div className="text-xs text-gray-500">Using default terms from Manage Default Terms (editable in settings)</div>
               </div>
-              <button type="button" onClick={openManageTerms} className="px-3 py-1 border rounded text-sm ml-2">
+              <button type="button" onClick={openManageTerms} className="px-3 py-2 md:py-1 border rounded text-sm ml-2">
                 Manage Default Terms
               </button>
             </div>
 
             {/* actions */}
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-wrap justify-end gap-3">
               <button type="button" onClick={closeModal} className="px-4 py-2 border rounded">Cancel</button>
               <button type="button" onClick={() => setPreviewOpen(true)} className="px-4 py-2 border rounded flex items-center gap-2">
                 <Eye className="w-4 h-4" /> Preview
@@ -524,14 +524,14 @@ export default function QuotationForm() {
         <Modal
           isOpen={manageTermsOpen}
           onRequestClose={closeManageTerms}
-          className="max-w-3xl mx-auto mt-10 bg-white rounded-xl p-6 outline-none shadow-xl"
-          overlayClassName="fixed inset-0 bg-black bg-opacity-40 flex items-start justify-center z-50 overflow-y-auto"
+          className="w-full md:w-auto max-w-3xl mx-auto mt-10 mb-4 md:mb-0 bg-white rounded-xl p-6 outline-none shadow-xl"
+          overlayClassName="fixed inset-0 bg-navy-900/50 flex items-start justify-center z-50 overflow-y-auto p-3 lg:p-0"
         >
           <div className="flex items-center justify-between mb-4">
             <h4 className="font-semibold" style={primaryStyle}>Manage Default Terms & Conditions</h4>
             <div className="flex gap-2">
-              <button onClick={closeManageTerms} className="px-3 py-1 border rounded">Close</button>
-              <button onClick={saveManagedTerms} className="px-3 py-1 bg-green-600 text-white rounded">Save</button>
+              <button onClick={closeManageTerms} className="px-3 py-2 md:py-1 border rounded">Close</button>
+              <button onClick={saveManagedTerms} className="px-3 py-2 md:py-1 bg-green-600 text-white rounded">Save</button>
             </div>
           </div>
 
@@ -551,10 +551,10 @@ export default function QuotationForm() {
             ))}
 
             <div className="flex gap-2">
-              <button onClick={addDefaultTerm} className="px-3 py-1 border rounded flex items-center gap-2">
+              <button onClick={addDefaultTerm} className="px-3 py-2 md:py-1 border rounded flex items-center gap-2">
                 <Plus className="w-4 h-4" /> Add Term
               </button>
-              <button onClick={() => { setManageTermsDraft(DEFAULT_TERMS_FALLBACK.slice()); notifyInfo('Reset to original default terms'); }} className="px-3 py-1 border rounded">
+              <button onClick={() => { setManageTermsDraft(DEFAULT_TERMS_FALLBACK.slice()); notifyInfo('Reset to original default terms'); }} className="px-3 py-2 md:py-1 border rounded">
                 Reset to original
               </button>
             </div>
@@ -565,8 +565,8 @@ export default function QuotationForm() {
         <Modal
           isOpen={previewOpen}
           onRequestClose={() => setPreviewOpen(false)}
-          className="max-w-3xl mx-auto mt-10 bg-white rounded-xl p-6 outline-none shadow-xl"
-          overlayClassName="fixed inset-0 bg-black bg-opacity-40 flex items-start justify-center z-50 overflow-y-auto"
+          className="w-full md:w-auto max-w-3xl mx-auto mt-10 mb-4 md:mb-0 bg-white rounded-xl p-6 outline-none shadow-xl"
+          overlayClassName="fixed inset-0 bg-navy-900/50 flex items-start justify-center z-50 overflow-y-auto p-3 lg:p-0"
         >
           <div className="flex justify-between items-center mb-4">
             <h4 className="font-semibold" style={primaryStyle}>Quotation Preview</h4>

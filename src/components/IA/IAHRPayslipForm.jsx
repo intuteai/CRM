@@ -10,6 +10,7 @@ import axios from 'axios';
 import Modal from 'react-modal';
 import { toWords } from 'number-to-words';
 import { useNotify } from '../../hooks/useNotify';
+import PeoplePage from '../shared/PeoplePage';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -193,74 +194,53 @@ function IAHRPayslipForm({ socket }) {
 
   // ────── RENDER ──────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-25 to-gray-100 relative overflow-hidden p-6">
-      <div className="absolute top-0 left-0 w-96 h-96 bg-amber-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
-      <div className="absolute top-0 right-0 w-96 h-96 bg-orange-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000"></div>
-      <div className="absolute -bottom-32 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
-
-      <div className="relative z-10">
-        <div className="text-center mb-12 mt-8">
-          <div className="inline-flex items-center justify-center mb-4">
-            <div className="p-3 bg-gradient-to-r from-amber-400 to-orange-400 rounded-2xl shadow-lg">
-              <Download className="w-8 h-8 text-white animate-bounce" />
-            </div>
-          </div>
-          <div className="flex justify-center mb-3">
-            <span className="inline-flex items-center bg-white border border-amber-200 text-amber-700 text-xs font-semibold uppercase tracking-widest px-4 py-1.5 rounded-full shadow-sm">
-              INTUTE AI
-            </span>
-          </div>
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-gray-800 via-gray-700 to-amber-700 bg-clip-text text-transparent mb-4 tracking-tight">
-            Payslip Generator
-          </h1>
-          <p className="text-sm text-gray-500 mt-2">HR-Only • Manual Entry • Pixel-Perfect PDF</p>
-        </div>
-
-        <div className="max-w-7xl mx-auto mb-8 flex justify-center">
-          <button
-            onClick={openModal}
-            className="px-8 py-4 bg-gradient-to-r from-amber-400 to-orange-400 text-white font-medium rounded-xl shadow-lg hover:shadow-xl flex items-center gap-3 transition-all text-lg"
-          >
-            <Plus className="w-6 h-6" /> Generate New Payslip
-          </button>
-        </div>
-
-        <div className="max-w-4xl mx-auto bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 text-center">
+    <PeoplePage
+      title="Payslip Generator"
+      subtitle="HR-Only • Manual Entry • Pixel-Perfect PDF"
+      actions={
+        <button
+          onClick={openModal}
+          className="px-5 py-3 bg-gold-500 text-navy-900 font-semibold rounded-lg hover:bg-gold-400 flex items-center gap-2 transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Generate New Payslip
+        </button>
+      }
+    >
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-6 text-center">
           <p className="text-gray-600">Click above to manually fill payslip details. Every field is under your control.</p>
-          <p className="text-sm text-amber-600 mt-2">Auto-calculate Net Pay • Real-time Amount in Words • Instant PDF Download</p>
+          <p className="text-sm text-gold-600 mt-2">Auto-calculate Net Pay • Real-time Amount in Words • Instant PDF Download</p>
         </div>
-      </div>
 
       <Modal
         isOpen={isModalOpen}
         onRequestClose={closeModal}
-        className="bg-white rounded-2xl p-8 max-w-5xl mx-auto mt-10 shadow-2xl outline-none overflow-y-auto max-h-screen"
-        overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        className="bg-white rounded-xl p-4 sm:p-6 max-w-5xl mx-auto mt-0 sm:mt-10 shadow-2xl outline-none overflow-y-auto max-h-[90vh] sm:max-h-screen w-[calc(100vw-2rem)] sm:w-auto"
+        overlayClassName="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50"
       >
-        <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">Generate Payslip</h2>
+        <h2 className="font-display text-xl font-bold text-navy-800 mb-5">Generate Payslip</h2>
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Employee Info */}
-          <div className="bg-amber-50 rounded-xl p-6 space-y-4">
-            <h3 className="font-semibold text-amber-800 flex items-center gap-2">
+          <div className="bg-navy-50 rounded-xl p-4 sm:p-6 space-y-4">
+            <h3 className="font-semibold text-navy-800 flex items-center gap-2">
               <Users className="w-5 h-5" /> Employee Details
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Employee Name *</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Employee Name *</label>
                 <input
                   type="text"
                   required
-                  className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+                  className="w-full px-4 py-3 rounded-lg border border-navy-100 bg-white focus:ring-2 focus:ring-gold-400 focus:outline-none"
                   value={form.employee.name}
                   onChange={(e) => setForm({ ...form, employee: { ...form.employee, name: e.target.value } })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Employee ID</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Employee ID</label>
                 <input
                   type="text"
-                  className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300"
+                  className="w-full px-4 py-3 rounded-lg border border-navy-100 bg-white focus:ring-2 focus:ring-gold-400 focus:outline-none"
                   value={form.employee.id}
                   onChange={(e) => setForm({ ...form, employee: { ...form.employee, id: e.target.value } })}
                 />
@@ -269,46 +249,46 @@ function IAHRPayslipForm({ socket }) {
           </div>
 
           {/* Pay Period */}
-          <div className="bg-orange-50 rounded-xl p-6 space-y-4">
-            <h3 className="font-semibold text-orange-800 flex items-center gap-2">
+          <div className="bg-blue-50 rounded-xl p-4 sm:p-6 space-y-4">
+            <h3 className="font-semibold text-blue-800 flex items-center gap-2">
               <Calendar className="w-5 h-5" /> Pay Period
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Period *</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Period *</label>
                 <input
                   type="text"
                   required
                   placeholder="SEPTEMBER 2025"
-                  className="w-full px-4 py-3 rounded-xl border border-orange-200 focus:ring-4 focus:ring-orange-300"
+                  className="w-full px-4 py-3 rounded-lg border border-blue-200 bg-white focus:ring-2 focus:ring-gold-400 focus:outline-none"
                   value={form.period}
                   onChange={(e) => setForm({ ...form, period: e.target.value.toUpperCase() })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Pay Date</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Pay Date</label>
                 <input
                   type="date"
-                  className="w-full px-4 py-3 rounded-xl border border-orange-200 focus:ring-4 focus:ring-orange-300"
+                  className="w-full px-4 py-3 rounded-lg border border-blue-200 bg-white focus:ring-2 focus:ring-gold-400 focus:outline-none"
                   value={toYMD(form.payDate)}
                   onChange={(e) => setForm({ ...form, payDate: toYMD(e.target.value) })}
                 />
               </div>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Paid Days</label>
+                  <label className="block text-sm font-medium text-navy-800 mb-1">Paid Days</label>
                   <input
                     type="number" min="0" max="31"
-                    className="w-full px-4 py-3 rounded-xl border border-orange-200 focus:ring-4 focus:ring-orange-300"
+                    className="w-full px-4 py-3 rounded-lg border border-blue-200 bg-white focus:ring-2 focus:ring-gold-400 focus:outline-none"
                     value={form.paidDays}
                     onChange={(e) => setForm({ ...form, paidDays: Number(e.target.value) || 0 })}
                   />
                 </div>
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">LOP Days</label>
+                  <label className="block text-sm font-medium text-navy-800 mb-1">LOP Days</label>
                   <input
                     type="number" min="0" max="31"
-                    className="w-full px-4 py-3 rounded-xl border border-orange-200 focus:ring-4 focus:ring-orange-300"
+                    className="w-full px-4 py-3 rounded-lg border border-blue-200 bg-white focus:ring-2 focus:ring-gold-400 focus:outline-none"
                     value={form.lopDays}
                     onChange={(e) => setForm({ ...form, lopDays: Number(e.target.value) || 0 })}
                   />
@@ -318,7 +298,7 @@ function IAHRPayslipForm({ socket }) {
           </div>
 
           {/* Earnings */}
-          <div className="bg-green-50 rounded-xl p-6 space-y-4">
+          <div className="bg-green-50 rounded-xl p-4 sm:p-6 space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="font-semibold text-green-800">Earnings</h3>
               <button type="button" onClick={addEarning} className="text-green-600 hover:bg-green-100 p-2 rounded-lg">
@@ -329,7 +309,7 @@ function IAHRPayslipForm({ socket }) {
               <div key={i} className="flex gap-2 items-center">
                 <input
                   type="text" placeholder="Label"
-                  className="flex-1 px-4 py-2 rounded-lg border border-green-200 focus:ring-2 focus:ring-green-300"
+                  className="flex-1 min-w-0 px-4 py-2 rounded-lg border border-green-200 bg-white focus:ring-2 focus:ring-green-300 focus:outline-none"
                   value={e.label}
                   onChange={(ev) => {
                     const newEarnings = [...form.earnings];
@@ -339,7 +319,7 @@ function IAHRPayslipForm({ socket }) {
                 />
                 <input
                   type="number" min="0" step="0.01" placeholder="0.00"
-                  className="w-32 px-4 py-2 rounded-lg border border-green-200 focus:ring-2 focus:ring-green-300"
+                  className="w-28 sm:w-32 shrink-0 px-4 py-2 rounded-lg border border-green-200 bg-white focus:ring-2 focus:ring-green-300 focus:outline-none"
                   value={e.amount}
                   onChange={(ev) => {
                     const newEarnings = [...form.earnings];
@@ -358,7 +338,7 @@ function IAHRPayslipForm({ socket }) {
           </div>
 
           {/* Deductions */}
-          <div className="bg-red-50 rounded-xl p-6 space-y-4">
+          <div className="bg-red-50 rounded-xl p-4 sm:p-6 space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="font-semibold text-red-800">Deductions</h3>
               <button type="button" onClick={addDeduction} className="text-red-600 hover:bg-red-100 p-2 rounded-lg">
@@ -369,7 +349,7 @@ function IAHRPayslipForm({ socket }) {
               <div key={i} className="flex gap-2 items-center">
                 <input
                   type="text" placeholder="Label"
-                  className="flex-1 px-4 py-2 rounded-lg border border-red-200 focus:ring-2 focus:ring-red-300"
+                  className="flex-1 min-w-0 px-4 py-2 rounded-lg border border-red-200 bg-white focus:ring-2 focus:ring-red-300 focus:outline-none"
                   value={d.label}
                   onChange={(ev) => {
                     const newDeductions = [...form.deductions];
@@ -379,7 +359,7 @@ function IAHRPayslipForm({ socket }) {
                 />
                 <input
                   type="number" min="0" step="0.01" placeholder="0.00"
-                  className="w-32 px-4 py-2 rounded-lg border border-red-200 focus:ring-2 focus:ring-red-300"
+                  className="w-28 sm:w-32 shrink-0 px-4 py-2 rounded-lg border border-red-200 bg-white focus:ring-2 focus:ring-red-300 focus:outline-none"
                   value={d.amount}
                   onChange={(ev) => {
                     const newDeductions = [...form.deductions];
@@ -398,33 +378,33 @@ function IAHRPayslipForm({ socket }) {
           </div>
 
           {/* Net Pay & Words */}
-          <div className="bg-gradient-to-r from-amber-100 to-orange-100 rounded-xl p-6 space-y-4">
+          <div className="bg-gold-400/20 border border-gold-400/40 rounded-xl p-4 sm:p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-amber-900">Net Pay</h3>
+              <h3 className="font-bold text-navy-800">Net Pay</h3>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={autoCalc}
                   onChange={(e) => setAutoCalc(e.target.checked)}
-                  className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500"
+                  className="w-4 h-4 text-gold-500 rounded focus:ring-gold-400"
                 />
-                <span className="text-sm text-amber-700">Auto-calculate</span>
+                <span className="text-sm text-navy-800">Auto-calculate</span>
               </label>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Net Pay (₹)</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Net Pay (₹)</label>
                 <input
                   type="number" min="0" step="0.01"
-                  className="w-full px-4 py-3 rounded-xl border border-amber-300 bg-white font-bold text-amber-900 focus:ring-4 focus:ring-amber-400"
+                  className="w-full px-4 py-3 rounded-lg border border-gold-400/60 bg-white font-bold text-navy-800 focus:ring-2 focus:ring-gold-400 focus:outline-none"
                   value={netPay.toFixed(2)}
                   readOnly={autoCalc}
                   onChange={(e) => !autoCalc && setForm({ ...form, netPay: Number(e.target.value) || 0 })}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount in Words</label>
-                <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-800 italic">
+                <label className="block text-sm font-medium text-navy-800 mb-1">Amount in Words</label>
+                <div className="px-4 py-3 rounded-lg bg-white border border-gold-400/60 text-navy-800 italic">
                   {amountInWords}
                 </div>
               </div>
@@ -432,14 +412,14 @@ function IAHRPayslipForm({ socket }) {
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-4 pt-6">
-            <button type="button" onClick={closeModal} className="px-8 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-all">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-4 pt-6">
+            <button type="button" onClick={closeModal} className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-8 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded-xl shadow-lg hover:shadow-xl flex items-center gap-3 transition-all disabled:opacity-70"
+              className="px-6 py-3 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 flex items-center justify-center gap-2 transition-colors disabled:opacity-70"
             >
               {loading ? (
                 <><Loader2 className="w-5 h-5 animate-spin" /> Generating...</>
@@ -451,7 +431,7 @@ function IAHRPayslipForm({ socket }) {
         </form>
       </Modal>
 
-</div>
+    </PeoplePage>
   );
 }
 

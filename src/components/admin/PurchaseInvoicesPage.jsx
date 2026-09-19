@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle, Plus } from 'lucide-react';
+import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle, Plus, Eye } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { useNotify } from '../../hooks/useNotify';
@@ -19,6 +19,54 @@ const formatDate = (dateString) => {
   }
 };
 
+function ActionsDropdown({ invoice, onEdit, onDelete }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target))
+        setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-2 hover:bg-navy-50 rounded-full transition-colors"
+        aria-label={`Actions for invoice ${invoice.invoiceId}`}
+      >
+        <MoreVertical size={18} className="text-gray-500" />
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg border border-navy-100 py-1">
+          <button
+            onClick={() => {
+              onEdit(invoice);
+              setIsOpen(false);
+            }}
+            className="flex items-center w-full px-4 py-2 text-sm text-navy-800 hover:bg-navy-50 transition-colors"
+          >
+            <Edit2 size={16} className="mr-2" /> Edit
+          </button>
+          <button
+            onClick={() => {
+              onDelete(invoice.invoiceId);
+              setIsOpen(false);
+            }}
+            className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <XCircle size={16} className="mr-2" /> Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PurchaseInvoicesPage({ socket: providedSocket }) {
   const [invoices, setInvoices] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -28,6 +76,7 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState('create'); // 'create' or 'edit'
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [viewingInvoice, setViewingInvoice] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
     supplierCode: '',
@@ -325,57 +374,6 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
     [formData, modalMode, selectedInvoice, socket]
   );
 
-  const ActionsDropdown = useCallback(
-    ({ invoice, onEdit, onDelete }) => {
-      const [isOpen, setIsOpen] = useState(false);
-      const dropdownRef = useRef(null);
-
-      useEffect(() => {
-        const handleClickOutside = (event) => {
-          if (dropdownRef.current && !dropdownRef.current.contains(event.target))
-            setIsOpen(false);
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-      }, []);
-
-      return (
-        <div ref={dropdownRef} className="relative">
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="p-2 hover:bg-gray-100 rounded-full"
-            aria-label={`Actions for invoice ${invoice.invoiceId}`}
-          >
-            <MoreVertical size={20} />
-          </button>
-          {isOpen && (
-            <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
-              <button
-                onClick={() => {
-                  onEdit(invoice);
-                  setIsOpen(false);
-                }}
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                <Edit2 size={16} className="mr-2" /> Edit
-              </button>
-              <button
-                onClick={() => {
-                  onDelete(invoice.invoiceId);
-                  setIsOpen(false);
-                }}
-                className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-              >
-                <XCircle size={16} className="mr-2" /> Delete
-              </button>
-            </div>
-          )}
-        </div>
-      );
-    },
-    []
-  );
-
   const handlePrevPage = useCallback(() => {
     if (page > 0) setPage((prev) => prev - 1);
   }, [page]);
@@ -392,11 +390,8 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
 
   if (isLoading && !invoices.length) {
     return (
-      <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
-        aria-live="polite"
-      >
-        <div className="text-gray-600 text-xl animate-pulse">Loading Purchase Invoices...</div>
+      <div className="flex items-center justify-center py-24" aria-live="polite">
+        <div className="text-gray-500 text-lg animate-pulse">Loading Purchase Invoices...</div>
       </div>
     );
   }
@@ -405,21 +400,18 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
 
   if (invoices.length === 0 && !isLoading) {
     return (
-      <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
-        role="status"
-      >
-        <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
-          <RefreshCw className="mx-auto mb-4 text-gray-400" size={48} />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">No Purchase Invoices Yet</h2>
-          <p className="text-gray-600 mb-6">
+      <div className="flex items-center justify-center py-24" role="status">
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-navy-100 text-center">
+          <RefreshCw className="mx-auto mb-4 text-gray-300" size={40} />
+          <h2 className="font-display text-xl font-bold text-navy-800 mb-2">No Purchase Invoices Yet</h2>
+          <p className="text-gray-500 mb-6">
             Your database is empty. Create a new invoice to get started!
           </p>
           <button
             onClick={handleCreate}
-            className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 transition-all duration-300"
+            className="px-5 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center gap-2 mx-auto"
           >
-            Create Invoice
+            <Plus size={18} /> Create Invoice
           </button>
         </div>
       </div>
@@ -427,13 +419,9 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-        Purchase Invoices
-      </h1>
-      <div className="max-w-7xl mx-auto">
-        <div className="flex mb-8 gap-6 flex-wrap">
-          <div className="relative flex-grow">
+    <div className="max-w-7xl mx-auto space-y-4">
+        <div className="flex gap-3 flex-wrap items-center">
+          <div className="relative flex-grow min-w-[220px]">
             <label htmlFor="search-invoices" className="sr-only">
               Search Purchase Invoices
             </label>
@@ -445,34 +433,34 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
+              className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
             />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <Search size={17} className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
           <button
-            onClick={handleCreate}
-            className="p-4 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-300 transition-all duration-300 shadow-md text-lg flex items-center"
-            aria-label="Create new invoice"
-          >
-            <Plus size={20} className="mr-2" /> Create
-          </button>
-          <button
             onClick={handleRefresh}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
+            className="flex items-center gap-2 px-4 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
             disabled={isLoading}
             aria-label="Refresh invoices"
           >
             {isLoading && invoices.length > 0 ? 'Refreshing...' : 'Refresh'}
           </button>
+          <button
+            onClick={handleCreate}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors"
+            aria-label="Create new invoice"
+          >
+            <Plus size={16} /> Create
+          </button>
         </div>
 
         {isLoading && invoices.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">
+          <div className="text-gray-500 text-sm text-center" aria-live="polite">
             Refreshing data...
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
           <table
             className="w-full text-left border-collapse"
             role="grid"
@@ -481,30 +469,20 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
             tabIndex={0}
           >
             <thead>
-              <tr
-                className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50"
-                role="row"
-              >
+              <tr className="bg-navy-50 text-navy-800" role="row">
                 {[
-                  { key: 'srNo', label: 'Sr. No.' },
                   { key: 'invoiceId', label: 'Invoice ID' },
-                  { key: 'supplierCode', label: 'Supplier Code' },
                   { key: 'supplierName', label: 'Supplier Name' },
                   { key: 'invoiceNumber', label: 'Invoice Number' },
                   { key: 'issueDate', label: 'Issue Date' },
-                  { key: 'description', label: 'Description' },
                   { key: 'unitPrice', label: 'Unit Price' },
-                  { key: 'quantity', label: 'Quantity' },
-                  { key: 'productId', label: 'Product ID' },
-                  { key: 'linkPdf', label: 'PDF Link' },
-                  { key: 'createdAt', label: 'Created At' },
                   { key: 'actions', label: 'Actions' },
                 ].map(({ key, label }) => (
                   <th
                     key={key}
-                    className={`py-5 px-3 text-gray-800 text-base font-semibold ${
-                      key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''
-                    } transition-all duration-200`}
+                    className={`px-5 py-3 text-sm font-semibold ${
+                      key !== 'actions' ? 'cursor-pointer hover:bg-navy-100' : ''
+                    } transition-colors whitespace-nowrap border-b border-navy-100`}
                     onClick={() => key !== 'actions' && handleSort(key)}
                     aria-sort={
                       sortConfig.key === key
@@ -519,52 +497,43 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
                       <span>{label}</span>
                       {key !== 'actions' && (
                         <ArrowDownUp
-                          size={16}
-                          className={`ml-2 text-gray-600 ${
-                            sortConfig.key === key ? 'text-gray-900' : 'opacity-50'
-                          }`}
+                          size={15}
+                          className={`ml-2 ${sortConfig.key === key ? 'text-gold-500' : 'text-navy-400/50'}`}
                           aria-hidden="true"
                         />
                       )}
                     </div>
                   </th>
                 ))}
+                <th className="px-5 py-3 text-sm font-semibold whitespace-nowrap border-b border-navy-100" scope="col">
+                  View
+                </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-navy-100">
               {sortedInvoices.map((invoice) => (
                 <tr
                   key={invoice.invoiceId}
-                  className="border-t hover:bg-amber-50 transition-all duration-200"
+                  className="hover:bg-navy-50/60 transition-colors"
                   role="row"
                 >
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.srNo}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.invoiceId}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.supplierCode}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.supplierName}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.invoiceNumber}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{formatDate(invoice.issueDate)}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.description}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.unitPrice}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.quantity}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.productId || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    {invoice.linkPdf ? (
-                      <a
-                        href={invoice.linkPdf}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 underline"
-                      >
-                        View PDF
-                      </a>
-                    ) : (
-                      'N/A'
-                    )}
-                  </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{formatDate(invoice.createdAt)}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
+                  <td className="px-5 py-3.5 text-navy-800 font-medium">{invoice.invoiceId}</td>
+                  <td className="px-5 py-3.5 text-gray-600 min-w-[160px] lg:min-w-0">{invoice.supplierName}</td>
+                  <td className="px-5 py-3.5 text-gray-600">{invoice.invoiceNumber}</td>
+                  <td className="px-5 py-3.5 text-gray-600">{formatDate(invoice.issueDate)}</td>
+                  <td className="px-5 py-3.5 text-gray-600">{invoice.unitPrice}</td>
+                  <td className="px-5 py-3.5 text-gray-600">
                     <ActionsDropdown invoice={invoice} onEdit={handleEdit} onDelete={handleDelete} />
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <button
+                      onClick={() => setViewingInvoice(invoice)}
+                      className="flex items-center gap-1.5 text-navy-800 hover:text-navy-600 font-medium text-sm transition-colors"
+                      aria-label={`View details for invoice ${invoice.invoiceId}`}
+                    >
+                      <Eye size={15} />
+                      View
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -572,26 +541,26 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
           </table>
 
           {totalItems > 0 && (
-            <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600">
+            <div className="flex justify-between items-center flex-wrap gap-2 p-4 bg-navy-50 border-t border-navy-100">
+              <div className="text-gray-500 text-sm">
                 Showing {sortedInvoices.length} of {totalItems} invoices
               </div>
-              <div className="flex space-x-2">
+              <div className="flex gap-2">
                 <button
                   onClick={handlePrevPage}
                   disabled={page === 0}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                   aria-label="Previous page"
                 >
-                  <ChevronLeft size={20} />
+                  <ChevronLeft size={18} />
                 </button>
                 <button
                   onClick={handleNextPage}
                   disabled={invoices.length < limit || isLoading}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                   aria-label="Next page"
                 >
-                  <ChevronRight size={20} />
+                  <ChevronRight size={18} />
                 </button>
               </div>
             </div>
@@ -599,115 +568,114 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
 
           {sortedInvoices.length === 0 && (
             <div
-              className="text-center py-12 text-gray-500 flex flex-col items-center"
+              className="text-center py-12 text-gray-400 flex flex-col items-center"
               role="alert"
             >
-              <Search className="mb-4 text-gray-400" size={48} />
-              <p className="text-lg">No invoices found matching your search.</p>
+              <Search className="mb-4 text-gray-300" size={40} />
+              <p>No invoices found matching your search.</p>
             </div>
           )}
         </div>
-      </div>
 
       {showModal && (
         <div
-          className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4"
           role="dialog"
           aria-labelledby="invoice-modal-title"
         >
-          <div className="bg-white p-8 rounded-2xl shadow-2xl w-[600px] relative">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+              className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
               aria-label="Close modal"
             >
-              <XCircle size={24} />
+              <XCircle size={20} />
             </button>
             <h2
               id="invoice-modal-title"
-              className="text-2xl font-bold text-gray-800 mb-6"
+              className="font-display text-xl font-bold text-navy-800 mb-5"
             >
               {modalMode === 'create' ? 'Create Purchase Invoice' : `Edit Invoice #${selectedInvoice?.invoiceId}`}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-gray-700 font-medium mb-2">Supplier Code</label>
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">Supplier Code</label>
                   <input
                     type="text"
                     placeholder="Enter Supplier Code"
                     value={formData.supplierCode}
                     onChange={(e) => setFormData({ ...formData, supplierCode: e.target.value })}
-                    className="w-full p-3 border rounded-lg shadow-sm"
+                    className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-700 font-medium mb-2">Supplier Name</label>
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">Supplier Name</label>
                   <input
                     type="text"
                     placeholder="Enter Supplier Name"
                     value={formData.supplierName}
                     onChange={(e) => setFormData({ ...formData, supplierName: e.target.value })}
-                    className="w-full p-3 border rounded-lg shadow-sm"
+                    className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                     required
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-gray-700 font-medium mb-2">Invoice Number</label>
+                <label className="block text-sm font-semibold text-navy-800 mb-1.5">Invoice Number</label>
                 <input
                   type="text"
                   placeholder="Enter Invoice Number"
                   value={formData.invoiceNumber}
                   onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
-                  className="w-full p-3 border rounded-lg shadow-sm"
+                  className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                   required
                 />
               </div>
               <div>
-                <label className="block text-gray-700 font-medium mb-2">Issue Date</label>
+                <label className="block text-sm font-semibold text-navy-800 mb-1.5">Issue Date</label>
                 <input
                   type="date"
                   value={formData.issueDate}
                   onChange={(e) => setFormData({ ...formData, issueDate: e.target.value })}
-                  className="w-full p-3 border rounded-lg shadow-sm"
+                  className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                   required
                 />
               </div>
               <div>
-                <label className="block text-gray-700 font-medium mb-2">Description</label>
+                <label className="block text-sm font-semibold text-navy-800 mb-1.5">Description</label>
                 <input
                   type="text"
                   placeholder="Enter Description"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full p-3 border rounded-lg shadow-sm"
+                  className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-gray-700 font-medium mb-2">Unit Price</label>
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">Unit Price</label>
                   <input
                     type="number"
                     placeholder="Enter Unit Price"
                     value={formData.unitPrice}
                     onChange={(e) => setFormData({ ...formData, unitPrice: e.target.value })}
-                    className="w-full p-3 border rounded-lg shadow-sm"
+                    className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                     required
                     min="0"
                     step="0.01"
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-700 font-medium mb-2">Quantity</label>
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">Quantity</label>
                   <input
                     type="number"
                     placeholder="Enter Quantity"
                     value={formData.quantity}
                     onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                    className="w-full p-3 border rounded-lg shadow-sm"
+                    className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                     required
                     min="0"
                     step="0.01"
@@ -715,35 +683,92 @@ function PurchaseInvoicesPage({ socket: providedSocket }) {
                 </div>
               </div>
               <div>
-                <label className="block text-gray-700 font-medium mb-2">Product ID</label>
+                <label className="block text-sm font-semibold text-navy-800 mb-1.5">Product ID</label>
                 <input
                   type="number"
                   placeholder="Enter Product ID"
                   value={formData.productId}
                   onChange={(e) => setFormData({ ...formData, productId: e.target.value })}
-                  className="w-full p-3 border rounded-lg shadow-sm"
+                  className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                   required
                   min="1"
                 />
               </div>
               <div>
-                <label className="block text-gray-700 font-medium mb-2">PDF Link</label>
+                <label className="block text-sm font-semibold text-navy-800 mb-1.5">PDF Link</label>
                 <input
                   type="url"
                   placeholder="Enter PDF Link"
                   value={formData.linkPdf}
                   onChange={(e) => setFormData({ ...formData, linkPdf: e.target.value })}
-                  className="w-full p-3 border rounded-lg shadow-sm"
+                  className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                 />
               </div>
               <button
                 type="submit"
                 disabled={uploading}
-                className="w-full bg-amber-500 text-white py-3 rounded-lg hover:bg-amber-600 transition-all duration-300 font-semibold"
+                className="w-full bg-navy-800 text-white py-3 rounded-lg font-semibold hover:bg-navy-700 transition-colors disabled:opacity-50"
               >
                 {uploading ? (modalMode === 'create' ? 'Creating...' : 'Updating...') : (modalMode === 'create' ? 'Create' : 'Update')}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {viewingInvoice && (
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto relative">
+            <button
+              onClick={() => setViewingInvoice(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
+              aria-label="Close"
+            >
+              <XCircle size={18} />
+            </button>
+            <h2 className="font-display text-xl font-bold text-navy-800 mb-5">
+              Invoice #{viewingInvoice.invoiceId}
+            </h2>
+            <dl className="space-y-4">
+              {[
+                { label: 'Sr. No.', value: viewingInvoice.srNo },
+                { label: 'Supplier Code', value: viewingInvoice.supplierCode },
+                { label: 'Description', value: viewingInvoice.description },
+                { label: 'Quantity', value: viewingInvoice.quantity },
+                { label: 'Product ID', value: viewingInvoice.productId },
+                { label: 'Created At', value: formatDate(viewingInvoice.createdAt) },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</dt>
+                  <dd className="text-navy-800 mt-0.5 break-words">{value || 'N/A'}</dd>
+                </div>
+              ))}
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">PDF Link</dt>
+                <dd className="text-navy-800 mt-0.5">
+                  {viewingInvoice.linkPdf ? (
+                    <a
+                      href={viewingInvoice.linkPdf}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline"
+                    >
+                      View PDF
+                    </a>
+                  ) : (
+                    'N/A'
+                  )}
+                </dd>
+              </div>
+            </dl>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setViewingInvoice(null)}
+                className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

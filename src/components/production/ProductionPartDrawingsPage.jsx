@@ -270,10 +270,10 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
   if (isLoading && !drawings.length) {
     return (
       <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
+        className="flex items-center justify-center py-24"
         aria-live="polite"
       >
-        <div className="text-gray-600 text-xl animate-pulse">Loading Part Drawings...</div>
+        <div className="text-gray-500 text-lg">Loading Part Drawings...</div>
       </div>
     );
   }
@@ -283,13 +283,13 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
   if (drawings.length === 0 && !isLoading) {
     return (
       <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
+        className="flex items-center justify-center py-24"
         role="status"
       >
-        <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-navy-100 text-center">
           <RefreshCw className="mx-auto mb-4 text-gray-400" size={48} />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">No Part Drawings</h2>
-          <p className="text-gray-600 mb-6">
+          <h2 className="font-display text-xl font-bold text-navy-800 mb-2">No Part Drawings</h2>
+          <p className="text-gray-500 mb-2">
             Your database is empty or no drawings match your search. Try refreshing or adjusting your search.
           </p>
         </div>
@@ -298,12 +298,9 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-6 text-center tracking-tight">
-        Production Part Drawings
-      </h1>
-      <div className="max-w-7xl mx-auto">
-        <div className="flex mb-6 gap-6 flex-wrap">
+    <div className="max-w-7xl mx-auto">
+      <div>
+        <div className="flex mb-6 gap-4 flex-wrap">
           <div className="relative flex-grow">
             <label htmlFor="search-drawings" className="sr-only">
               Search Part Drawings
@@ -316,13 +313,13 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
+              className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
             />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <Search size={17} className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
           <button
             onClick={handleRefresh}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isLoading}
             aria-label="Refresh part drawings"
           >
@@ -331,12 +328,12 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
         </div>
 
         {isLoading && drawings.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">
+          <div className="text-gray-500 text-sm mb-4 text-center" aria-live="polite">
             Refreshing data...
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
           <table
             className="w-full text-left border-collapse"
             role="grid"
@@ -345,7 +342,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
             tabIndex={0}
           >
             <thead>
-              <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50" role="row">
+              <tr className="bg-navy-50" role="row">
                 {[
                   { key: 'srNo', label: 'Sr. No.' },
                   { key: 'drawingId', label: 'Drawing ID' },
@@ -357,7 +354,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
                 ].map(({ key, label }) => (
                   <th
                     key={key}
-                    className="py-5 px-3 text-gray-800 text-base font-semibold cursor-pointer hover:bg-amber-300 transition-all duration-200"
+                    className="py-3 px-3 text-navy-800 text-sm font-semibold cursor-pointer hover:bg-navy-100 transition-colors whitespace-nowrap"
                     onClick={() => handleSort(key)}
                     aria-sort={
                       sortConfig.key === key
@@ -372,9 +369,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
                       <span>{label}</span>
                       <ArrowDownUp
                         size={16}
-                        className={`ml-2 text-gray-600 ${
-                          sortConfig.key === key ? 'text-gray-900' : 'opacity-50'
-                        }`}
+                        className={`ml-2 ${sortConfig.key === key ? 'text-gold-500' : 'text-navy-400/50'}`}
                         aria-hidden="true"
                       />
                     </div>
@@ -386,15 +381,15 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
               {sortedDrawings.map((drawing) => (
                 <tr
                   key={drawing.srNo}
-                  className="border-t hover:bg-amber-50 transition-all duration-200"
+                  className="border-t border-navy-100 hover:bg-navy-50/60 transition-colors"
                   role="row"
                 >
-                  <td className="py-4 px-3 text-gray-600 text-base">{drawing.srNo || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{drawing.drawingId || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{drawing.productName}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{drawing.itemName}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{drawing.productId || 'N/A'}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
+                  <td className="py-3.5 px-3 text-gray-600">{drawing.srNo || 'N/A'}</td>
+                  <td className="py-3.5 px-3 text-gray-600">{drawing.drawingId || 'N/A'}</td>
+                  <td className="py-3.5 px-3 text-gray-600">{drawing.productName}</td>
+                  <td className="py-3.5 px-3 text-gray-600">{drawing.itemName}</td>
+                  <td className="py-3.5 px-3 text-gray-600">{drawing.productId || 'N/A'}</td>
+                  <td className="py-3.5 px-3 text-gray-600">
                     {drawing.drawingLink ? (
                       <a
                         href={drawing.drawingLink}
@@ -409,7 +404,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
                       'N/A'
                     )}
                   </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
+                  <td className="py-3.5 px-3 text-gray-600">
                     {drawing.updatedAt ? formatDate(drawing.updatedAt) : 'N/A'}
                   </td>
                 </tr>
@@ -418,15 +413,15 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
           </table>
 
           {totalItems > 0 && (
-            <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600">
+            <div className="flex justify-between items-center p-4 bg-navy-50 border-t border-navy-100">
+              <div className="text-gray-500 text-sm">
                 Showing {Math.min(page * limit + 1, totalItems)} to {Math.min((page + 1) * limit, totalItems)} of {totalItems} drawings
               </div>
-              <div className="flex space-x-2">
+              <div className="flex gap-2">
                 <button
                   onClick={handlePrevPage}
                   disabled={page === 0}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                   aria-label="Previous page"
                 >
                   <ChevronLeft size={20} />
@@ -434,7 +429,7 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
                 <button
                   onClick={handleNextPage}
                   disabled={page >= Math.ceil(totalItems / limit) - 1 || isLoading}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                   aria-label="Next page"
                 >
                   <ChevronRight size={20} />
@@ -445,11 +440,11 @@ function ProductionPartDrawingsPage({ socket: providedSocket, userRole }) {
 
           {sortedDrawings.length === 0 && (
             <div
-              className="text-center py-12 text-gray-500 flex flex-col items-center"
+              className="text-center py-12 text-gray-400 flex flex-col items-center"
               role="alert"
             >
-              <Search className="mb-4 text-gray-400" size={48} />
-              <p className="text-lg">No drawings found matching your search.</p>
+              <Search className="mb-4 text-gray-300" size={40} />
+              <p>No drawings found matching your search.</p>
             </div>
           )}
         </div>

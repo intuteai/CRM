@@ -11,10 +11,10 @@ const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const STATUS_OPTIONS = ['pending', 'in_progress', 'repaired', 'dispatched'];
 const STATUS_LABELS  = { pending: 'Pending', in_progress: 'In Progress', repaired: 'Repaired', dispatched: 'Dispatched' };
 const STATUS_COLORS  = {
-  pending:     'bg-yellow-100 text-yellow-700 border-yellow-200',
-  in_progress: 'bg-blue-100 text-blue-700 border-blue-200',
-  repaired:    'bg-green-100 text-green-700 border-green-200',
-  dispatched:  'bg-slate-100 text-slate-600 border-slate-200',
+  pending:     'bg-gold-400/25 text-gold-600',
+  in_progress: 'bg-blue-100 text-blue-700',
+  repaired:    'bg-green-100 text-green-700',
+  dispatched:  'bg-gray-100 text-gray-600',
 };
 const STATUS_ICONS = {
   pending:     <Clock className="w-3 h-3" />,
@@ -25,8 +25,8 @@ const STATUS_ICONS = {
 
 const SERVICE_TYPE_LABELS = { repair: 'Repair', purchase_for_service: 'Purchase for Service' };
 const SERVICE_TYPE_COLORS = {
-  repair:               'bg-orange-100 text-orange-700 border-orange-200',
-  purchase_for_service: 'bg-purple-100 text-purple-700 border-purple-200',
+  repair:               'bg-orange-100 text-orange-700',
+  purchase_for_service: 'bg-purple-100 text-purple-700',
 };
 
 const EMPTY_FORM = {
@@ -37,7 +37,7 @@ const EMPTY_FORM = {
 };
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
-const inputCls = 'w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white placeholder:text-gray-400';
+const inputCls = 'w-full px-3 py-2 rounded-lg border border-navy-100 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white placeholder:text-gray-400';
 const formatDate = (d) => (!d ? '—' : new Date(d).toLocaleDateString('en-IN'));
 const val = (v) => (v != null && v !== '') ? v : '—';
 
@@ -56,7 +56,7 @@ function StatusBadge({ status, type = 'status' }) {
   const label  = type === 'status' ? STATUS_LABELS[status] : SERVICE_TYPE_LABELS[status];
   const icon   = type === 'status' ? STATUS_ICONS[status] : (status === 'repair' ? <Wrench className="w-3 h-3" /> : <ShoppingBag className="w-3 h-3" />);
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${colors[status] || 'bg-gray-100 text-gray-600'}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || 'bg-gray-100 text-gray-600'}`}>
       {icon}{label || status}
     </span>
   );
@@ -161,26 +161,26 @@ function ViewModal({ record, onClose, onEdit, onDeletePhoto }) {
   const del = onDeletePhoto ? (field, url) => onDeletePhoto(field, url) : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto py-6 px-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white rounded-t-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-navy-100 bg-navy-50 rounded-t-xl">
           <div className="flex items-center gap-3 flex-wrap">
             <div>
               <p className="text-xs text-gray-400 font-medium uppercase tracking-widest">Record</p>
-              <h2 className="text-xl font-bold text-gray-900">#{record.record_id}</h2>
+              <h2 className="font-display text-xl font-bold text-navy-800">#{record.record_id}</h2>
             </div>
             <StatusBadge status={record.service_type} type="service" />
             <StatusBadge status={record.repair_status} type="status" />
           </div>
           <div className="flex items-center gap-2">
             <button onClick={onEdit}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold shadow-sm transition-colors">
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-navy-800 hover:bg-navy-700 text-white text-sm font-semibold transition-colors">
               <Edit2 className="w-3.5 h-3.5" /> Edit
             </button>
-            <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
-              <X className="w-5 h-5 text-gray-400" />
+            <button onClick={onClose} className="p-1 text-gray-400 hover:text-navy-800 transition-colors">
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -208,8 +208,8 @@ function ViewModal({ record, onClose, onEdit, onDeletePhoto }) {
             <Section title="Repair Details">
               <div className="space-y-4">
                 {(record.fault_query || record.fault_photos_urls?.length > 0) && (
-                  <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-3 space-y-2">
-                    <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wide">Fault / Query from Customer</p>
+                  <div className="bg-navy-50 border border-navy-100 rounded-xl p-3 space-y-2">
+                    <p className="text-xs font-semibold text-gold-600 uppercase tracking-wide">Fault / Query from Customer</p>
                     {record.fault_query && <p className="text-sm text-gray-800">{record.fault_query}</p>}
                     {record.fault_photos_urls?.length > 0 && (
                       <div className="flex flex-wrap gap-2 pt-1">
@@ -350,10 +350,10 @@ function CustomerTypeahead({ value, onChange }) {
         onFocus={() => { if (query) { setOpen(true); fetchOptions(query); } }}
         placeholder="Type to search customer..." className={inputCls} autoComplete="off" required />
       {open && options.length > 0 && (
-        <ul className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto text-sm">
+        <ul className="absolute z-50 left-0 right-0 mt-1 bg-white border border-navy-100 rounded-lg shadow-xl max-h-48 overflow-y-auto text-sm">
           {options.map((c) => (
             <li key={c.customer_id} onMouseDown={() => handleSelect(c.name)}
-              className="px-4 py-2.5 hover:bg-amber-50 cursor-pointer first:rounded-t-xl last:rounded-b-xl">
+              className="px-4 py-2.5 hover:bg-gold-400/10 cursor-pointer first:rounded-t-lg last:rounded-b-lg transition-colors">
               {c.name}
             </li>
           ))}
@@ -547,218 +547,214 @@ function ServiceRepairPage({ socket, userRole }) {
   const clearFilters  = () => { setSearch(''); setStatusFilter(''); setTypeFilter(''); };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-4">
 
-        {/* ── Page header ── */}
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-4xl font-bold text-gray-800 tracking-tight">Service &amp; Repair</h1>
-          <div className="flex gap-2">
-            <button onClick={fetchRecords}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 text-sm text-gray-600 shadow-sm transition-colors">
-              <RefreshCw className="w-4 h-4" /> Refresh
+      {/* ── Actions ── */}
+      <div className="flex justify-end gap-2">
+        <button onClick={fetchRecords}
+          className="flex items-center gap-1.5 px-4 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors text-sm">
+          <RefreshCw className="w-4 h-4" /> Refresh
+        </button>
+        <button onClick={openCreate}
+          className="flex items-center gap-1.5 px-4 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors text-sm">
+          <Plus className="w-4 h-4" /> New Record
+        </button>
+      </div>
+
+      {/* ── Stats bar (click to filter by status) ── */}
+      {!isLoading && records.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { key: 'pending',     label: 'Pending',     value: stats.pending,     border: 'border-l-gold-500' },
+            { key: 'in_progress', label: 'In Progress', value: stats.in_progress, border: 'border-l-blue-400' },
+            { key: 'repaired',    label: 'Repaired',    value: stats.repaired,    border: 'border-l-green-400' },
+            { key: 'dispatched',  label: 'Dispatched',  value: stats.dispatched,  border: 'border-l-navy-400' },
+          ].map(s => (
+            <button
+              key={s.key}
+              onClick={() => setStatusFilter(prev => prev === s.key ? '' : s.key)}
+              className={`${s.border} border-l-4 border-y border-r border-navy-100 rounded-lg px-4 py-3 bg-white shadow-sm text-left transition-colors hover:bg-navy-50/60 ${
+                statusFilter === s.key ? 'ring-2 ring-gold-400' : ''
+              }`}
+            >
+              <p className="text-2xl font-bold text-navy-800">{s.value}</p>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">{s.label}</p>
             </button>
-            <button onClick={openCreate}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold shadow-sm transition-colors">
-              <Plus className="w-4 h-4" /> New Record
+          ))}
+        </div>
+      )}
+
+      {/* ── Filter bar ── */}
+      {!isLoading && records.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search */}
+          <div className="relative flex-1 min-w-48">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search customer, material no., person…"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-navy-100 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gold-400 shadow-sm"
+            />
+          </div>
+
+          {/* Status filter */}
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-navy-100 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gold-400 shadow-sm text-gray-600"
+          >
+            <option value="">All Statuses</option>
+            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+          </select>
+
+          {/* Type filter */}
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-navy-100 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gold-400 shadow-sm text-gray-600"
+          >
+            <option value="">All Types</option>
+            <option value="repair">Repair</option>
+            <option value="purchase_for_service">Purchase for Service</option>
+          </select>
+
+          {/* Clear */}
+          {activeFilters > 0 && (
+            <button onClick={clearFilters}
+              className="flex items-center gap-1 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-500 text-sm hover:bg-red-100 transition-colors">
+              <X className="w-3.5 h-3.5" /> Clear ({activeFilters})
+            </button>
+          )}
+
+          {/* Result count */}
+          <p className="text-xs text-gray-400 ml-auto">
+            {filteredRecords.length} of {records.length} record{records.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+      )}
+
+      {/* ── Table ── */}
+      {isLoading ? (
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-16 text-center">
+          <div className="w-8 h-8 border-3 border-gold-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-400">Loading records…</p>
+        </div>
+      ) : filteredRecords.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-16 text-center">
+          <div className="w-16 h-16 bg-gold-400/25 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <Wrench className="w-8 h-8 text-gold-600" />
+          </div>
+          {activeFilters > 0 ? (
+            <>
+              <h3 className="text-base font-semibold text-gray-700 mb-1">No matching records</h3>
+              <p className="text-sm text-gray-400 mb-4">Try adjusting your search or filters</p>
+              <button onClick={clearFilters}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold transition-colors">
+                <X className="w-4 h-4" /> Clear filters
+              </button>
+            </>
+          ) : (
+            <>
+              <h3 className="text-base font-semibold text-gray-700 mb-1">No records yet</h3>
+              <p className="text-sm text-gray-400 mb-4">Create your first service or repair record</p>
+              <button onClick={openCreate}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gold-500 hover:bg-gold-400 text-navy-900 text-sm font-semibold transition-colors">
+                <Plus className="w-4 h-4" /> New Record
+              </button>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-navy-50 text-navy-800">
+                  {['#', 'Type', 'Customer / Recipient', 'Material No.', 'Status', 'Responsibility', 'Date', ''].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-sm font-semibold whitespace-nowrap border-b border-navy-100">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-navy-100">
+                {filteredRecords.map((r) => (
+                  <tr key={r.record_id} onClick={() => setViewRecord(r)}
+                    className="hover:bg-navy-50/60 cursor-pointer transition-colors group">
+                    <td className="px-4 py-3.5 text-gray-400 text-xs font-mono">#{r.record_id}</td>
+                    <td className="px-4 py-3.5"><StatusBadge status={r.service_type} type="service" /></td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        {r.chalan_photos_urls?.[0] && (
+                          <img
+                            src={getWeservUrl(r.chalan_photos_urls[0])}
+                            alt=""
+                            className="w-8 h-8 rounded-lg object-cover border border-gray-200 shrink-0"
+                            onError={e => { e.target.style.display = 'none'; }}
+                          />
+                        )}
+                        <span className="font-semibold text-navy-800">{r.customer_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-gray-500">{r.dispatch_material_no || '—'}</td>
+                    <td className="px-4 py-3.5"><StatusBadge status={r.repair_status} type="status" /></td>
+                    <td className="px-4 py-3.5 text-gray-600">{r.responsibility_person || '—'}</td>
+                    <td className="px-4 py-3.5 text-gray-500 text-xs">{formatDate(r.sent_date)}</td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setViewRecord(r)}
+                          className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-500 transition-colors" title="View">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => openEdit(r)}
+                          className="p-1.5 rounded-lg hover:bg-gold-400/25 text-gold-600 transition-colors" title="Edit">
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        {isAdmin && (
+                          <button onClick={() => setConfirmDelete(r.record_id)}
+                            className="p-1.5 rounded-lg hover:bg-red-100 text-red-400 transition-colors" title="Delete">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between px-4 py-3 border-t border-navy-100 bg-navy-50">
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-navy-100 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              <ChevronLeft className="w-3.5 h-3.5" /> Previous
+            </button>
+            <span className="text-xs text-gray-400">Page {page + 1}</span>
+            <button onClick={() => setPage(p => p + 1)} disabled={records.length < limit}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-navy-100 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              Next <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
-
-        {/* ── Stats bar (click to filter by status) ── */}
-        {!isLoading && records.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { key: 'pending',     label: 'Pending',     value: stats.pending,     border: 'border-l-yellow-400', bg: 'bg-yellow-50',  ring: 'ring-yellow-300' },
-              { key: 'in_progress', label: 'In Progress', value: stats.in_progress, border: 'border-l-blue-400',   bg: 'bg-blue-50',    ring: 'ring-blue-300' },
-              { key: 'repaired',    label: 'Repaired',    value: stats.repaired,    border: 'border-l-green-400',  bg: 'bg-green-50',   ring: 'ring-green-300' },
-              { key: 'dispatched',  label: 'Dispatched',  value: stats.dispatched,  border: 'border-l-slate-400',  bg: 'bg-slate-50',   ring: 'ring-slate-300' },
-            ].map(s => (
-              <button
-                key={s.key}
-                onClick={() => setStatusFilter(prev => prev === s.key ? '' : s.key)}
-                className={`${s.bg} ${s.border} border-l-4 rounded-xl px-4 py-3 bg-white shadow-sm text-left transition-all
-                  ${statusFilter === s.key ? `ring-2 ${s.ring} scale-[1.02]` : 'hover:scale-[1.01] hover:shadow-md'}`}
-              >
-                <p className="text-2xl font-bold text-gray-800">{s.value}</p>
-                <p className="text-xs text-gray-500 font-medium mt-0.5">{s.label}</p>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* ── Filter bar ── */}
-        {!isLoading && records.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Search */}
-            <div className="relative flex-1 min-w-48">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search customer, material no., person…"
-                className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 shadow-sm"
-              />
-            </div>
-
-            {/* Status filter */}
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 shadow-sm text-gray-600"
-            >
-              <option value="">All Statuses</option>
-              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-            </select>
-
-            {/* Type filter */}
-            <select
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 shadow-sm text-gray-600"
-            >
-              <option value="">All Types</option>
-              <option value="repair">Repair</option>
-              <option value="purchase_for_service">Purchase for Service</option>
-            </select>
-
-            {/* Clear */}
-            {activeFilters > 0 && (
-              <button onClick={clearFilters}
-                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-500 text-sm hover:bg-red-100 transition-colors">
-                <X className="w-3.5 h-3.5" /> Clear ({activeFilters})
-              </button>
-            )}
-
-            {/* Result count */}
-            <p className="text-xs text-gray-400 ml-auto">
-              {filteredRecords.length} of {records.length} record{records.length !== 1 ? 's' : ''}
-            </p>
-          </div>
-        )}
-
-        {/* ── Table ── */}
-        {isLoading ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
-            <div className="w-8 h-8 border-3 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm text-gray-400">Loading records…</p>
-          </div>
-        ) : filteredRecords.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
-            <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Wrench className="w-8 h-8 text-amber-500" />
-            </div>
-            {activeFilters > 0 ? (
-              <>
-                <h3 className="text-base font-semibold text-gray-700 mb-1">No matching records</h3>
-                <p className="text-sm text-gray-400 mb-4">Try adjusting your search or filters</p>
-                <button onClick={clearFilters}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-semibold">
-                  <X className="w-4 h-4" /> Clear filters
-                </button>
-              </>
-            ) : (
-              <>
-                <h3 className="text-base font-semibold text-gray-700 mb-1">No records yet</h3>
-                <p className="text-sm text-gray-400 mb-4">Create your first service or repair record</p>
-                <button onClick={openCreate}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold">
-                  <Plus className="w-4 h-4" /> New Record
-                </button>
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/60">
-                    {['#', 'Type', 'Customer / Recipient', 'Material No.', 'Status', 'Responsibility', 'Date', ''].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filteredRecords.map((r) => (
-                    <tr key={r.record_id} onClick={() => setViewRecord(r)}
-                      className="hover:bg-amber-50/40 cursor-pointer transition-colors group">
-                      <td className="px-4 py-3.5 text-gray-400 text-xs font-mono">#{r.record_id}</td>
-                      <td className="px-4 py-3.5"><StatusBadge status={r.service_type} type="service" /></td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-2.5">
-                          {r.chalan_photos_urls?.[0] && (
-                            <img
-                              src={getWeservUrl(r.chalan_photos_urls[0])}
-                              alt=""
-                              className="w-8 h-8 rounded-lg object-cover border border-gray-200 shrink-0"
-                              onError={e => { e.target.style.display = 'none'; }}
-                            />
-                          )}
-                          <span className="font-semibold text-gray-800">{r.customer_name}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 text-gray-500">{r.dispatch_material_no || '—'}</td>
-                      <td className="px-4 py-3.5"><StatusBadge status={r.repair_status} type="status" /></td>
-                      <td className="px-4 py-3.5 text-gray-600">{r.responsibility_person || '—'}</td>
-                      <td className="px-4 py-3.5 text-gray-500 text-xs">{formatDate(r.sent_date)}</td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-                          <button onClick={() => setViewRecord(r)}
-                            className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-500 transition-colors" title="View">
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => openEdit(r)}
-                            className="p-1.5 rounded-lg hover:bg-amber-100 text-amber-600 transition-colors" title="Edit">
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          {isAdmin && (
-                            <button onClick={() => setConfirmDelete(r.record_id)}
-                              className="p-1.5 rounded-lg hover:bg-red-100 text-red-400 transition-colors" title="Delete">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/40">
-              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                <ChevronLeft className="w-3.5 h-3.5" /> Previous
-              </button>
-              <span className="text-xs text-gray-400">Page {page + 1}</span>
-              <button onClick={() => setPage(p => p + 1)} disabled={records.length < limit}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                Next <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* ── View modal ── */}
       {viewRecord && <ViewModal record={viewRecord} onClose={() => setViewRecord(null)} onEdit={() => openEdit(viewRecord)} onDeletePhoto={(field, url) => deletePhoto(viewRecord.record_id, field, url)} />}
 
       {/* ── Delete confirm ── */}
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
-            <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/50 px-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full">
+            <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mb-4">
               <Trash2 className="w-6 h-6 text-red-500" />
             </div>
-            <h3 className="text-base font-bold text-gray-900 mb-1">Delete this record?</h3>
+            <h3 className="text-base font-bold text-navy-800 mb-1">Delete this record?</h3>
             <p className="text-sm text-gray-500 mb-5">This cannot be undone.</p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmDelete(null)}
-                className="flex-1 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
+                className="flex-1 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition-colors">Cancel</button>
               <button onClick={() => handleDelete(confirmDelete)}
-                className="flex-1 px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors">Delete</button>
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors">Delete</button>
             </div>
           </div>
         </div>
@@ -766,21 +762,21 @@ function ServiceRepairPage({ socket, userRole }) {
 
       {/* ── Create / Edit modal ── */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto py-6 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
 
             {/* Form header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white rounded-t-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-navy-100 bg-navy-50 rounded-t-xl">
               <div>
                 <p className="text-xs text-gray-400 uppercase tracking-widest font-medium">
                   {modalMode === 'create' ? 'New' : 'Edit'} Record
                 </p>
-                <h2 className="text-lg font-bold text-gray-900">
+                <h2 className="font-display text-lg font-bold text-navy-800">
                   {modalMode === 'create' ? 'Log a Service Job' : `Editing Record #${selectedRecord?.record_id}`}
                 </h2>
               </div>
-              <button onClick={() => setShowModal(false)} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
-                <X className="w-5 h-5 text-gray-400" />
+              <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-navy-800 transition-colors">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -899,11 +895,15 @@ function ServiceRepairPage({ socket, userRole }) {
                 </div>
               </FormSection>
 
-              <div className="flex justify-end gap-3 pt-1 border-t border-gray-100">
+              <div className="flex justify-end gap-3 pt-1 border-t border-navy-100">
                 <button type="button" onClick={() => setShowModal(false)}
-                  className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
+                  className="px-5 py-2.5 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition-colors">Cancel</button>
                 <button type="submit" disabled={uploading}
-                  className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold disabled:opacity-60 shadow-sm transition-colors">
+                  className={`px-6 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-60 transition-colors ${
+                    modalMode === 'create'
+                      ? 'bg-gold-500 text-navy-900 hover:bg-gold-400'
+                      : 'bg-navy-800 text-white hover:bg-navy-700'
+                  }`}>
                   {uploading ? 'Saving…' : modalMode === 'create' ? 'Create Record' : 'Save Changes'}
                 </button>
               </div>
@@ -937,13 +937,13 @@ function Field({ label, children }) {
 
 function RadioOption({ name, value, checked, onChange, icon, label, sub }) {
   return (
-    <label className={`flex items-start gap-3 cursor-pointer p-3 rounded-xl border-2 transition-all ${
-      checked ? 'border-amber-400 bg-amber-50 shadow-sm' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+    <label className={`flex items-start gap-3 cursor-pointer p-3 rounded-lg border-2 transition-colors ${
+      checked ? 'border-gold-500 bg-gold-400/10' : 'border-navy-100 hover:bg-navy-50/60'
     }`}>
       <input type="radio" name={name} value={value} checked={checked} onChange={onChange} className="hidden" />
-      <div className={`p-1.5 rounded-lg shrink-0 ${checked ? 'bg-amber-400 text-white' : 'bg-gray-100 text-gray-500'}`}>{icon}</div>
+      <div className={`p-1.5 rounded-lg shrink-0 ${checked ? 'bg-gold-500 text-navy-900' : 'bg-gray-100 text-gray-500'}`}>{icon}</div>
       <div>
-        <p className="text-sm font-semibold text-gray-800">{label}</p>
+        <p className="text-sm font-semibold text-navy-800">{label}</p>
         <p className="text-xs text-gray-500 mt-0.5">{sub}</p>
       </div>
     </label>
@@ -954,7 +954,7 @@ function FileInput({ onChange, current, label }) {
   const [fileName, setFileName] = useState('');
   return (
     <div className="space-y-1.5">
-      <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 border-dashed border-amber-300 cursor-pointer hover:border-amber-400 hover:bg-amber-50/50 text-sm text-amber-600 transition-all">
+      <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 border-dashed border-gold-300 cursor-pointer hover:border-gold-400 hover:bg-gold-400/10 text-sm text-gold-600 transition-colors">
         <Upload className="w-4 h-4 shrink-0" />
         <span className="truncate">{fileName || label}</span>
         <input type="file" accept="image/*,application/pdf" onChange={e => { const f = e.target.files[0]; if (f) { setFileName(f.name); onChange(f); } }} className="hidden" />
@@ -972,7 +972,7 @@ function MultiFileInput({ onChange, existing = [], label = 'Upload photos (multi
   const [count, setCount] = useState(0);
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 border-dashed border-amber-300 cursor-pointer hover:border-amber-400 hover:bg-amber-50/50 text-sm text-amber-600 transition-all">
+      <label className="flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 border-dashed border-gold-300 cursor-pointer hover:border-gold-400 hover:bg-gold-400/10 text-sm text-gold-600 transition-colors">
         <Upload className="w-4 h-4 shrink-0" />
         {count > 0 ? `${count} file(s) selected` : label}
         <input type="file" accept={accept} multiple onChange={e => { const f = Array.from(e.target.files); setCount(f.length); onChange(f); }} className="hidden" />

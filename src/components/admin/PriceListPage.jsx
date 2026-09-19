@@ -225,11 +225,8 @@ function PriceListPage({ socket }) {
 
   if (isLoading && !priceItems.length) {
     return (
-      <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
-        aria-live="polite"
-      >
-        <div className="text-gray-600 text-xl animate-pulse">Loading price list...</div>
+      <div className="flex items-center justify-center py-24" aria-live="polite">
+        <div className="text-gray-500 text-lg animate-pulse">Loading price list...</div>
       </div>
     );
   }
@@ -237,11 +234,9 @@ function PriceListPage({ socket }) {
   if (error && !priceItems.length) return <ConnectionError onRetry={() => fetchPriceList(0, '', true)} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Price List</h1>
-      <div className="max-w-7xl mx-auto">
-        <div className="flex mb-8 gap-6 flex-wrap">
-          <div className="relative flex-grow">
+    <div className="max-w-7xl mx-auto space-y-4">
+        <div className="flex gap-4 flex-wrap items-center">
+          <div className="relative flex-grow min-w-[220px]">
             <label htmlFor="search-price-list" className="sr-only">
               Search price list
             </label>
@@ -253,17 +248,17 @@ function PriceListPage({ socket }) {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="w-full p-4 pl-12 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md hover:shadow-lg transition-all duration-300"
+              className="w-full p-3 pl-11 border border-navy-100 rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
             />
             <Search
-              className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"
-              size={20}
+              className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400"
+              size={17}
               aria-hidden="true"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
+                className="absolute right-3.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors"
                 aria-label="Clear search"
               >
                 <X size={16} />
@@ -272,28 +267,28 @@ function PriceListPage({ socket }) {
           </div>
           <button
             onClick={() => fetchPriceList(0, '', true)}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg flex items-center disabled:opacity-50"
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isLoading}
             aria-label="Refresh price list"
           >
-            <RefreshCw className="mr-2" size={18} aria-hidden={isLoading} />
+            <RefreshCw size={16} aria-hidden={isLoading} />
             {isLoading ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
 
         {isLoading && priceItems.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">
+          <div className="text-gray-500 text-sm text-center" aria-live="polite">
             Refreshing data...
           </div>
         )}
 
         {filteredPriceItems.length === 0 ? (
           <div
-            className="text-center py-16 flex flex-col items-center justify-center text-gray-500 bg-white rounded-2xl shadow-lg"
+            className="text-center py-12 flex flex-col items-center justify-center text-gray-400 bg-white rounded-xl shadow-sm"
             role="alert"
           >
             <svg
-              className="w-12 h-12 mb-4 text-gray-400"
+              className="w-12 h-12 mb-4 text-gray-300"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -311,7 +306,7 @@ function PriceListPage({ socket }) {
                 Try adjusting your search term or{' '}
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="text-amber-500 hover:text-amber-600 underline"
+                  className="text-gold-600 hover:text-gold-500 underline transition-colors"
                 >
                   clear the filter
                 </button>
@@ -320,16 +315,16 @@ function PriceListPage({ socket }) {
             )}
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
+          <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
             <table
-              className="w-full text-left"
+              className="w-full text-left border-collapse"
               role="grid"
               aria-label="Price list table"
               ref={tableRef}
               tabIndex={0}
             >
-              <thead className="bg-amber-100">
-                <tr role="row">
+              <thead>
+                <tr className="bg-navy-50" role="row">
                   {[
                     { key: 'priceId', label: 'Price ID' },
                     { key: 'productName', label: 'Product Name' },
@@ -345,46 +340,50 @@ function PriceListPage({ socket }) {
                         (e.key === 'Enter' || e.key === ' ') &&
                         (e.preventDefault(), handleSort(key))
                       }
-                      className={`py-5 px-3 ${
+                      className={`py-3 px-3 text-navy-800 text-sm font-semibold ${
                         key !== 'actions'
-                          ? 'cursor-pointer hover:bg-amber-200 focus:outline-none focus:bg-amber-200'
+                          ? 'cursor-pointer hover:bg-navy-100 focus:outline-none focus:bg-navy-100'
                           : ''
-                      }`}
+                      } transition-colors whitespace-nowrap`}
                       tabIndex={key !== 'actions' ? 0 : undefined}
                       aria-sort={sortConfig.key === key ? sortConfig.direction : 'none'}
                       role="columnheader"
                     >
-                      <div className="flex items-center">
-                        {label}
+                      <div className="flex items-center justify-between">
+                        <span>{label}</span>
                         {key !== 'actions' && (
-                          <ArrowDownUp className="ml-2" size={16} aria-hidden="true" />
+                          <ArrowDownUp
+                            className={`ml-2 ${sortConfig.key === key ? 'text-gold-500' : 'text-navy-400/50'}`}
+                            size={15}
+                            aria-hidden="true"
+                          />
                         )}
                       </div>
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-navy-100">
                 {filteredPriceItems.map((item) => {
                   const isEditing = editingItem === item.priceId;
                   return (
                     <tr
                       key={item.priceId}
-                      className={`border-t hover:bg-amber-50 ${
-                        isEditing ? 'bg-amber-100/50' : ''
-                      } transition-all duration-300`}
+                      className={`hover:bg-navy-50/60 transition-colors ${
+                        isEditing ? 'bg-navy-50' : ''
+                      }`}
                       role="row"
                     >
-                      <td className="py-4 px-3">{item.priceId}</td>
-                      <td className="py-4 px-3">{item.productName}</td>
-                      <td className="py-4 px-3">
+                      <td className="py-3.5 px-3 text-navy-800 font-medium">{item.priceId}</td>
+                      <td className="py-3.5 px-3 text-gray-600 min-w-[180px] lg:min-w-0">{item.productName}</td>
+                      <td className="py-3.5 px-3 text-gray-600">
                         {isEditing ? (
                           <input
                             type="number"
                             step="0.01"
                             value={editPrice}
                             onChange={(e) => setEditPrice(e.target.value)}
-                            className="w-32 p-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            className="w-32 p-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                             autoFocus
                             aria-label={`Edit price for ${item.productName}`}
                           />
@@ -394,11 +393,11 @@ function PriceListPage({ socket }) {
                           'N/A'
                         )}
                       </td>
-                      <td className="py-4 px-3">
+                      <td className="py-3.5 px-3 text-gray-600">
                         {item.createdAt ? (
                           <div className="flex flex-col">
                             <span>{formatDate(item.createdAt)}</span>
-                            <span className="text-sm text-gray-500">
+                            <span className="text-xs text-gray-400">
                               {new Date(item.createdAt).toLocaleTimeString('en-IN')}
                             </span>
                           </div>
@@ -406,19 +405,19 @@ function PriceListPage({ socket }) {
                           'N/A'
                         )}
                       </td>
-                      <td className="py-4 px-3">
+                      <td className="py-3.5 px-3">
                         {isEditing ? (
                           <div className="flex space-x-2">
                             <button
                               onClick={() => handleSavePrice(item)}
-                              className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 transition-all duration-300"
+                              className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 transition-colors"
                               aria-label={`Save price for ${item.productName}`}
                             >
                               <Save size={16} aria-hidden="true" />
                             </button>
                             <button
                               onClick={handleCancelEdit}
-                              className="p-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-all duration-300"
+                              className="p-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors"
                               aria-label={`Cancel editing for ${item.productName}`}
                             >
                               <XCircle size={16} aria-hidden="true" />
@@ -427,7 +426,7 @@ function PriceListPage({ socket }) {
                         ) : (
                           <button
                             onClick={() => handleEditClick(item)}
-                            className="p-2 bg-amber-400 text-gray-800 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300"
+                            className="p-2 bg-navy-800 text-white rounded-lg hover:bg-navy-700 focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
                             aria-label={`Edit price for ${item.productName}`}
                           >
                             <Edit size={16} aria-hidden="true" />
@@ -440,35 +439,33 @@ function PriceListPage({ socket }) {
               </tbody>
             </table>
             {totalItems > 0 && (
-              <div className="flex justify-between items-center p-4 bg-gray-50">
-                <div className="text-gray-600">
+              <div className="flex justify-between items-center flex-wrap gap-2 p-4 bg-navy-50 border-t border-navy-100">
+                <div className="text-gray-500 text-sm">
                   Showing {(page * limit) + 1}–{Math.min((page + 1) * limit, totalItems)} of {totalItems} price items
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex gap-2">
                   <button
                     onClick={handlePrevPage}
                     disabled={page === 0}
-                    className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                     aria-label="Previous page"
                   >
-                    <ChevronLeft size={20} />
+                    <ChevronLeft size={18} />
                   </button>
                   <button
                     onClick={handleNextPage}
                     disabled={(page + 1) * limit >= totalItems || isLoading}
-                    className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                     aria-label="Next page"
                   >
-                    <ChevronRight size={20} />
+                    <ChevronRight size={18} />
                   </button>
                 </div>
               </div>
             )}
           </div>
         )}
-      </div>
-
-</div>
+    </div>
   );
 }
 

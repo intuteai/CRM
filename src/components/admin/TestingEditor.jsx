@@ -82,7 +82,7 @@ export default function TestingEditor({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
+      <div className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl p-5 sm:p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
           {testingType} Testing
         </h3>
@@ -93,7 +93,7 @@ export default function TestingEditor({
             <input
               type="number"
               min="0"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+              className="w-full px-3 py-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
               value={qty}
               onChange={(e) => setQty(e.target.value)}
             />
@@ -103,7 +103,7 @@ export default function TestingEditor({
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <input
               type="date"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+              className="w-full px-3 py-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
               value={date}
               onChange={(e) => setDate(e.target.value)}
             />
@@ -113,7 +113,7 @@ export default function TestingEditor({
             <label className="block text-sm font-medium text-gray-700 mb-1">Controller Type</label>
             <input
               type="text"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+              className="w-full px-3 py-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
               value={controllerType}
               onChange={(e) => setControllerType(e.target.value)}
               placeholder="e.g. Sine wave controller X"
@@ -128,7 +128,7 @@ export default function TestingEditor({
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60"
+              className="px-4 py-2 rounded-lg bg-navy-800 text-white hover:bg-navy-700 transition-colors disabled:opacity-60"
               disabled={saving}
             >
               {saving ? "Saving…" : "Save"}

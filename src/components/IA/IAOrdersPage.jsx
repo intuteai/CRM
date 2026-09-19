@@ -12,6 +12,7 @@ import axios from 'axios';
 import debounce from 'lodash.debounce';
 import Modal from 'react-modal';
 import { useNotify } from '../../hooks/useNotify';
+import PeoplePage from '../shared/PeoplePage';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL;
 const MAX_CACHED = 200;
@@ -40,7 +41,7 @@ const Highlight = ({ text, query }) => {
   return (
     <span>
       {text.slice(0, idx)}
-      <mark className="bg-amber-200 text-amber-900 rounded px-0.5">{text.slice(idx, idx + query.length)}</mark>
+      <mark className="bg-gold-300/60 text-navy-800 rounded px-0.5">{text.slice(idx, idx + query.length)}</mark>
       {text.slice(idx + query.length)}
     </span>
   );
@@ -89,16 +90,16 @@ const itemHasHmi = (item) =>
 const SortIcon = ({ col, sortConfig }) => {
   if (sortConfig.key !== col) return <ArrowUpDown className="w-3.5 h-3.5 text-gray-400 inline ml-1 opacity-50" />;
   return sortConfig.direction === 'asc'
-    ? <ChevronUp className="w-3.5 h-3.5 text-amber-600 inline ml-1" />
-    : <ChevronDown className="w-3.5 h-3.5 text-amber-600 inline ml-1" />;
+    ? <ChevronUp className="w-3.5 h-3.5 text-gold-600 inline ml-1" />
+    : <ChevronDown className="w-3.5 h-3.5 text-gold-600 inline ml-1" />;
 };
 
 // ── Sortable TH ───────────────────────────────────────────────
 const SortTh = ({ col, label, icon, sortConfig, onSort, className = '' }) => (
   <th
     onClick={() => onSort(col)}
-    className={`px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer select-none transition-colors
-      ${sortConfig.key === col ? 'bg-amber-100 text-amber-800' : 'hover:bg-amber-50'}
+    className={`px-4 py-3 text-left text-sm font-semibold text-navy-800 whitespace-nowrap cursor-pointer select-none transition-colors
+      ${sortConfig.key === col ? 'bg-gold-400/25 text-gold-600' : 'hover:bg-navy-50'}
       ${className}`}
   >
     <div className="flex items-center gap-1.5">
@@ -558,37 +559,29 @@ function IAOrdersPage({ socket }) {
 
   // ── Render ────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-25 to-gray-100 relative overflow-hidden">
-      {/* Background blobs */}
-      <div className="absolute top-0 left-0 w-96 h-96 bg-amber-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse" />
-      <div className="absolute top-0 right-0 w-96 h-96 bg-orange-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000" />
-      <div className="absolute -bottom-32 left-1/2 -translate-x-1/2 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000" />
-
-      <div className="relative z-10 p-6">
-
-        {/* ── Header ── */}
-        <div className="text-center mb-10 mt-8">
-          <div className="inline-flex items-center justify-center mb-4">
-            <div className="p-3 bg-gradient-to-r from-amber-400 to-orange-400 rounded-2xl shadow-lg">
-              <Sparkles className="w-8 h-8 text-white animate-pulse" />
-            </div>
-          </div>
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-gray-800 via-gray-700 to-amber-700 bg-clip-text text-transparent mb-4 tracking-tight">
-            Dispatch Orders
-          </h1>
-        </div>
-
+    <PeoplePage
+      title="Dispatch Orders"
+      subtitle="Track VCU and HMI dispatch with serial numbers"
+      actions={
+        <button
+          onClick={openCreate}
+          className="px-5 py-3 bg-gold-500 text-navy-900 font-semibold rounded-lg hover:bg-gold-400 flex items-center gap-2 transition-colors whitespace-nowrap"
+        >
+          <Plus className="w-4 h-4" /> New Order
+        </button>
+      }
+    >
         {/* ── Stats bar ── */}
-        <div className="max-w-7xl mx-auto mb-6 grid grid-cols-3 gap-4">
+        <div className="mb-5 grid grid-cols-3 gap-2 sm:gap-4">
           {[
-            { label: 'Total Orders', value: stats.totalOrders, icon: <FileText className="w-5 h-5" />, color: 'text-amber-700 bg-amber-100' },
-            { label: 'Shown',        value: stats.shownOrders, icon: <Filter className="w-5 h-5" />,   color: 'text-orange-700 bg-orange-100' },
-            { label: 'Total Units',  value: stats.totalUnits,  icon: <Package className="w-5 h-5" />,  color: 'text-green-700 bg-green-100' },
+            { label: 'Total Orders', value: stats.totalOrders, icon: <FileText className="w-5 h-5" />, color: 'text-gold-600 bg-gold-400/25' },
+            { label: 'Shown',        value: stats.shownOrders, icon: <Filter className="w-5 h-5" />,   color: 'text-blue-700 bg-blue-100' },
+            { label: 'Total Units',  value: stats.totalUnits,  icon: <Package className="w-5 h-5" />,  color: 'text-emerald-700 bg-emerald-100' },
           ].map(s => (
-            <div key={s.label} className="bg-white rounded-2xl shadow-sm border border-amber-100 px-5 py-4 flex items-center gap-4">
-              <div className={`p-2.5 rounded-xl ${s.color}`}>{s.icon}</div>
-              <div>
-                <p className="text-2xl font-bold text-gray-800">{s.value}</p>
+            <div key={s.label} className="bg-white rounded-xl shadow-sm border border-navy-100 px-3 sm:px-5 py-4 flex items-center gap-2 sm:gap-4">
+              <div className={`p-2.5 rounded-xl hidden sm:block ${s.color}`}>{s.icon}</div>
+              <div className="min-w-0">
+                <p className="text-2xl font-bold text-navy-800">{s.value}</p>
                 <p className="text-xs text-gray-500 font-medium">{s.label}</p>
               </div>
             </div>
@@ -596,12 +589,12 @@ function IAOrdersPage({ socket }) {
         </div>
 
         {/* ── Search + Filter bar ── */}
-        <div className="max-w-7xl mx-auto mb-4 space-y-3">
+        <div className="mb-4 space-y-3">
 
           <div className="flex flex-col sm:flex-row gap-3">
             {/* Search field selector */}
             <select
-              className="px-4 py-3 rounded-xl border border-amber-200 bg-white text-sm text-gray-700 focus:ring-4 focus:ring-amber-300 focus:outline-none shrink-0"
+              className="px-4 py-3 rounded-lg border border-navy-100 bg-white text-sm text-gray-700 shadow-sm focus:ring-2 focus:ring-gold-400 focus:outline-none shrink-0"
               value={searchField}
               onChange={e => setSearchField(e.target.value)}
             >
@@ -624,7 +617,7 @@ function IAOrdersPage({ socket }) {
 
             {/* Search input */}
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-[17px] h-[17px]" />
               <input
                 ref={searchRef}
                 type="text"
@@ -636,7 +629,7 @@ function IAOrdersPage({ socket }) {
                   searchField === 'hmi_imei'   ? 'Search by HMI IMEI...' :
                   `Search by ${searchField.replace('_', ' ')}...`
                 }
-                className="w-full pl-10 pr-10 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 focus:outline-none text-sm"
+                className="w-full pl-11 pr-10 py-3 rounded-lg border border-navy-100 bg-white shadow-sm focus:ring-2 focus:ring-gold-400 focus:outline-none text-sm"
                 value={searchInput}
                 onChange={e => { setSearchInput(e.target.value); debouncedSearch(e.target.value); }}
               />
@@ -650,40 +643,33 @@ function IAOrdersPage({ socket }) {
             {/* Filter toggle */}
             <button
               onClick={() => setShowFilters(v => !v)}
-              className={`px-4 py-3 rounded-xl border text-sm font-medium flex items-center gap-2 transition-all shrink-0
+              className={`px-4 py-3 rounded-lg border text-sm font-medium flex items-center gap-2 transition-colors shrink-0
                 ${showFilters || dateFrom || dateTo
-                  ? 'border-amber-400 bg-amber-50 text-amber-700'
-                  : 'border-amber-200 bg-white text-gray-600 hover:border-amber-300'}`}
+                  ? 'border-gold-400 bg-navy-50 text-gold-600'
+                  : 'border-navy-100 bg-white text-gray-600 hover:border-gold-400'}`}
             >
               <Filter className="w-4 h-4" />
               Filters
               {(dateFrom || dateTo) && (
-                <span className="bg-amber-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                <span className="bg-navy-800 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
                   {[dateFrom, dateTo].filter(Boolean).length}
                 </span>
               )}
             </button>
 
-            {/* New order */}
-            <button
-              onClick={openCreate}
-              className="px-5 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-white font-medium rounded-xl shadow-lg hover:shadow-xl flex items-center gap-2 transition-all whitespace-nowrap shrink-0"
-            >
-              <Plus className="w-5 h-5" /> New Order
-            </button>
           </div>
 
           {/* Expanded filters */}
           {showFilters && (
-            <div className="bg-white border border-amber-200 rounded-xl p-4 flex flex-wrap gap-4 items-end shadow-sm">
+            <div className="bg-white border border-navy-100 rounded-xl p-4 flex flex-wrap gap-4 items-end shadow-sm">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Dispatch Date From</label>
-                <input type="date" className="px-3 py-2 rounded-lg border border-amber-200 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                <input type="date" className="px-3 py-2 rounded-lg border border-navy-100 text-sm focus:ring-2 focus:ring-gold-400 focus:outline-none"
                   value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Dispatch Date To</label>
-                <input type="date" className="px-3 py-2 rounded-lg border border-amber-200 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                <input type="date" className="px-3 py-2 rounded-lg border border-navy-100 text-sm focus:ring-2 focus:ring-gold-400 focus:outline-none"
                   value={dateTo} onChange={e => setDateTo(e.target.value)} />
               </div>
               {(search || dateFrom || dateTo) && (
@@ -699,19 +685,19 @@ function IAOrdersPage({ socket }) {
             <div className="flex flex-wrap gap-2 items-center">
               <span className="text-xs text-gray-500">Active filters:</span>
               {search && (
-                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full">
+                <span className="inline-flex items-center gap-1 bg-gold-400/25 text-gold-600 text-xs px-3 py-1 rounded-full">
                   {searchField === 'all' ? 'All fields' : searchField.replace('_', ' ')}: "{search}"
                   <button onClick={() => { setSearchInput(''); setSearch(''); }}><X className="w-3 h-3" /></button>
                 </span>
               )}
               {dateFrom && (
-                <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 text-xs px-3 py-1 rounded-full">
+                <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-xs px-3 py-1 rounded-full">
                   From: {formatDate(dateFrom)}
                   <button onClick={() => setDateFrom('')}><X className="w-3 h-3" /></button>
                 </span>
               )}
               {dateTo && (
-                <span className="inline-flex items-center gap-1 bg-orange-100 text-orange-800 text-xs px-3 py-1 rounded-full">
+                <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-xs px-3 py-1 rounded-full">
                   To: {formatDate(dateTo)}
                   <button onClick={() => setDateTo('')}><X className="w-3 h-3" /></button>
                 </span>
@@ -722,68 +708,68 @@ function IAOrdersPage({ socket }) {
         </div>
 
         {/* ── Table ── */}
-        <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gradient-to-r from-amber-100 to-orange-50 border-b border-amber-200">
+              <thead className="bg-navy-50 border-b border-navy-100">
                 <tr>
-                  <th className="px-4 py-4 w-10" />
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-4 py-3 w-10" />
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-navy-800 whitespace-nowrap">
                     <div className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5 text-gray-400" /> S.No</div>
                   </th>
                   <SortTh col="customer_name"  label="Customer"      icon={<User className="w-3.5 h-3.5" />}     sortConfig={sortConfig} onSort={handleSort} />
                   <SortTh col="invoice_number" label="Invoice"       icon={<FileText className="w-3.5 h-3.5" />} sortConfig={sortConfig} onSort={handleSort} />
                   <SortTh col="dispatch_date"  label="Dispatch Date" icon={<Calendar className="w-3.5 h-3.5" />} sortConfig={sortConfig} onSort={handleSort} />
                   <SortTh col="units"          label="Units"         icon={<Package className="w-3.5 h-3.5" />}  sortConfig={sortConfig} onSort={handleSort} />
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-navy-800 whitespace-nowrap">
                     <div className="flex items-center gap-1.5"><StickyNote className="w-3.5 h-3.5 text-gray-400" /> Notes</div>
                   </th>
-                  <th className="px-4 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-navy-800 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-navy-100">
                 {sorted.length === 0 && !loading ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-16 text-center">
-                      <Package className="w-12 h-12 text-amber-200 mx-auto mb-3" />
-                      <p className="text-gray-500 font-medium">No orders found</p>
+                      <Package className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-400 font-medium">No orders found</p>
                       {activeFilterCount > 0 && (
-                        <button onClick={resetFilters} className="mt-2 text-sm text-amber-600 hover:text-amber-800 underline">Clear filters</button>
+                        <button onClick={resetFilters} className="mt-2 text-sm text-gold-600 hover:text-gold-600 underline">Clear filters</button>
                       )}
                     </td>
                   </tr>
                 ) : sorted.map((order, index) => (
                   <React.Fragment key={order.order_id}>
-                    <tr className={`transition-colors group ${expandedRows.has(order.order_id) ? 'bg-amber-50/80' : 'hover:bg-amber-50/50'}`}>
+                    <tr className={`transition-colors group ${expandedRows.has(order.order_id) ? 'bg-navy-50/80' : 'hover:bg-navy-50/50'}`}>
                       {/* Expand */}
-                      <td className="px-4 py-4">
-                        <button onClick={() => toggleRow(order.order_id)} className="p-1.5 hover:bg-amber-200 rounded-lg transition-all">
-                          <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expandedRows.has(order.order_id) ? 'rotate-90 text-amber-600' : ''}`} />
+                      <td className="px-4 py-3.5">
+                        <button onClick={() => toggleRow(order.order_id)} className="p-1.5 hover:bg-navy-50 rounded-lg transition-all">
+                          <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${expandedRows.has(order.order_id) ? 'rotate-90 text-gold-600' : ''}`} />
                         </button>
                       </td>
-                      <td className="px-4 py-4 text-sm font-mono text-gray-400">#{sorted.length - index}</td>
-                      <td className="px-4 py-4 text-sm font-semibold text-gray-900">
+                      <td className="px-4 py-3.5 font-mono text-gray-400 whitespace-nowrap">#{sorted.length - index}</td>
+                      <td className="px-4 py-3.5 font-semibold text-gray-900">
                         <Highlight text={order.customer_name} query={searchField === 'all' || searchField === 'customer' ? search : ''} />
                       </td>
-                      <td className="px-4 py-4 text-sm font-mono text-amber-700">
+                      <td className="px-4 py-3.5 font-mono text-gold-600 whitespace-nowrap">
                         <Highlight text={order.invoice_number} query={searchField === 'all' || searchField === 'invoice' ? search : ''} />
                       </td>
-                      <td className="px-4 py-4 text-sm text-gray-600">{formatDate(order.dispatch_date)}</td>
-                      <td className="px-4 py-4">
-                        <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1.5 rounded-full">
+                      <td className="px-4 py-3.5 text-gray-600 whitespace-nowrap">{formatDate(order.dispatch_date)}</td>
+                      <td className="px-4 py-3.5">
+                        <span className="inline-flex items-center gap-1.5 bg-gold-400/25 text-gold-600 text-xs font-semibold px-2.5 py-1.5 rounded-full">
                           <Package className="w-3 h-3" /> {order.items?.length || 0}
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-sm text-gray-600 max-w-xs">
+                      <td className="px-4 py-3.5 text-gray-600 max-w-xs">
                         {order.notes ? (
-                          <button onClick={() => setNotesModal(order.notes)} className="text-left truncate block max-w-[150px] hover:text-amber-700 transition-colors" title="Click to view">
+                          <button onClick={() => setNotesModal(order.notes)} className="text-left truncate block max-w-[150px] hover:text-gold-600 transition-colors" title="Click to view">
                             {order.notes.length > 35 ? `${order.notes.slice(0, 35)}…` : order.notes}
                           </button>
                         ) : <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-4 py-4">
+                      <td className="px-4 py-3.5">
                         <div className="flex gap-1.5 opacity-70 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => openEdit(order)} className="p-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-all" title="Edit"><Edit2 className="w-4 h-4" /></button>
+                          <button onClick={() => openEdit(order)} className="p-2 text-gold-600 hover:bg-navy-50 rounded-lg transition-all" title="Edit"><Edit2 className="w-4 h-4" /></button>
                           <button onClick={() => handleDelete(order)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Delete"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </td>
@@ -791,15 +777,15 @@ function IAOrdersPage({ socket }) {
 
                     {/* ── Expanded items ── */}
                     {expandedRows.has(order.order_id) && (
-                      <tr className="bg-amber-50/40">
+                      <tr className="bg-navy-50/40">
                         <td colSpan={8} className="px-6 pb-5 pt-2">
                           {order.items?.length > 0 ? (
-                            <div className="space-y-2">
+                            <div className="space-y-2 sticky left-0 max-w-[calc(100vw-6.5rem)] lg:max-w-none">
                               {order.items.map((item, i) => {
                                 const hasHmi = itemHasHmi(item);
                                 return (
-                                  <div key={item.item_id} className="bg-white rounded-xl border border-amber-100 shadow-sm overflow-hidden">
-                                    <div className={`grid ${hasHmi ? 'grid-cols-2 divide-x divide-amber-100' : 'grid-cols-1'}`}>
+                                  <div key={item.item_id} className="bg-white rounded-xl border border-navy-100 shadow-sm overflow-hidden">
+                                    <div className={`grid ${hasHmi ? 'grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-navy-100' : 'grid-cols-1'}`}>
                                       {/* VCU */}
                                       <div className="p-3">
                                         <div className="flex items-center gap-2 mb-2">
@@ -811,7 +797,7 @@ function IAOrdersPage({ socket }) {
                                             <span className="ml-auto text-xs text-gray-300 italic">No HMI</span>
                                           )}
                                         </div>
-                                        <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs">
+                                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1 text-xs">
                                           <div>
                                             <span className="text-gray-400 block">Serial</span>
                                             <span className="font-mono font-semibold text-gray-800">
@@ -839,7 +825,7 @@ function IAOrdersPage({ socket }) {
                                           <div className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-bold px-2 py-0.5 rounded-md mb-2 w-fit">
                                             <Monitor className="w-3 h-3" /> HMI
                                           </div>
-                                          <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs">
+                                          <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1 text-xs">
                                             <div>
                                               <span className="text-gray-400 block">IMEI</span>
                                               <span className="font-mono font-semibold text-gray-800">
@@ -877,39 +863,38 @@ function IAOrdersPage({ socket }) {
           </div>
 
           {loading && orders.length === 0 && (
-            <div className="p-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-amber-500 mx-auto" /></div>
+            <div className="p-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-gold-600 mx-auto" /></div>
           )}
 
           {hasMore && (
-            <div className="p-4 text-center border-t border-amber-100">
+            <div className="p-4 text-center border-t border-navy-100">
               <button onClick={debouncedLoadMore} disabled={loading}
-                className="px-6 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 font-medium rounded-xl border border-amber-200 disabled:opacity-50 flex items-center gap-2 mx-auto transition-all text-sm">
+                className="px-6 py-2.5 bg-navy-50 hover:bg-gold-400/25 text-gold-600 font-medium rounded-xl border border-navy-100 disabled:opacity-50 flex items-center gap-2 mx-auto transition-all text-sm">
                 {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Loading...</> : 'Load More Orders'}
               </button>
             </div>
           )}
         </div>
-      </div>
 
       {/* ── Notes modal ── */}
       <Modal isOpen={!!notesModal} onRequestClose={() => setNotesModal(null)}
-        className="bg-white rounded-2xl p-6 max-w-lg mx-auto mt-24 shadow-2xl outline-none"
-        overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        className="bg-white rounded-xl p-6 max-w-lg mx-auto mt-0 sm:mt-24 shadow-2xl outline-none max-h-[90vh] overflow-y-auto"
+        overlayClassName="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2"><StickyNote className="w-5 h-5 text-amber-500" /> Notes</h3>
+          <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2"><StickyNote className="w-5 h-5 text-gold-600" /> Notes</h3>
           <button onClick={() => setNotesModal(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-500" /></button>
         </div>
-        <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl">
+        <div className="bg-navy-50 border border-navy-100 p-4 rounded-xl">
           <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans break-words">{notesModal}</pre>
         </div>
       </Modal>
 
       {/* ── Create / Edit modal ── */}
       <Modal isOpen={isModalOpen} onRequestClose={closeModal}
-        className="bg-white rounded-2xl p-8 max-w-3xl mx-auto mt-8 shadow-2xl outline-none overflow-y-auto max-h-[92vh]"
-        overlayClassName="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        className="bg-white rounded-xl p-4 sm:p-6 max-w-3xl mx-auto mt-0 sm:mt-8 shadow-2xl outline-none overflow-y-auto max-h-[92vh] w-full sm:w-auto"
+        overlayClassName="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">{editingOrder ? 'Edit Order' : 'New Dispatch Order'}</h2>
+          <h2 className="font-display text-xl font-bold text-navy-800">{editingOrder ? 'Edit Order' : 'New Dispatch Order'}</h2>
           <button onClick={closeModal} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><X className="w-5 h-5 text-gray-500" /></button>
         </div>
 
@@ -918,13 +903,13 @@ function IAOrdersPage({ socket }) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Customer Name</label>
               <input type="text" required placeholder="e.g. ABC Industries"
-                className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 focus:outline-none text-sm"
+                className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400 focus:outline-none text-sm"
                 value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Invoice Number</label>
               <input type="text" required placeholder="e.g. INV-2024-001"
-                className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 focus:outline-none text-sm font-mono"
+                className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400 focus:outline-none text-sm font-mono"
                 value={form.invoice_number} onChange={e => setForm({ ...form, invoice_number: e.target.value })} />
             </div>
           </div>
@@ -932,7 +917,7 @@ function IAOrdersPage({ socket }) {
           <div className="max-w-xs">
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Dispatch Date</label>
             <input type="date" required
-              className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 focus:outline-none text-sm"
+              className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400 focus:outline-none text-sm"
               value={toYMD(form.dispatch_date)} onChange={e => setForm({ ...form, dispatch_date: toYMD(e.target.value) })} />
           </div>
 
@@ -941,7 +926,7 @@ function IAOrdersPage({ socket }) {
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-medium text-gray-700">VCU + HMI Units</label>
               <button type="button" onClick={addItem}
-                className="text-xs text-amber-600 hover:text-amber-800 font-semibold flex items-center gap-1 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-all">
+                className="text-xs text-gold-600 hover:text-gold-600 font-semibold flex items-center gap-1 bg-navy-50 hover:bg-navy-50 px-3 py-1.5 rounded-lg transition-all">
                 <Plus className="w-3.5 h-3.5" /> Add unit
               </button>
             </div>
@@ -952,26 +937,26 @@ function IAOrdersPage({ socket }) {
               <div>
                 <span className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">VCU Code for this order</span>
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="inline-flex rounded-lg border border-amber-200 overflow-hidden text-xs font-medium">
+                  <div className="inline-flex rounded-lg border border-navy-100 overflow-hidden text-xs font-medium">
                     <button type="button" onClick={() => setCodeMode('same')}
-                      className={`px-3 py-2 transition-colors ${form.codeMode === 'same' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-amber-50'}`}>
+                      className={`px-3 py-2 transition-colors ${form.codeMode === 'same' ? 'bg-navy-800 text-white' : 'bg-white text-gray-600 hover:bg-navy-50'}`}>
                       Same for all units
                     </button>
                     <button type="button" onClick={() => setCodeMode('mixed')}
-                      className={`px-3 py-2 transition-colors border-l border-amber-200 ${form.codeMode === 'mixed' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-amber-50'}`}>
+                      className={`px-3 py-2 transition-colors border-l border-navy-100 ${form.codeMode === 'mixed' ? 'bg-navy-800 text-white' : 'bg-white text-gray-600 hover:bg-navy-50'}`}>
                       Mixed per unit
                     </button>
                   </div>
                   <div>
                     <input type="text" value={serialGen.prefix}
                       onChange={e => setCodePrefix(e.target.value)}
-                      className="w-16 px-3 py-2 rounded-lg border border-amber-200 text-sm font-mono focus:ring-2 focus:ring-amber-300 focus:outline-none" placeholder="VCL" />
+                      className="w-16 px-3 py-2 rounded-lg border border-navy-100 text-sm font-mono focus:ring-2 focus:ring-gold-400 focus:outline-none" placeholder="VCL" />
                   </div>
                   {form.codeMode === 'same' ? (
                     <div className="flex items-center gap-1.5">
                       <input type="number" min="0" value={form.orderCode}
                         onChange={e => setOrderCode(e.target.value)}
-                        className="w-20 px-3 py-2 rounded-lg border border-amber-200 text-sm font-mono focus:ring-2 focus:ring-amber-300 focus:outline-none" placeholder="1" />
+                        className="w-20 px-3 py-2 rounded-lg border border-navy-100 text-sm font-mono focus:ring-2 focus:ring-gold-400 focus:outline-none" placeholder="1" />
                       <span className="text-xs text-gray-400">
                         → {(serialGen.prefix || DEFAULT_CODE_PREFIX)}{padSerialNum(parseInt(form.orderCode, 10) || 0)}
                       </span>
@@ -992,16 +977,16 @@ function IAOrdersPage({ socket }) {
                     <label className="block text-xs text-gray-500 mb-1">Start #</label>
                     <input type="number" min="0" value={serialGen.start}
                       onChange={e => setSerialGen(prev => ({ ...prev, start: e.target.value }))}
-                      className="w-20 px-3 py-2 rounded-lg border border-amber-200 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none" placeholder="10" />
+                      className="w-20 px-3 py-2 rounded-lg border border-navy-100 text-sm focus:ring-2 focus:ring-gold-400 focus:outline-none" placeholder="10" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">End #</label>
                     <input type="number" min="0" value={serialGen.end}
                       onChange={e => setSerialGen(prev => ({ ...prev, end: e.target.value }))}
-                      className="w-20 px-3 py-2 rounded-lg border border-amber-200 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none" placeholder="20" />
+                      className="w-20 px-3 py-2 rounded-lg border border-navy-100 text-sm focus:ring-2 focus:ring-gold-400 focus:outline-none" placeholder="20" />
                   </div>
                   <button type="button" onClick={generateSerials} disabled={checkingSerials}
-                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-all flex items-center gap-1.5">
+                    className="px-4 py-2 bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors flex items-center gap-1.5">
                     {checkingSerials ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                     Generate
                   </button>
@@ -1032,19 +1017,19 @@ function IAOrdersPage({ socket }) {
               <div>
                 <span className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">VCU Model for this order</span>
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="inline-flex rounded-lg border border-amber-200 overflow-hidden text-xs font-medium">
+                  <div className="inline-flex rounded-lg border border-navy-100 overflow-hidden text-xs font-medium">
                     <button type="button" onClick={() => setModelMode('same')}
-                      className={`px-3 py-2 transition-colors ${form.modelMode === 'same' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-amber-50'}`}>
+                      className={`px-3 py-2 transition-colors ${form.modelMode === 'same' ? 'bg-navy-800 text-white' : 'bg-white text-gray-600 hover:bg-navy-50'}`}>
                       Same for all units
                     </button>
                     <button type="button" onClick={() => setModelMode('mixed')}
-                      className={`px-3 py-2 transition-colors border-l border-amber-200 ${form.modelMode === 'mixed' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-amber-50'}`}>
+                      className={`px-3 py-2 transition-colors border-l border-navy-100 ${form.modelMode === 'mixed' ? 'bg-navy-800 text-white' : 'bg-white text-gray-600 hover:bg-navy-50'}`}>
                       Mixed per unit
                     </button>
                   </div>
                   {form.modelMode === 'same' ? (
                     <select
-                      className="px-3 py-2 rounded-lg border border-amber-200 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none"
+                      className="px-3 py-2 rounded-lg border border-navy-100 text-sm focus:ring-2 focus:ring-gold-400 focus:outline-none"
                       value={form.orderModel}
                       onChange={e => setOrderModel(e.target.value)}
                     >
@@ -1059,9 +1044,9 @@ function IAOrdersPage({ socket }) {
 
             <div className="space-y-3">
               {form.items.map((item, index) => (
-                <div key={index} className="border border-amber-200 rounded-xl overflow-hidden">
-                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-2 flex items-center justify-between border-b border-amber-100">
-                    <span className="text-xs font-bold text-amber-700 uppercase tracking-wide">Unit {index + 1}</span>
+                <div key={index} className="border border-navy-100 rounded-xl overflow-hidden">
+                  <div className="bg-navy-50 px-4 py-2 flex items-center justify-between border-b border-navy-100">
+                    <span className="text-xs font-bold text-gold-600 uppercase tracking-wide">Unit {index + 1}</span>
                     {form.items.length > 1 && (
                       <button type="button" onClick={() => removeItem(index)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded-lg transition-all">
                         <X className="w-3.5 h-3.5" />
@@ -1070,11 +1055,11 @@ function IAOrdersPage({ socket }) {
                   </div>
                   <div className="p-4 space-y-3">
                     {/* VCU row */}
-                    <div className="flex items-start gap-3">
-                      <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-bold px-2.5 py-2 rounded-lg shrink-0 mt-5 border border-blue-100">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
+                      <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-bold px-2.5 py-2 rounded-lg shrink-0 self-start sm:self-auto mt-0 sm:mt-5 border border-blue-100">
                         <Cpu className="w-3.5 h-3.5" /> VCU
                       </div>
-                      <div className="grid grid-cols-4 gap-2 flex-1">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-1 min-w-0">
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">Code #</label>
                           {form.codeMode === 'mixed' ? (
@@ -1084,7 +1069,7 @@ function IAOrdersPage({ socket }) {
                                 type="number"
                                 min="0"
                                 placeholder="1"
-                                className="w-full px-2 py-2 rounded-lg border border-amber-200 focus:ring-2 focus:ring-amber-300 focus:outline-none text-sm font-mono"
+                                className="w-full px-2 py-2 rounded-lg border border-navy-100 focus:ring-2 focus:ring-gold-400 focus:outline-none text-sm font-mono"
                                 value={item.vcu_code_num}
                                 onChange={e => setItemCode(index, e.target.value)}
                               />
@@ -1101,7 +1086,7 @@ function IAOrdersPage({ socket }) {
                             type="text"
                             required
                             placeholder="VCL001--058"
-                            className="w-full px-3 py-2 rounded-lg border border-amber-200 focus:ring-2 focus:ring-amber-300 focus:outline-none text-sm font-mono"
+                            className="w-full px-3 py-2 rounded-lg border border-navy-100 focus:ring-2 focus:ring-gold-400 focus:outline-none text-sm font-mono"
                             value={item.vcu_serial}
                             onChange={e => setItemField(index, 'vcu_serial', e.target.value)}
                           />
@@ -1111,7 +1096,7 @@ function IAOrdersPage({ socket }) {
                           <select
                             required
                             disabled={form.modelMode === 'same'}
-                            className={`w-full px-3 py-2 rounded-lg border border-amber-200 focus:ring-2 focus:ring-amber-300 focus:outline-none text-sm ${form.modelMode === 'same' ? 'bg-gray-50 text-gray-500' : ''}`}
+                            className={`w-full px-3 py-2 rounded-lg border border-navy-100 focus:ring-2 focus:ring-gold-400 focus:outline-none text-sm ${form.modelMode === 'same' ? 'bg-gray-50 text-gray-500' : ''}`}
                             value={item.vcu_model}
                             onChange={e => setItemField(index, 'vcu_model', e.target.value)}
                           >
@@ -1130,14 +1115,14 @@ function IAOrdersPage({ socket }) {
                       </div>
                     </div>
 
-                    <div className="border-t border-dashed border-amber-100" />
+                    <div className="border-t border-dashed border-navy-100" />
 
                     {/* HMI row — optional */}
-                    <div className="flex items-start gap-3">
-                      <div className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-bold px-2.5 py-2 rounded-lg shrink-0 mt-5 border border-green-100">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
+                      <div className="flex items-center gap-1.5 bg-green-50 text-green-700 text-xs font-bold px-2.5 py-2 rounded-lg shrink-0 self-start sm:self-auto mt-0 sm:mt-5 border border-green-100">
                         <Monitor className="w-3.5 h-3.5" /> HMI
                       </div>
-                      <div className="grid grid-cols-3 gap-2 flex-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1 min-w-0">
                         {[
                           ['hmi_imei',  'IMEI',  '358XXXXXXXXXXX', true],
                           ['hmi_make',  'Make',  'e.g. Weintek',   false],
@@ -1151,7 +1136,7 @@ function IAOrdersPage({ socket }) {
                             <input
                               type="text"
                               placeholder={placeholder}
-                              className={`w-full px-3 py-2 rounded-lg border border-amber-200 focus:ring-2 focus:ring-amber-300 focus:outline-none text-sm ${mono ? 'font-mono' : ''}`}
+                              className={`w-full px-3 py-2 rounded-lg border border-navy-100 focus:ring-2 focus:ring-gold-400 focus:outline-none text-sm ${mono ? 'font-mono' : ''}`}
                               value={item[field]}
                               onChange={e => setItemField(index, field, e.target.value)}
                             />
@@ -1165,7 +1150,7 @@ function IAOrdersPage({ socket }) {
                       const hmiFields = [item.hmi_imei.trim(), item.hmi_make.trim(), item.hmi_model.trim()];
                       const filled = hmiFields.filter(Boolean).length;
                       return filled > 0 && filled < 3 ? (
-                        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+                        <p className="text-xs text-gold-600 bg-navy-50 border border-navy-100 rounded-lg px-3 py-2 flex items-center gap-1.5">
                           <span>⚠️</span> Fill all HMI fields or leave all blank
                         </p>
                       ) : null;
@@ -1176,7 +1161,7 @@ function IAOrdersPage({ socket }) {
               <button
                 type="button"
                 onClick={addItem}
-                className="w-full flex items-center justify-center gap-1.5 text-xs text-amber-600 hover:text-amber-800 font-semibold bg-amber-50 hover:bg-amber-100 border border-dashed border-amber-300 px-3 py-2.5 rounded-xl transition-all"
+                className="w-full flex items-center justify-center gap-1.5 text-xs text-gold-600 hover:text-gold-600 font-semibold bg-navy-50 hover:bg-navy-50 border border-dashed border-gold-400 px-3 py-2.5 rounded-xl transition-all"
               >
                 <Plus className="w-3.5 h-3.5" /> Add unit
               </button>
@@ -1187,20 +1172,20 @@ function IAOrdersPage({ socket }) {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
             <textarea rows={3} placeholder="Any additional notes..."
-              className="w-full px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 focus:outline-none resize-none text-sm"
+              className="w-full px-4 py-3 rounded-xl border border-navy-100 focus:ring-4 focus:ring-gold-400 focus:outline-none resize-none text-sm"
               value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={closeModal} className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-all text-sm font-medium">Cancel</button>
-            <button type="submit" className="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-white rounded-xl shadow-lg hover:shadow-xl transition-all text-sm font-medium">
+            <button type="submit" className={`px-6 py-3 rounded-lg text-sm font-semibold transition-colors ${editingOrder ? 'bg-navy-800 text-white hover:bg-navy-700' : 'bg-gold-500 text-navy-900 hover:bg-gold-400'}`}>
               {editingOrder ? 'Update Order' : 'Create Order'}
             </button>
           </div>
         </form>
       </Modal>
 
-</div>
+    </PeoplePage>
   );
 }
 

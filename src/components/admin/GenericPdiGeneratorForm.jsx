@@ -134,10 +134,10 @@ function UndoToast({ message, onUndo }) {
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white rounded-lg shadow-lg px-4 py-3 flex items-center gap-4 z-50"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy-800 text-white rounded-lg shadow-lg px-4 py-3 flex items-center gap-4 z-50 max-w-[calc(100vw-2rem)]"
     >
       <span className="text-sm">{message}</span>
-      <button type="button" onClick={onUndo} className="text-amber-400 text-sm font-semibold hover:text-amber-300">
+      <button type="button" onClick={onUndo} className="text-gold-400 text-sm font-semibold hover:text-gold-300 transition-colors">
         Undo
       </button>
     </div>
@@ -148,11 +148,11 @@ function ReviewPanel({ items, onFinalizeAnyway, finalizing }) {
   const incomplete = items.filter((i) => !i.filled);
   return (
     <div className="max-w-xl">
-      <h2 className="text-xl font-bold text-gray-800 mb-2">Review &amp; Finalize</h2>
+      <h2 className="font-display text-xl font-bold text-navy-800 mb-2">Review &amp; Finalize</h2>
       {incomplete.length === 0 ? (
         <p className="text-sm text-gray-500 mb-6">Every section has at least some data filled in. You&apos;re good to finalize.</p>
       ) : (
-        <p className="text-sm text-amber-700 mb-4">
+        <p className="text-sm text-gold-600 mb-4">
           {incomplete.length} section{incomplete.length === 1 ? '' : 's'} still empty: {incomplete.map((i) => i.label).join(', ')}.
         </p>
       )}
@@ -168,7 +168,7 @@ function ReviewPanel({ items, onFinalizeAnyway, finalizing }) {
         type="button"
         onClick={onFinalizeAnyway}
         disabled={finalizing}
-        className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+        className="flex items-center gap-2 px-6 py-2.5 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-50 text-sm font-semibold"
       >
         <Download size={16} />
         {finalizing ? 'Finalizing...' : 'Finalize Anyway'}
@@ -1027,24 +1027,24 @@ export default function GenericPdiGeneratorForm() {
 
   if (isOpen && form) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
+      <div className="min-h-[calc(100vh-7rem)] bg-navy-50 flex flex-col rounded-xl border border-navy-100 overflow-hidden">
+        <div className="bg-white border-b border-navy-100 px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <FileText className="text-amber-500 shrink-0" size={22} />
-            <h1 className="text-lg font-bold text-gray-800 truncate">{templateName}</h1>
+            <FileText className="text-gold-500 shrink-0" size={22} />
+            <h1 className="font-display text-lg font-bold text-navy-800 truncate">{templateName}</h1>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-medium text-gray-500">PDI No.</label>
-              <input className={INPUT_CLS + ' w-40'} value={form.pdi_no} onChange={(e) => setField('pdi_no', e.target.value)} placeholder="e.g. PDI-2026-001" />
+          <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
+            <div className="flex items-center gap-2 flex-1 sm:flex-none min-w-0">
+              <label className="text-xs font-medium text-gray-500 whitespace-nowrap">PDI No.</label>
+              <input className={INPUT_CLS + ' sm:w-40'} value={form.pdi_no} onChange={(e) => setField('pdi_no', e.target.value)} placeholder="e.g. PDI-2026-001" />
             </div>
-            <span className="text-xs text-gray-400 w-36 text-right shrink-0">{SAVE_STATUS_LABEL[saveStatus]}</span>
+            <span className="text-xs text-gray-400 sm:w-36 text-right shrink-0">{SAVE_STATUS_LABEL[saveStatus]}</span>
           </div>
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-col lg:flex-row flex-1 lg:overflow-hidden">
           <GenericPdiSidebar templateName={templateName} items={sidebarItems} activeKey={activeKey} onSelect={setActiveKey} />
-          <div className="flex-1 overflow-y-auto px-10 py-8">
+          <div className="flex-1 min-w-0 lg:overflow-y-auto px-4 sm:px-6 lg:px-10 py-5 lg:py-8">
             {activeKey === 'review' ? (
               <ReviewPanel items={sidebarItems} onFinalizeAnyway={() => doFinalize(true)} finalizing={loading} />
             ) : (
@@ -1053,11 +1053,11 @@ export default function GenericPdiGeneratorForm() {
           </div>
         </div>
 
-        <div className="flex justify-between gap-3 px-8 py-4 border-t border-gray-200 bg-white shrink-0">
+        <div className="grid grid-cols-2 lg:flex lg:justify-between gap-3 px-4 sm:px-8 py-4 border-t border-navy-100 bg-white shrink-0">
           <button type="button" onClick={handleSave} disabled={saving} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm font-semibold">
             {saving ? 'Saving...' : 'Save Progress'}
           </button>
-          <div className="flex items-center gap-3">
+          <div className="contents lg:flex lg:items-center lg:gap-3">
             <button type="button" onClick={goPrevious} disabled={activeIndex <= 0} className="px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-40 text-sm">
               &larr; Previous
             </button>
@@ -1071,7 +1071,7 @@ export default function GenericPdiGeneratorForm() {
               type="button"
               onClick={() => doFinalize(false)}
               disabled={loading}
-              className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+              className="col-span-2 lg:col-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-50 text-sm font-semibold"
             >
               <Download size={16} />
               {loading ? 'Finalizing...' : 'Finalize & Generate PDF'}
@@ -1086,21 +1086,21 @@ export default function GenericPdiGeneratorForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">{templateName}</h1>
+    <div className="max-w-3xl mx-auto space-y-6">
+      <h1 className="font-display text-2xl font-bold text-navy-800">{templateName}</h1>
 
-      <div className="max-w-3xl mx-auto">
+      <div>
         <div
           onClick={handleOpen}
-          className="bg-white rounded-2xl shadow-lg p-8 cursor-pointer hover:shadow-xl transition-shadow border-2 border-dashed border-amber-300 flex items-center gap-6"
+          className="bg-white rounded-xl shadow-sm p-5 sm:p-8 cursor-pointer hover:shadow-md transition-shadow border-2 border-dashed border-gold-400 flex items-center gap-4 sm:gap-6"
         >
-          <div className="p-4 bg-amber-100 rounded-xl">
-            <FileText size={40} className="text-amber-600" />
+          <div className="p-3 sm:p-4 bg-gold-400/25 rounded-xl shrink-0">
+            <FileText size={40} className="text-gold-600" />
           </div>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">New {templateName}</h2>
+          <div className="min-w-0">
+            <h2 className="font-display text-xl sm:text-2xl font-bold text-navy-800">New {templateName}</h2>
             <p className="text-gray-500 mt-1">Fill in the details and generate a PDF report.</p>
-            <span className="inline-block mt-3 px-4 py-1.5 bg-amber-500 text-white rounded-lg text-sm font-medium">
+            <span className="inline-block mt-3 px-4 py-1.5 bg-gold-500 text-navy-900 rounded-lg text-sm font-semibold">
               + Create PDI
             </span>
           </div>

@@ -66,31 +66,31 @@ const STATUS_OPTIONS = ["Pending", "In Progress", "Completed"];
 const statusToBadgeClass = (status) => {
   switch (status) {
     case "Completed":
-      return "bg-green-600 text-white";
+      return "bg-emerald-100 text-emerald-700";
     case "In Progress":
-      return "bg-yellow-600 text-white";
+      return "bg-gold-400/25 text-gold-600";
     case "Pending":
     default:
-      return "bg-gray-400 text-white";
+      return "bg-gray-100 text-gray-500";
   }
 };
 
 /* ---------- generic modal ---------- */
 const Modal = ({ title, onClose, children, widthClass = "max-w-2xl" }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+  <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
     <div className={`w-full ${widthClass}`}>
-      <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
-          className="sticky top-4 right-4 float-right text-gray-500 hover:text-gray-700 z-10"
+          className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors z-10"
           aria-label="Close"
         >
-          <X size={22} />
+          <X size={20} />
         </button>
-        <div className="p-6 border-b">
-          <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
+        <div className="p-4 sm:p-6 border-b border-navy-100">
+          <h3 className="font-display text-xl font-bold text-navy-800 pr-8">{title}</h3>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-4 sm:p-6">{children}</div>
       </div>
     </div>
   </div>
@@ -185,30 +185,30 @@ function ProcessRowEditor({
       </div>
 
       <div>
-        <label className="block text-sm text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-navy-800 mb-1">
           Responsible Person
         </label>
         <input
           type="text"
           value={row.responsiblePerson || ""}
           onChange={(e) => onChange({ ...row, responsiblePerson: e.target.value })}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          className="w-full px-3 py-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
           placeholder="e.g., Asha"
         />
       </div>
 
       <div>
-        <label className="block text-sm text-gray-700 mb-1">Target Date</label>
+        <label className="block text-sm font-medium text-navy-800 mb-1">Target Date</label>
         <input
           type="date"
           value={row.targetDate || ""}
           onChange={(e) => onChange({ ...row, targetDate: e.target.value })}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          className="w-full px-3 py-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
         />
       </div>
 
       <div>
-        <label className="block text-sm text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-navy-800 mb-1">
           In-Use Quantity
           <span className="ml-2 text-xs text-gray-500">
             (Materials currently being worked on - shared globally)
@@ -218,7 +218,7 @@ function ProcessRowEditor({
           type="number"
           value={row.inUseQuantity ?? ""}
           onChange={(e) => onChange({ ...row, inUseQuantity: e.target.value })}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          className="w-full px-3 py-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
           min="0"
           step="1"
           placeholder="0"
@@ -226,7 +226,7 @@ function ProcessRowEditor({
       </div>
 
       <div>
-        <label className="block text-sm text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-navy-800 mb-1">
           Completed Quantity
           <span className="ml-2 text-xs text-gray-500">
             (Finished work - independent per process)
@@ -236,7 +236,7 @@ function ProcessRowEditor({
           type="number"
           value={row.completedQuantity ?? ""}
           onChange={(e) => onChange({ ...row, completedQuantity: e.target.value })}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          className="w-full px-3 py-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
           min="0"
           step="1"
           placeholder="0"
@@ -255,13 +255,13 @@ function ProcessRowEditor({
       <div className="flex justify-end gap-3">
         <button
           onClick={onCancel}
-          className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+          className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
         >
           Cancel
         </button>
         <button
           onClick={handleSave}
-          className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
+          className="px-4 py-2 rounded-lg bg-navy-800 text-white hover:bg-navy-700 transition-colors"
         >
           Save
         </button>
@@ -289,14 +289,14 @@ function MaterialEditor({ material, onCancel, onSave }) {
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
       <div>
-        <label className="block text-sm text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-navy-800 mb-1">
           Quantity (Raw Material ID: {material.rawMaterialId})
         </label>
         <input
           type="number"
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
-          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+          className="w-full px-3 py-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
           min="1"
           step="1"
         />
@@ -305,13 +305,13 @@ function MaterialEditor({ material, onCancel, onSave }) {
       <div className="flex justify-end gap-3">
         <button
           onClick={onCancel}
-          className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+          className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
         >
           Cancel
         </button>
         <button
           onClick={handleSave}
-          className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
+          className="px-4 py-2 rounded-lg bg-navy-800 text-white hover:bg-navy-700 transition-colors"
         >
           Save
         </button>
@@ -445,14 +445,14 @@ function AddMaterialModal({ wocId, onClose, onAdded }) {
     <Modal title="Add Raw Material" onClose={onClose} widthClass="max-w-md">
       <div className="space-y-5">
         <div className="relative">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-navy-800 mb-1">
             Raw Material
           </label>
 
           {loading ? (
             <div className="py-3 text-gray-500 text-center">Loading materials…</div>
           ) : stockItems.length === 0 ? (
-            <div className="py-3 text-amber-700 text-center">
+            <div className="py-3 text-gold-600 text-center">
               No raw materials available in stock
             </div>
           ) : (
@@ -466,13 +466,13 @@ function AddMaterialModal({ wocId, onClose, onAdded }) {
                   setSelectedItem(null);
                 }}
                 onFocus={() => setShowDropdown(true)}
-                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-300"
+                className="w-full border border-navy-100 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gold-400"
                 placeholder="Search materials..."
                 disabled={addBusy}
               />
 
               {showDropdown && filteredItems.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                <div className="absolute z-10 w-full mt-1 bg-white border border-navy-100 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                   {filteredItems.map((item) => {
                     const name = item.productName || `Product ${item.productId}`;
                     const code = item.productCode ? ` [${item.productCode}]` : "";
@@ -483,9 +483,9 @@ function AddMaterialModal({ wocId, onClose, onAdded }) {
                       <div
                         key={item.productId}
                         onClick={() => handleSelectItem(item)}
-                        className="px-4 py-3 hover:bg-amber-50 cursor-pointer border-b last:border-0"
+                        className="px-4 py-3 hover:bg-navy-50 cursor-pointer border-b border-navy-100 last:border-0 transition-colors"
                       >
-                        <div className="font-medium text-gray-800">
+                        <div className="font-medium text-navy-800">
                           {name}
                           {code}
                         </div>
@@ -500,19 +500,19 @@ function AddMaterialModal({ wocId, onClose, onAdded }) {
               )}
 
               {showDropdown && filteredItems.length === 0 && searchTerm && (
-                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg p-4 text-center text-gray-500">
+                <div className="absolute z-10 w-full mt-1 bg-white border border-navy-100 rounded-lg shadow-lg p-4 text-center text-gray-500">
                   No materials found matching "{searchTerm}"
                 </div>
               )}
 
               {selectedItem && (
-                <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="mt-2 p-3 bg-navy-50 border border-navy-100 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium text-amber-900">
+                      <div className="font-medium text-navy-800">
                         {selectedItem.productName}
                       </div>
-                      <div className="text-sm text-amber-700">
+                      <div className="text-sm text-gold-600">
                         Available: {selectedItem.stockQuantity}
                         {selectedItem.location && ` • ${selectedItem.location}`}
                       </div>
@@ -522,7 +522,7 @@ function AddMaterialModal({ wocId, onClose, onAdded }) {
                         setSelectedItem(null);
                         setSearchTerm("");
                       }}
-                      className="text-amber-600 hover:text-amber-800"
+                      className="text-gray-400 hover:text-navy-800 transition-colors"
                     >
                       <X size={18} />
                     </button>
@@ -534,7 +534,7 @@ function AddMaterialModal({ wocId, onClose, onAdded }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-navy-800 mb-1">
             Quantity
           </label>
           <input
@@ -543,7 +543,7 @@ function AddMaterialModal({ wocId, onClose, onAdded }) {
             onChange={(e) => setQuantity(e.target.value)}
             min="1"
             step="1"
-            className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-300"
+            className="w-full border border-navy-100 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gold-400"
             placeholder="e.g. 150"
             disabled={addBusy || loading || stockItems.length === 0}
           />
@@ -553,14 +553,14 @@ function AddMaterialModal({ wocId, onClose, onAdded }) {
           <button
             onClick={onClose}
             disabled={addBusy}
-            className="px-5 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-50"
+            className="px-5 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleAdd}
             disabled={addBusy || loading || stockItems.length === 0 || !selectedItem}
-            className="px-5 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-60"
+            className="px-5 py-2 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-60"
           >
             {addBusy ? "Adding…" : "Add Material"}
           </button>
@@ -583,21 +583,21 @@ function StageEditor({ stage, onCancel, onSave }) {
     >
       <div className="space-y-4">
         <div>
-          <label className="block text-sm text-gray-700 mb-1">Target Date</label>
+          <label className="block text-sm font-medium text-navy-800 mb-1">Target Date</label>
           <input
             type="date"
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+            className="w-full px-3 py-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
             value={targetDate}
             onChange={(e) => setTargetDate(e.target.value)}
           />
         </div>
         <div className="flex justify-end gap-3">
-          <button onClick={onCancel} className="px-4 py-2 rounded-lg border">
+          <button onClick={onCancel} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
             Cancel
           </button>
           <button
             onClick={() => onSave({ targetDate })}
-            className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
+            className="px-4 py-2 rounded-lg bg-navy-800 text-white hover:bg-navy-700 transition-colors"
           >
             Save
           </button>
@@ -892,7 +892,7 @@ function ComponentDetailModal({
           <button
             onClick={ensureWorkOrderComponent}
             disabled={busy}
-            className="px-5 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-60"
+            className="px-5 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors disabled:opacity-60"
           >
             {busy ? "Creating…" : "Initialize Component"}
           </button>
@@ -919,8 +919,8 @@ function ComponentDetailModal({
           </div>
         )}
 
-        <div className="bg-white rounded-xl border p-5 shadow-sm">
-          <h4 className="text-lg font-semibold mb-4 flex items-center justify-between">
+        <div className="bg-white rounded-xl border border-navy-100 p-5 shadow-sm">
+          <h4 className="text-lg font-semibold text-navy-800 mb-4 flex items-center justify-between">
             <span>Processes</span>
             <span className="text-sm font-normal text-gray-500">
               Max allowed: {maxAllowedQty}
@@ -931,8 +931,8 @@ function ComponentDetailModal({
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="text-left text-gray-600 border-b">
-                    <th className="py-2 pr-4">Seq</th>
+                  <tr className="text-left bg-navy-50 text-navy-800 font-semibold">
+                    <th className="py-2 pr-4 pl-2">Seq</th>
                     <th className="py-2 pr-4">Process</th>
                     <th className="py-2 pr-4">Responsible</th>
                     <th className="py-2 pr-4">Target Date</th>
@@ -942,13 +942,13 @@ function ComponentDetailModal({
                     <th className="py-2">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-navy-100">
                   {processRows.map((p) => (
-                    <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50">
-                      <td className="py-3 pr-4 text-gray-500">{p.sequence}</td>
-                      <td className="py-3 pr-4 font-medium">{p.name}</td>
-                      <td className="py-3 pr-4">{p.responsiblePerson || "—"}</td>
-                      <td className="py-3 pr-4">{p.targetDate || "—"}</td>
+                    <tr key={p.id} className="hover:bg-navy-50/60 transition-colors">
+                      <td className="py-3 pr-4 pl-2 text-gray-500">{p.sequence}</td>
+                      <td className="py-3 pr-4 font-medium text-navy-800">{p.name}</td>
+                      <td className="py-3 pr-4 text-gray-600">{p.responsiblePerson || "—"}</td>
+                      <td className="py-3 pr-4 text-gray-600">{p.targetDate || "—"}</td>
                       <td className="py-3 pr-4">
                         <span
                           className={`px-3 py-1 rounded-full text-xs font-semibold ${statusToBadgeClass(
@@ -964,13 +964,13 @@ function ComponentDetailModal({
                         </span>
                       </td>
                       <td className="py-3 pr-4">
-                        <span className="font-medium">{p.completedQuantity}</span>
+                        <span className="font-medium text-navy-800">{p.completedQuantity}</span>
                         <span className="text-gray-500"> / {maxAllowedQty}</span>
                       </td>
                       <td className="py-3">
                         <button
                           onClick={() => setEditRow(p)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded hover:bg-amber-50"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-navy-100 text-navy-800 rounded hover:bg-navy-50 transition-colors"
                         >
                           <Pencil size={15} /> Edit
                         </button>
@@ -989,16 +989,16 @@ function ComponentDetailModal({
           )}
         </div>
 
-        <div className="bg-white rounded-xl border p-5 shadow-sm">
+        <div className="bg-white rounded-xl border border-navy-100 p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h4 className="text-lg font-semibold flex items-center gap-2">
-              <Package size={18} className="text-amber-600" />
+            <h4 className="text-lg font-semibold text-navy-800 flex items-center gap-2">
+              <Package size={18} className="text-gold-600" />
               Raw Materials
             </h4>
             {workOrderComponent && (
               <button
                 onClick={() => setShowAddMaterial(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors"
               >
                 <Plus size={16} /> Add Material
               </button>
@@ -1006,14 +1006,14 @@ function ComponentDetailModal({
           </div>
 
           {materials.length ? (
-            <ul className="divide-y">
+            <ul className="divide-y divide-navy-100">
               {materials.map((rm) => (
                 <li
                   key={rm.workOrderMaterialId}
-                  className="py-3 flex justify-between items-center"
+                  className="py-3 flex flex-wrap justify-between items-center gap-2"
                 >
                   <div>
-                    <div className="font-medium">
+                    <div className="font-medium text-navy-800">
                       {rm.rawMaterialName || `Raw Material ${rm.rawMaterialId}`}
                     </div>
                     <div className="text-sm text-gray-600">
@@ -1026,13 +1026,13 @@ function ComponentDetailModal({
                     </span>
                     <button
                       onClick={() => setEditMaterial(rm)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded hover:bg-amber-50"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-navy-100 text-navy-800 rounded hover:bg-navy-50 transition-colors"
                     >
                       <Pencil size={15} /> Edit
                     </button>
                     <button
                       onClick={() => deleteMaterial(rm.workOrderMaterialId)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-red-200 text-red-600 rounded hover:bg-red-50"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
                     >
                       <Trash2 size={15} /> Delete
                     </button>
@@ -1506,69 +1506,69 @@ export default function CreateMotorProcess({ socket }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-600">
+      <div className="flex items-center justify-center py-24 text-gray-500">
         Loading motors and configuration…
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6 md:p-8">
-      <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-8 md:mb-10 text-center">
-        Work Orders — Order #{orderId} — {customerName || "Unknown Customer"}
-      </h1>
+    <div className="max-w-7xl mx-auto space-y-4">
+      <p className="text-sm text-gray-500">
+        Order #{orderId} — <span className="text-navy-800 font-medium">{customerName || "Unknown Customer"}</span>
+      </p>
 
-      <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row gap-4 md:gap-6">
+      <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-grow">
           <input
             type="text"
             placeholder="Search motors by name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full p-4 pl-12 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-300 bg-white shadow-sm"
+            className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
           />
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
         </div>
 
         <div className="flex gap-3 flex-wrap">
           <button
             onClick={refetchAll}
             disabled={loadingList}
-            className="px-5 py-3 bg-amber-100 text-amber-800 rounded-xl hover:bg-amber-200 flex items-center gap-2 shadow-sm"
+            className="flex items-center gap-2 px-4 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
           >
-            <RefreshCw className={loadingList ? "animate-spin" : ""} size={18} />
+            <RefreshCw className={loadingList ? "animate-spin" : ""} size={16} />
             Refresh
           </button>
           <button
             onClick={() => setShowAddMotor(true)}
-            className="px-6 py-3 bg-amber-600 text-white rounded-xl hover:bg-amber-700 flex items-center gap-2 shadow-md"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors"
           >
-            <PlusCircle size={18} /> Add Motor
+            <PlusCircle size={16} /> Add Motor
           </button>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow overflow-x-auto">
+      <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-gradient-to-r from-amber-100 to-amber-50">
-              <th className="py-5 px-4 font-semibold text-gray-800">Motor</th>
+            <tr className="bg-navy-50">
+              <th className="py-3 px-4 font-semibold text-navy-800 text-sm">Motor</th>
               {displayColumns.map((col) => (
                 <th
                   key={col.label}
-                  className="py-5 px-4 font-semibold text-gray-800 whitespace-nowrap"
+                  className="py-3 px-4 font-semibold text-navy-800 text-sm whitespace-nowrap"
                 >
                   {col.label}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-navy-100">
             {filteredMotors.length === 0 ? (
               <tr>
                 <td
                   colSpan={1 + displayColumns.length}
-                  className="py-12 text-center text-gray-500"
+                  className="py-12 text-center text-gray-400"
                 >
                   No motors found. Add a motor to begin.
                 </td>
@@ -1577,11 +1577,11 @@ export default function CreateMotorProcess({ socket }) {
               filteredMotors.map((motor) => (
                 <tr
                   key={motor.instance_group_id}
-                  className="border-t hover:bg-amber-50/60 transition-colors"
+                  className="hover:bg-navy-50/60 transition-colors"
                 >
-                  <td className="py-5 px-4">
-                    <div className="font-semibold">{motor.instance_name || "(unnamed)"}</div>
-                    <div className="text-sm text-gray-600">Motor</div>
+                  <td className="py-3.5 px-4">
+                    <div className="font-medium text-navy-800">{motor.instance_name || "(unnamed)"}</div>
+                    <div className="text-sm text-gray-500">Motor</div>
                   </td>
 
                   {displayColumns.map((col) => {
@@ -1594,12 +1594,12 @@ export default function CreateMotorProcess({ socket }) {
                         const testingMap = testingByWorkOrder.get(motor.instance_group_id);
 
                         return (
-                          <td key="stage-Testing" className="py-5 px-4">
+                          <td key="stage-Testing" className="py-3.5 px-4">
                             {["Primary", "Final"].map((type) => {
                               const entry = testingMap?.get(type);
                               return (
                                 <div key={type} className="flex items-center gap-2 text-xs mb-1 last:mb-0">
-                                  <span className="font-medium text-gray-700 w-14 shrink-0">{type}</span>
+                                  <span className="font-medium text-gray-600 w-14 shrink-0">{type}</span>
                                   <span className="text-gray-600">{entry?.testDate || "—"}</span>
                                   <button
                                     onClick={() =>
@@ -1612,7 +1612,7 @@ export default function CreateMotorProcess({ socket }) {
                                         controllerType: entry?.controllerType ?? null,
                                       })
                                     }
-                                    className="text-amber-700 hover:underline"
+                                    className="text-gold-600 hover:underline transition-colors"
                                   >
                                     {entry?.testDate ? "edit" : "add"}
                                   </button>
@@ -1627,7 +1627,7 @@ export default function CreateMotorProcess({ socket }) {
                       const stage = stageMap?.get(normalizeNameKey(col.label));
 
                       return (
-                        <td key={`stage-${col.label}`} className="py-5 px-4">
+                        <td key={`stage-${col.label}`} className="py-3.5 px-4">
                           {stage ? (
                             <div className="flex items-center gap-2 text-sm">
                               <span className="text-gray-600">
@@ -1640,7 +1640,7 @@ export default function CreateMotorProcess({ socket }) {
                                     workOrderId: stage.workOrderId,
                                   })
                                 }
-                                className="text-amber-700 hover:underline text-xs"
+                                className="text-gold-600 hover:underline text-xs transition-colors"
                               >
                                 edit
                               </button>
@@ -1657,7 +1657,7 @@ export default function CreateMotorProcess({ socket }) {
                                     : motor.instance_group_id,
                                 })
                               }
-                              className="text-xs text-amber-600 hover:underline italic"
+                              className="text-xs text-gold-600 hover:underline italic transition-colors"
                             >
                               Add date
                             </button>
@@ -1668,7 +1668,7 @@ export default function CreateMotorProcess({ socket }) {
 
                     if (col.missing) {
                       return (
-                        <td key={col.label} className="py-5 px-4 text-xs text-gray-400 italic">
+                        <td key={col.label} className="py-3.5 px-4 text-xs text-gray-400 italic">
                           Not defined
                         </td>
                       );
@@ -1687,13 +1687,13 @@ export default function CreateMotorProcess({ socket }) {
                       editingCell?.componentId === col.componentId;
 
                     return (
-                      <td key={col.componentId} className="py-5 px-4">
+                      <td key={col.componentId} className="py-3.5 px-4">
                         {isEditingThisCell ? (
                           <div className="flex items-center gap-2 flex-wrap">
                             <select
                               value={editingValue}
                               onChange={(e) => setEditingValue(e.target.value)}
-                              className="border rounded px-3 py-1.5 text-sm"
+                              className="border border-navy-100 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
                             >
                               {STATUS_OPTIONS.map((opt) => (
                                 <option key={opt} value={opt}>
@@ -1703,13 +1703,13 @@ export default function CreateMotorProcess({ socket }) {
                             </select>
                             <button
                               onClick={() => saveStatus(motor, col, editingValue)}
-                              className="px-3 py-1.5 bg-amber-600 text-white rounded hover:bg-amber-700 text-sm"
+                              className="px-3 py-1.5 bg-navy-800 text-white rounded hover:bg-navy-700 transition-colors text-sm"
                             >
                               Save
                             </button>
                             <button
                               onClick={() => setEditingCell(null)}
-                              className="px-3 py-1.5 border rounded hover:bg-gray-100 text-sm"
+                              className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors text-sm"
                             >
                               Cancel
                             </button>
@@ -1729,7 +1729,7 @@ export default function CreateMotorProcess({ socket }) {
                             </button>
                             <button
                               onClick={() => openCellDetails(motor, col)}
-                              className="text-sm text-amber-700 hover:underline"
+                              className="text-sm text-gold-600 hover:underline transition-colors"
                             >
                               Details
                             </button>

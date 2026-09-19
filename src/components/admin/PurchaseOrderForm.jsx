@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import Modal from 'react-modal';
 import axios from 'axios';
-import { Plus, Download, Trash2, FileText, Settings } from 'lucide-react';
+import { Plus, Download, Trash2, FileText, Settings, XCircle } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import { useNotify } from '../../hooks/useNotify';
 import ConnectionError from '../pages/ConnectionError.jsx';
@@ -195,22 +195,21 @@ export default function PurchaseOrderForm() {
 
   /* ── Landing page ─────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
-      <div className="max-w-4xl mx-auto">
+    <div className="max-w-7xl mx-auto space-y-4">
+      <div className="max-w-4xl mx-auto space-y-6">
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5">
           <div>
-            <div className="inline-flex items-center gap-2 bg-amber-100 border border-amber-200 rounded-full px-3 py-1 mb-3">
-              <FileText size={12} className="text-amber-700" />
-              <span className="text-amber-700 text-xs font-semibold tracking-wide">FY 2025-26</span>
+            <div className="inline-flex items-center gap-2 bg-gold-400/25 rounded-full px-3 py-1 mb-3">
+              <FileText size={12} className="text-gold-600" />
+              <span className="text-gold-600 text-xs font-semibold tracking-wide">FY 2025-26</span>
             </div>
-            <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Purchase Orders</h1>
-            <p className="text-gray-600 text-sm mt-1.5">Create purchase orders for suppliers with instant PDF export</p>
+            <p className="text-gray-600 text-sm">Create purchase orders for suppliers with instant PDF export</p>
           </div>
           <button
             onClick={() => setIsOpen(true)}
-            className="px-5 py-2.5 bg-green-700 hover:bg-green-800 text-white rounded-xl flex items-center gap-2 font-semibold transition-all shadow-md hover:shadow-lg text-sm shrink-0"
+            className="px-5 py-2.5 bg-gold-500 text-navy-900 rounded-lg flex items-center gap-2 font-semibold hover:bg-gold-400 transition-colors text-sm shrink-0"
           >
             <Plus size={15} /> New Purchase Order
           </button>
@@ -218,17 +217,17 @@ export default function PurchaseOrderForm() {
 
         {/* Summary card */}
         <div
-          className="bg-gradient-to-br from-amber-100 to-amber-50 rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer border border-amber-200"
+          className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer border border-navy-100"
           onClick={() => setIsOpen(true)}
         >
-          <div className="h-1.5 bg-gradient-to-r from-orange-500 to-amber-600" />
+          <div className="h-1.5 bg-gold-500" />
           <div className="p-7">
             <div className="flex items-start justify-between mb-6">
               <div>
                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.15em] mb-1">Current Draft</p>
-                <h2 className="text-xl font-bold text-gray-800">{form.po_no}</h2>
+                <h2 className="text-xl font-bold text-navy-800">{form.po_no}</h2>
               </div>
-              <span className="bg-amber-200 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-300">
+              <span className="bg-gold-400/25 text-gold-600 text-xs font-bold px-3 py-2 md:py-1.5 rounded-full">
                 Draft
               </span>
             </div>
@@ -239,25 +238,25 @@ export default function PurchaseOrderForm() {
                 { label: 'Date',       value: form.date                 },
                 { label: 'Supplier',   value: form.to_name || '—'       },
               ].map(({ label, value }) => (
-                <div key={label} className="bg-white rounded-xl p-4 border border-amber-100">
+                <div key={label} className="bg-white rounded-xl p-4 border border-navy-100">
                   <p className="text-xs text-gray-500 mb-1">{label}</p>
-                  <p className="font-semibold text-gray-800 text-sm truncate">{value}</p>
+                  <p className="font-semibold text-navy-800 text-sm truncate">{value}</p>
                 </div>
               ))}
-              <div className="bg-white rounded-xl p-4 border border-amber-100">
+              <div className="bg-white rounded-xl p-4 border border-navy-100">
                 <p className="text-xs text-gray-500 mb-1">Grand Net Total</p>
-                <p className="font-bold text-lg text-orange-700">₹ {formatINR(grandNet)}</p>
+                <p className="font-bold text-lg text-gold-600">₹ {formatINR(grandNet)}</p>
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-amber-200">
+            <div className="flex items-center justify-between pt-4 border-t border-navy-100">
               <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
                 <span>{form.items.length} item{form.items.length !== 1 ? 's' : ''}</span>
                 {form.ref_no && <><span>·</span><span>Ref: {form.ref_no}</span></>}
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); setTermsOpen(true); }}
-                className="text-xs text-gray-500 hover:text-gray-700 transition-colors flex items-center gap-1"
+                className="text-xs text-gray-500 hover:text-navy-800 transition-colors flex items-center gap-1"
               >
                 <Settings size={11} /> Manage Terms
               </button>
@@ -265,256 +264,282 @@ export default function PurchaseOrderForm() {
           </div>
         </div>
 
-        <p className="text-gray-500 text-xs text-center mt-6">
+        <p className="text-gray-500 text-xs text-center">
           Click the card or "New Purchase Order" to fill in details and generate a PDF
         </p>
+      </div>
 
-        {/* ── Main Form Modal ─────────────────────────────── */}
-        <Modal
-          isOpen={isOpen}
-          onRequestClose={() => setIsOpen(false)}
-          className="max-w-5xl mx-auto mt-6 bg-white rounded-xl p-6 outline-none shadow-xl"
-          overlayClassName="fixed inset-0 bg-black bg-opacity-40 flex items-start justify-center z-50 overflow-y-auto"
+      {/* ── Main Form Modal ─────────────────────────────── */}
+      <Modal
+        isOpen={isOpen}
+        onRequestClose={() => setIsOpen(false)}
+        className="w-full md:w-auto max-w-5xl mx-auto mt-6 mb-4 md:mb-0 bg-white rounded-xl p-6 outline-none shadow-2xl relative"
+        overlayClassName="fixed inset-0 bg-navy-900/50 flex items-start justify-center z-50 overflow-y-auto p-3 lg:p-0"
+      >
+        <button
+          onClick={() => setIsOpen(false)}
+          className="absolute top-4 right-4 p-2 -m-2 text-gray-400 hover:text-navy-800 transition-colors"
+          aria-label="Close"
         >
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="text-xl font-semibold text-gray-800">Purchase Order Details</h3>
-            <button onClick={() => setIsOpen(false)} className="px-3 py-1.5 border rounded text-sm text-gray-600">Close</button>
+          <XCircle size={20} />
+        </button>
+        <h2 className="font-display text-xl font-bold text-navy-800 mb-5">Purchase Order Details</h2>
+
+        <form onSubmit={handleGenerate} className="space-y-5">
+
+          {/* Top row: PO No, Ref No, Date, Ref Date */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="text-sm font-medium text-navy-800 mb-1 block">ORDER No. *</label>
+              <input
+                className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
+                value={form.po_no}
+                onChange={e => setForm(p => ({ ...p, po_no: e.target.value }))}
+                required
+                placeholder="CAS/2025-26/001"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-navy-800 mb-1 block">Ref No.</label>
+              <input
+                className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
+                value={form.ref_no}
+                onChange={e => setForm(p => ({ ...p, ref_no: e.target.value }))}
+                placeholder="Optional"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-navy-800 mb-1 block">Date</label>
+              <input
+                type="date"
+                className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
+                value={form.date}
+                onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-navy-800 mb-1 block">Ref Date</label>
+              <input
+                type="date"
+                className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
+                value={form.ref_date}
+                onChange={e => setForm(p => ({ ...p, ref_date: e.target.value }))}
+              />
+            </div>
           </div>
 
-          <form onSubmit={handleGenerate} className="space-y-5">
-
-            {/* Top row: PO No, Ref No, Date, Ref Date */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">ORDER No. *</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={form.po_no}
-                  onChange={e => setForm(p => ({ ...p, po_no: e.target.value }))}
-                  required
-                  placeholder="CAS/2025-26/001"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Ref No.</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={form.ref_no}
-                  onChange={e => setForm(p => ({ ...p, ref_no: e.target.value }))}
-                  placeholder="Optional"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Date</label>
-                <input
-                  type="date"
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={form.date}
-                  onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Ref Date</label>
-                <input
-                  type="date"
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={form.ref_date}
-                  onChange={e => setForm(p => ({ ...p, ref_date: e.target.value }))}
-                />
-              </div>
+          {/* To section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-navy-800 mb-1 block">To (Supplier Name)</label>
+              <input
+                className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
+                value={form.to_name}
+                onChange={e => setForm(p => ({ ...p, to_name: e.target.value }))}
+              />
             </div>
-
-            {/* To section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">To (Supplier Name)</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={form.to_name}
-                  onChange={e => setForm(p => ({ ...p, to_name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Supplier Address / City</label>
-                <input
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  value={form.to_address}
-                  onChange={e => setForm(p => ({ ...p, to_address: e.target.value }))}
-                />
-              </div>
+            <div>
+              <label className="text-sm font-medium text-navy-800 mb-1 block">Supplier Address / City</label>
+              <input
+                className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
+                value={form.to_address}
+                onChange={e => setForm(p => ({ ...p, to_address: e.target.value }))}
+              />
             </div>
+          </div>
 
-            {/* Items table */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-3">
-                <span className="font-semibold text-gray-800 text-sm">Items</span>
-                <button type="button" onClick={addItem} className="text-green-700 text-sm flex items-center gap-1.5">
-                  <Plus size={14} /> Add Item
-                </button>
-              </div>
-
-              {/* Header row */}
-              <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-gray-500 mb-2 px-1">
-                <div className="col-span-1 text-center">#</div>
-                <div className="col-span-4">Description</div>
-                <div className="col-span-1 text-center">Qty (KG)</div>
-                <div className="col-span-2 text-center">Unit Price</div>
-                <div className="col-span-1 text-center">Total</div>
-                <div className="col-span-1 text-center">Disc%</div>
-                <div className="col-span-1 text-center">Net Price</div>
-                <div className="col-span-1" />
-              </div>
-
-              {form.items.map((it, idx) => (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-start mb-2">
-                  <div className="col-span-1 text-center pt-2.5 text-sm text-gray-500">{idx + 1}</div>
-                  <textarea
-                    rows={2}
-                    className="col-span-4 border rounded-lg px-2 py-1.5 text-sm resize-none"
-                    value={it.description}
-                    onChange={e => updateItem(idx, 'description', e.target.value)}
-                    placeholder="Description"
-                  />
-                  <input
-                    type="number" min="0" step="any"
-                    className="col-span-1 border rounded-lg px-2 py-1.5 text-sm text-center"
-                    value={it.qty}
-                    onChange={e => updateItem(idx, 'qty', e.target.value)}
-                    placeholder="0"
-                  />
-                  <input
-                    type="number" min="0" step="0.01"
-                    className="col-span-2 border rounded-lg px-2 py-1.5 text-sm"
-                    value={it.unit_price}
-                    onChange={e => updateItem(idx, 'unit_price', e.target.value)}
-                    placeholder="0.00"
-                  />
-                  <input
-                    type="number" min="0" step="0.01"
-                    className="col-span-1 border rounded-lg px-2 py-1.5 text-sm"
-                    value={it.total_price}
-                    onChange={e => updateItem(idx, 'total_price', e.target.value)}
-                    placeholder="auto"
-                  />
-                  <input
-                    type="number" min="0" max="100" step="0.01"
-                    className="col-span-1 border rounded-lg px-2 py-1.5 text-sm text-center"
-                    value={it.discount}
-                    onChange={e => updateItem(idx, 'discount', e.target.value)}
-                    placeholder="0"
-                  />
-                  <input
-                    type="number" min="0" step="0.01"
-                    className="col-span-1 border rounded-lg px-2 py-1.5 text-sm"
-                    value={it.net_price}
-                    onChange={e => updateItem(idx, 'net_price', e.target.value)}
-                    placeholder="auto"
-                  />
-                  <div className="col-span-1 flex justify-center pt-1.5">
-                    {form.items.length > 1 && (
-                      <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700">
-                        <Trash2 size={15} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {/* Grand net total */}
-              <div className="flex justify-end mt-3 pt-3 border-t border-gray-200">
-                <div className="text-right">
-                  <div className="text-xs text-gray-500">Grand Net Total</div>
-                  <div className="font-bold text-lg text-orange-700">₹ {formatINR(grandNet)}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Terms & Conditions preview */}
-            <div className="flex items-center gap-4">
-              <div>
-                <div className="text-sm text-gray-700 font-medium">Terms &amp; Conditions</div>
-                <div className="text-xs text-gray-500 mt-0.5">Using {defaultTerms.length} default terms</div>
-              </div>
+          {/* Items table */}
+          <div className="bg-white rounded-lg border border-navy-100 p-4">
+            <div className="flex justify-between items-center mb-3">
+              <span className="font-semibold text-navy-800 text-sm">Items</span>
               <button
                 type="button"
-                onClick={() => setTermsOpen(true)}
-                className="px-3 py-1.5 border rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-1.5"
+                onClick={addItem}
+                className="text-navy-800 hover:text-navy-600 font-medium transition-colors text-sm flex items-center gap-1.5 py-2 -my-2"
               >
-                <Settings size={13} /> Manage Terms
+                <Plus size={14} /> Add Item
               </button>
             </div>
 
-            {/* Actions */}
-            <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => setIsOpen(false)} className="px-4 py-2 border rounded-lg text-sm text-gray-600">
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-6 py-2 bg-green-700 hover:bg-green-800 text-white rounded-lg flex items-center gap-2 text-sm font-semibold shadow-sm"
-              >
-                <Download size={15} />
-                {loading ? 'Generating…' : 'Generate PDF'}
-              </button>
+            <div className="overflow-x-auto">
+            <div className="min-w-[760px]">
+            {/* Header row */}
+            <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-navy-800 mb-2 px-2 py-2 bg-navy-50 rounded-lg">
+              <div className="col-span-1 text-center">#</div>
+              <div className="col-span-4">Description</div>
+              <div className="col-span-1 text-center">Qty (KG)</div>
+              <div className="col-span-2 text-center">Unit Price</div>
+              <div className="col-span-1 text-center">Total</div>
+              <div className="col-span-1 text-center">Disc%</div>
+              <div className="col-span-1 text-center">Net Price</div>
+              <div className="col-span-1" />
             </div>
-          </form>
-        </Modal>
 
-        {/* ── Manage Terms Modal ─────────────────────────── */}
-        <Modal
-          isOpen={termsOpen}
-          onRequestClose={() => setTermsOpen(false)}
-          className="max-w-2xl mx-auto mt-12 bg-white rounded-xl p-6 outline-none shadow-xl"
-          overlayClassName="fixed inset-0 bg-black bg-opacity-40 flex items-start justify-center z-50 overflow-y-auto"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="font-semibold text-gray-800">Manage Default Terms &amp; Conditions</h4>
-            <div className="flex gap-2">
-              <button onClick={() => setTermsOpen(false)} className="px-3 py-1 border rounded text-sm">Close</button>
-              <button onClick={() => saveTerms(termsDraft)} className="px-3 py-1 bg-green-700 text-white rounded text-sm">Save</button>
-            </div>
-          </div>
-
-          <p className="text-sm text-gray-500 mb-4">
-            These terms will be printed on all Purchase Orders. Changes are saved to your browser.
-          </p>
-
-          <div className="space-y-3">
-            {termsDraft.map((t, i) => (
-              <div key={i} className="flex gap-2 items-start">
+            {form.items.map((it, idx) => (
+              <div key={idx} className="grid grid-cols-12 gap-2 items-start mb-2 px-2 py-1 rounded-lg hover:bg-navy-50/60 transition-colors">
+                <div className="col-span-1 text-center pt-2.5 text-sm text-gray-500">{idx + 1}</div>
                 <textarea
                   rows={2}
-                  className="flex-1 border rounded-lg px-3 py-1.5 text-sm"
-                  value={t}
-                  onChange={e => setTermsDraft(prev => prev.map((x, j) => j === i ? e.target.value : x))}
+                  className="col-span-4 border border-navy-100 rounded-lg px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gold-400"
+                  value={it.description}
+                  onChange={e => updateItem(idx, 'description', e.target.value)}
+                  placeholder="Description"
                 />
-                <button
-                  onClick={() => setTermsDraft(prev => prev.filter((_, j) => j !== i))}
-                  className="px-2 py-1.5 text-red-500 border rounded-lg text-sm h-10"
-                >
-                  Remove
-                </button>
+                <input
+                  type="number" min="0" step="any"
+                  className="col-span-1 border border-navy-100 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-gold-400"
+                  value={it.qty}
+                  onChange={e => updateItem(idx, 'qty', e.target.value)}
+                  placeholder="0"
+                />
+                <input
+                  type="number" min="0" step="0.01"
+                  className="col-span-2 border border-navy-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
+                  value={it.unit_price}
+                  onChange={e => updateItem(idx, 'unit_price', e.target.value)}
+                  placeholder="0.00"
+                />
+                <input
+                  type="number" min="0" step="0.01"
+                  className="col-span-1 border border-navy-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
+                  value={it.total_price}
+                  onChange={e => updateItem(idx, 'total_price', e.target.value)}
+                  placeholder="auto"
+                />
+                <input
+                  type="number" min="0" max="100" step="0.01"
+                  className="col-span-1 border border-navy-100 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-gold-400"
+                  value={it.discount}
+                  onChange={e => updateItem(idx, 'discount', e.target.value)}
+                  placeholder="0"
+                />
+                <input
+                  type="number" min="0" step="0.01"
+                  className="col-span-1 border border-navy-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
+                  value={it.net_price}
+                  onChange={e => updateItem(idx, 'net_price', e.target.value)}
+                  placeholder="auto"
+                />
+                <div className="col-span-1 flex justify-center pt-1.5">
+                  {form.items.length > 1 && (
+                    <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700 transition-colors">
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
+            </div>
+            </div>
+
+            {/* Grand net total */}
+            <div className="flex justify-end mt-3 pt-3 border-t border-navy-100">
+              <div className="text-right">
+                <div className="text-xs text-gray-500">Grand Net Total</div>
+                <div className="font-bold text-lg text-gold-600">₹ {formatINR(grandNet)}</div>
+              </div>
+            </div>
           </div>
 
-          <div className="flex gap-2 mt-4">
+          {/* Terms & Conditions preview */}
+          <div className="flex items-center gap-4">
+            <div>
+              <div className="text-sm text-gray-700 font-medium">Terms &amp; Conditions</div>
+              <div className="text-xs text-gray-500 mt-0.5">Using {defaultTerms.length} default terms</div>
+            </div>
             <button
-              onClick={() => setTermsDraft(prev => [...prev, ''])}
-              className="px-3 py-1.5 border rounded-lg text-sm flex items-center gap-1.5"
+              type="button"
+              onClick={() => setTermsOpen(true)}
+              className="px-3 py-2 md:py-1.5 border border-navy-100 rounded-lg text-sm text-navy-800 hover:bg-navy-50 transition-colors flex items-center gap-1.5"
             >
-              <Plus size={13} /> Add Term
-            </button>
-            <button
-              onClick={() => { setTermsDraft(DEFAULT_TERMS_FALLBACK.slice()); notifyInfo('Reset to defaults'); }}
-              className="px-3 py-1.5 border rounded-lg text-sm text-gray-600"
-            >
-              Reset to Default
+              <Settings size={13} /> Manage Terms
             </button>
           </div>
-        </Modal>
-      </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-2 bg-gold-500 text-navy-900 rounded-lg flex items-center gap-2 text-sm font-semibold hover:bg-gold-400 transition-colors disabled:bg-gray-200 disabled:text-gray-400"
+            >
+              <Download size={15} />
+              {loading ? 'Generating…' : 'Generate PDF'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ── Manage Terms Modal ─────────────────────────── */}
+      <Modal
+        isOpen={termsOpen}
+        onRequestClose={() => setTermsOpen(false)}
+        className="w-full md:w-auto max-w-2xl mx-auto mt-12 mb-4 md:mb-0 bg-white rounded-xl p-6 outline-none shadow-2xl"
+        overlayClassName="fixed inset-0 bg-navy-900/50 flex items-start justify-center z-50 overflow-y-auto p-3 lg:p-0"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-xl font-bold text-navy-800">Manage Default Terms &amp; Conditions</h2>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setTermsOpen(false)}
+              className="px-3 py-2 md:py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+            >
+              Close
+            </button>
+            <button
+              onClick={() => saveTerms(termsDraft)}
+              className="px-3 py-2 md:py-1.5 bg-gold-500 text-navy-900 rounded-lg text-sm font-semibold hover:bg-gold-400 transition-colors"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          These terms will be printed on all Purchase Orders. Changes are saved to your browser.
+        </p>
+
+        <div className="space-y-3">
+          {termsDraft.map((t, i) => (
+            <div key={i} className="flex gap-2 items-start">
+              <textarea
+                rows={2}
+                className="flex-1 border border-navy-100 rounded-lg px-3 py-2 md:py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
+                value={t}
+                onChange={e => setTermsDraft(prev => prev.map((x, j) => j === i ? e.target.value : x))}
+              />
+              <button
+                onClick={() => setTermsDraft(prev => prev.filter((_, j) => j !== i))}
+                className="px-2 py-1.5 text-red-500 hover:text-red-700 border border-navy-100 rounded-lg text-sm h-10 transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          <button
+            onClick={() => setTermsDraft(prev => [...prev, ''])}
+            className="px-3 py-2 md:py-1.5 border border-navy-100 rounded-lg text-sm text-navy-800 hover:bg-navy-50 transition-colors flex items-center gap-1.5"
+          >
+            <Plus size={13} /> Add Term
+          </button>
+          <button
+            onClick={() => { setTermsDraft(DEFAULT_TERMS_FALLBACK.slice()); notifyInfo('Reset to defaults'); }}
+            className="px-3 py-2 md:py-1.5 border border-navy-100 rounded-lg text-sm text-navy-800 hover:bg-navy-50 transition-colors"
+          >
+            Reset to Default
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

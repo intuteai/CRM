@@ -71,7 +71,7 @@ function stripUiKeys(definition) {
 const STATUS_STYLES = {
   draft: 'bg-gray-100 text-gray-600',
   active: 'bg-green-100 text-green-700',
-  archived: 'bg-amber-100 text-amber-700',
+  archived: 'bg-gold-400/25 text-gold-600',
 };
 
 function StatusBadge({ status }) {
@@ -95,11 +95,11 @@ function SectionCard({ section, onChange, definition }) {
   const typeOption = sectionTypeOption(section);
   const filledIn = sectionLooksFilledIn(section);
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
+    <div className="border border-navy-100 rounded-lg overflow-hidden w-full">
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left"
+        className="w-full flex items-center justify-between px-3 py-2 bg-navy-50 hover:bg-navy-100 text-left transition-colors"
       >
         <div className="flex items-center gap-2 min-w-0">
           <span
@@ -112,7 +112,7 @@ function SectionCard({ section, onChange, definition }) {
         {expanded ? <ChevronUp size={16} className="text-gray-400 shrink-0" /> : <ChevronDown size={16} className="text-gray-400 shrink-0" />}
       </button>
       {expanded && (
-        <div className="p-3 border-t border-gray-200">
+        <div className="p-2 sm:p-3 border-t border-navy-100">
           <SectionEditorFor section={section} onChange={onChange} definition={definition} />
         </div>
       )}
@@ -202,9 +202,9 @@ function TemplateEditor({ template, onClose, onSaved }) {
 
   return (
     <ShowKeysContext.Provider value={showKeys}>
-    <div className="flex gap-4 items-start" style={{ minHeight: '70vh' }}>
+    <div className="flex flex-col xl:flex-row gap-4 items-stretch xl:items-start" style={{ minHeight: '70vh' }}>
       <div className="flex-1 min-w-0 space-y-4">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <input className={FIELD_CLS + ' text-lg font-semibold'} value={name} onChange={(e) => setName(e.target.value)} />
           <span className="text-xs text-gray-400 shrink-0">id: {template.id}</span>
           <label className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0 ml-auto cursor-pointer">
@@ -217,7 +217,7 @@ function TemplateEditor({ template, onClose, onSaved }) {
         </p>
         <div className="space-y-4">
           {definition.pages.map((page, i) => (
-            <div key={i} className="border border-gray-300 rounded p-3">
+            <div key={i} className="border border-navy-100 rounded p-2 sm:p-3">
               <div className="text-sm font-semibold mb-2">Page {i + 1}</div>
               <PageEditor
                 page={page}
@@ -239,19 +239,19 @@ function TemplateEditor({ template, onClose, onSaved }) {
           <button
             type="button"
             onClick={() => setDefinition({ ...definition, pages: [...definition.pages, { sections: [] }] })}
-            className="flex items-center gap-1 text-sm font-medium text-amber-700 border border-amber-300 rounded px-3 py-1.5 hover:bg-amber-50"
+            className="flex items-center gap-1 text-sm font-medium bg-gold-500 text-navy-900 rounded px-3 py-1.5 hover:bg-gold-400 transition-colors"
           >
             <Plus size={16} /> Add page
           </button>
         </div>
-        <div className="flex gap-2 pt-3 border-t border-gray-200">
-          <button type="button" disabled={saving} onClick={() => save(null)} className="px-3 py-2 border rounded text-sm">Save</button>
-          <button type="button" disabled={saving} onClick={() => save('publish')} className="flex items-center gap-1 px-3 py-2 bg-amber-500 text-white rounded text-sm"><Upload size={16} /> Save &amp; Publish</button>
-          <button type="button" disabled={saving} onClick={() => save('archive')} className="flex items-center gap-1 px-3 py-2 border rounded text-sm text-gray-600"><Archive size={16} /> Archive</button>
-          <button type="button" onClick={onClose} className="px-3 py-2 text-sm text-gray-500">Close</button>
+        <div className="flex flex-wrap gap-2 pt-3 border-t border-navy-100">
+          <button type="button" disabled={saving} onClick={() => save(null)} className="px-3 py-2 bg-navy-800 text-white rounded text-sm font-medium hover:bg-navy-700 transition-colors disabled:opacity-50">Save</button>
+          <button type="button" disabled={saving} onClick={() => save('publish')} className="flex items-center gap-1 px-3 py-2 bg-navy-800 text-white rounded text-sm font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"><Upload size={16} /> Save &amp; Publish</button>
+          <button type="button" disabled={saving} onClick={() => save('archive')} className="flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded text-sm font-medium hover:bg-gray-200 transition-colors disabled:opacity-50"><Archive size={16} /> Archive</button>
+          <button type="button" onClick={onClose} className="px-3 py-2 bg-gray-100 text-gray-700 rounded text-sm font-medium hover:bg-gray-200 transition-colors">Close</button>
         </div>
       </div>
-      <div className="w-96 shrink-0 sticky top-4" style={{ height: '70vh' }}>
+      <div className="w-full xl:w-96 xl:shrink-0 xl:sticky xl:top-4 h-[60vh] xl:h-[70vh]">
         <PdiTemplatePreviewPane templateId={template.id} definition={definition} />
       </div>
     </div>
@@ -421,11 +421,10 @@ export default function PdiTemplatesAdminPage() {
 
   if (editing) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        {/* Wider than the list view's max-w-4xl — this view now hosts a
-            two-column layout (editor + a w-96 live preview pane beside it),
-            which max-w-4xl left too cramped for the editor column. */}
-        <div className="max-w-7xl mx-auto bg-white rounded-xl shadow p-6">
+      <div className="max-w-7xl mx-auto space-y-4">
+        {/* White card wraps the two-column layout (editor + a w-96 live
+            preview pane beside it). */}
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-4 sm:p-6">
           <TemplateEditor
             template={editing}
             onClose={() => { setEditing(null); refresh(); }}
@@ -437,83 +436,78 @@ export default function PdiTemplatesAdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">PDI Templates</h1>
-          <p className="text-sm text-gray-500 mt-1">Author, publish, and manage the PDI templates end users can fill out and generate.</p>
-        </div>
+    <div className="max-w-7xl mx-auto space-y-4">
+      <p className="text-sm text-gray-500">Author, publish, and manage the PDI templates end users can fill out and generate.</p>
 
-        {!showBlankCreate ? (
-          <button
-            type="button"
-            onClick={() => setShowBlankCreate(true)}
-            className="text-sm text-gray-400 hover:text-gray-600 mb-6"
-          >
-            + Start a blank template from scratch
-          </button>
-        ) : (
-          <div className="bg-white rounded-xl shadow p-4 mb-6">
-            <div className="text-sm font-semibold text-gray-700 mb-3">Create a blank template</div>
-            <div className="flex gap-2 items-end flex-wrap">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
-                <input className={FIELD_CLS} value={creatingName} onChange={(e) => handleNameChange(e.target.value)} placeholder="e.g. Acme Motor PDI" />
-                <button type="button" onClick={() => setShowIdAdvanced((s) => !s)} className="text-[11px] text-gray-400 hover:text-gray-600 mt-0.5">
-                  {showIdAdvanced ? 'Hide id' : 'Advanced'}
-                </button>
-                {showIdAdvanced && (
-                  <input
-                    className={FIELD_CLS + ' mt-1 text-xs text-gray-500'}
-                    placeholder="id (auto-generated from the name if left blank)"
-                    value={creatingIdOverride ?? labelToKey(creatingName.trim(), [])}
-                    onChange={(e) => setCreatingIdOverride(e.target.value)}
-                  />
-                )}
-              </div>
-              <button type="button" disabled={creating} onClick={createTemplate} className="flex items-center gap-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50">
-                <Plus size={16} /> Create
+      {!showBlankCreate ? (
+        <button
+          type="button"
+          onClick={() => setShowBlankCreate(true)}
+          className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          + Start a blank template from scratch
+        </button>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-4">
+          <div className="text-sm font-semibold text-navy-800 mb-3">Create a blank template</div>
+          <div className="flex gap-2 items-end flex-wrap">
+            <div className="w-full sm:w-auto">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+              <input className={FIELD_CLS} value={creatingName} onChange={(e) => handleNameChange(e.target.value)} placeholder="e.g. Acme Motor PDI" />
+              <button type="button" onClick={() => setShowIdAdvanced((s) => !s)} className="text-[11px] text-gray-400 hover:text-gray-600 mt-0.5 transition-colors">
+                {showIdAdvanced ? 'Hide id' : 'Advanced'}
               </button>
-              <button type="button" onClick={() => setShowBlankCreate(false)} className="text-sm text-gray-400 px-2 py-2">Cancel</button>
+              {showIdAdvanced && (
+                <input
+                  className={FIELD_CLS + ' mt-1 text-xs text-gray-500'}
+                  placeholder="id (auto-generated from the name if left blank)"
+                  value={creatingIdOverride ?? labelToKey(creatingName.trim(), [])}
+                  onChange={(e) => setCreatingIdOverride(e.target.value)}
+                />
+              )}
+            </div>
+            <button type="button" disabled={creating} onClick={createTemplate} className="flex items-center gap-1 px-4 py-2 bg-gold-500 text-navy-900 rounded text-sm font-semibold hover:bg-gold-400 transition-colors disabled:opacity-50">
+              <Plus size={16} /> Create
+            </button>
+            <button type="button" onClick={() => setShowBlankCreate(false)} className="text-sm px-3 py-2 bg-gray-100 text-gray-700 rounded font-medium hover:bg-gray-200 transition-colors">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-navy-100 divide-y divide-navy-100">
+        {!list && <div className="p-6 text-gray-400 text-sm">Loading...</div>}
+        {list && list.length === 0 && <div className="p-6 text-gray-400 text-sm">No authored templates yet. Create one above to get started.</div>}
+        {list && list.map((t) => (
+          <div key={t.id} className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-navy-50/60 transition-colors">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="font-medium text-navy-800 truncate">{t.name}</div>
+                <StatusBadge status={t.status} />
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                {t.id} · v{t.version}{t.created_at ? ` · created ${formatDate(t.created_at)}` : ''}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0 sm:ml-4">
+              <button
+                type="button"
+                onClick={() => duplicateTemplate(t)}
+                className="flex items-center gap-1 text-sm font-medium text-navy-800 border border-navy-100 rounded px-2.5 py-1.5 sm:py-1 hover:bg-navy-50 transition-colors"
+              >
+                <Copy size={14} /> Duplicate
+              </button>
+              <button type="button" onClick={() => openEditor(t.id)} className="text-sm text-gray-500 hover:text-navy-800 transition-colors px-2 py-1.5 sm:p-0">Edit</button>
+              <button
+                type="button"
+                onClick={() => deleteTemplate(t)}
+                className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700 transition-colors p-1.5 sm:p-0"
+                title="Delete this template"
+              >
+                <Trash2 size={15} />
+              </button>
             </div>
           </div>
-        )}
-
-        <div className="bg-white rounded-xl shadow divide-y">
-          {!list && <div className="p-6 text-gray-400 text-sm">Loading...</div>}
-          {list && list.length === 0 && <div className="p-6 text-gray-400 text-sm">No authored templates yet. Create one above to get started.</div>}
-          {list && list.map((t) => (
-            <div key={t.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <div className="font-medium text-gray-900 truncate">{t.name}</div>
-                  <StatusBadge status={t.status} />
-                </div>
-                <div className="text-xs text-gray-400 mt-0.5">
-                  {t.id} · v{t.version}{t.created_at ? ` · created ${formatDate(t.created_at)}` : ''}
-                </div>
-              </div>
-              <div className="flex items-center gap-3 shrink-0 ml-4">
-                <button
-                  type="button"
-                  onClick={() => duplicateTemplate(t)}
-                  className="flex items-center gap-1 text-sm font-medium text-amber-700 border border-amber-300 rounded px-2.5 py-1 hover:bg-amber-50"
-                >
-                  <Copy size={14} /> Duplicate
-                </button>
-                <button type="button" onClick={() => openEditor(t.id)} className="text-sm text-gray-500 hover:text-gray-700">Edit</button>
-                <button
-                  type="button"
-                  onClick={() => deleteTemplate(t)}
-                  className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700"
-                  title="Delete this template"
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        ))}
       </div>
     </div>
   );

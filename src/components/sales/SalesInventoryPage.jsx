@@ -217,13 +217,13 @@ function ProductCodeBuilder({
             maxLength={11}
             onChange={e => { setManualVal(e.target.value); onChange?.(e.target.value); }}
             placeholder="Enter 11-char code manually"
-            className="flex-1 p-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-amber-300"
+            className="flex-1 p-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-gold-400"
             disabled={disabled}
           />
           <button
             type="button"
             onClick={() => setManualMode(false)}
-            className="text-xs px-3 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 whitespace-nowrap"
+            className="text-xs px-3 py-2 bg-gold-400/25 text-gold-600 rounded-lg hover:bg-navy-50 whitespace-nowrap"
           >
             ← Use Builder
           </button>
@@ -234,7 +234,7 @@ function ProductCodeBuilder({
   }
 
   return (
-    <div className="border-2 border-amber-200 rounded-xl bg-gradient-to-br from-amber-50 to-white p-4 space-y-4 shadow-sm">
+    <div className="border-2 border-navy-100 rounded-xl bg-navy-50 p-3 sm:p-4 space-y-4 shadow-sm">
 
       {/* Live Preview */}
       <div className="space-y-1.5">
@@ -242,13 +242,13 @@ function ProductCodeBuilder({
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Code Preview</p>
           {isComplete
             ? <span className="text-xs bg-green-100 text-green-700 border border-green-300 px-2 py-1 rounded-full font-semibold">✓ 11 / 11</span>
-            : <span className="text-xs bg-amber-100 text-amber-700 border border-amber-300 px-2 py-1 rounded-full">
+            : <span className="text-xs bg-gold-400/25 text-gold-600 border border-gold-400 px-2 py-1 rounded-full">
                 {[seg_part, seg_chart, seg_sub, seg_store, seg_col, seg_row].join('').length} / 11
               </span>
           }
         </div>
 
-        <div className="flex items-center gap-1 bg-white border-2 border-amber-300 rounded-xl px-4 py-3 shadow-inner justify-center font-mono text-2xl tracking-[0.2em] select-all overflow-x-auto">
+        <div className="flex items-center gap-1 bg-white border-2 border-gold-400 rounded-xl px-2 sm:px-4 py-3 shadow-inner justify-center font-mono text-lg sm:text-2xl tracking-[0.1em] sm:tracking-[0.2em] select-all overflow-x-auto">
           <span className={`${SEG.part}  font-black`}>{seg_part}</span>
           <span className="text-gray-200 font-thin">·</span>
           <span className={`${SEG.chart} font-black`}>{seg_chart || <span className="text-gray-200 text-lg">??</span>}</span>
@@ -277,7 +277,7 @@ function ProductCodeBuilder({
         </div>
       </div>
 
-      <hr className="border-amber-100" />
+      <hr className="border-navy-100" />
 
       {/* ① Part Number */}
       <div>
@@ -320,7 +320,7 @@ function ProductCodeBuilder({
           Product Chart
           <span className="font-normal text-gray-400 ml-1">— auto-fills Sub Code</span>
         </label>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
           {PRODUCT_CHARTS.map(c => (
             <button
               key={c.symbol}
@@ -399,10 +399,10 @@ function ProductCodeBuilder({
         </div>
       </div>
 
-      <hr className="border-amber-100" />
+      <hr className="border-navy-100" />
 
       {/* ④⑤⑥ Store / Column / Row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <div>
           <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
             <span className={`${SEG.store} font-black text-sm`}>④</span> Store # <span className="font-normal text-gray-400">(1 digit)</span>
@@ -443,7 +443,7 @@ function ProductCodeBuilder({
               <button
                 key={r} type="button"
                 onClick={() => !disabled && setRowNum(r)}
-                className={`py-1 rounded border text-xs font-bold transition-all duration-100
+                className={`py-1.5 sm:py-1 rounded border text-xs font-bold transition-all duration-100
                   ${rowNum === r ? 'border-teal-500 bg-teal-100 text-teal-800' : 'border-gray-200 bg-white text-gray-500 hover:border-teal-300 hover:bg-teal-50'}
                   ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
               >{r}</button>
@@ -543,6 +543,7 @@ const acceptReturnApi = async (productId, qty) => {
 
 /* ========= ProductionInventoryPage Component ========= */
 function SalesInventoryPage({ userRole }) {
+  const { notifySuccess, notifyError, notifyInfo } = useNotify();
   const [page, setPage] = useState(0);
   const [itemsPerPage] = useState(10);
   const [searchInput, setSearchInput] = useState('');
@@ -552,8 +553,7 @@ function SalesInventoryPage({ userRole }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
-  const [showDescriptionModal, setShowDescriptionModal] = useState(false);
-  const [selectedDescription, setSelectedDescription] = useState('');
+  const [viewingItem, setViewingItem] = useState(null);
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const [selectedBarcode, setSelectedBarcode] = useState('');
   const [selectedProductName, setSelectedProductName] = useState('');
@@ -814,7 +814,6 @@ function SalesInventoryPage({ userRole }) {
   }, [handleUpdateItem]);
 
   const initiateEdit = useCallback((item) => { setSelectedItem(item); setShowEditForm(true); }, []);
-  const showDescription = useCallback((description) => { setSelectedDescription(description); setShowDescriptionModal(true); }, []);
   const showBarcode = useCallback((productCode, productName, description) => {
     setSelectedBarcode(productCode);
     setSelectedProductName(productName);
@@ -837,7 +836,7 @@ function SalesInventoryPage({ userRole }) {
 
     return (
       <div ref={dropdownRef} className="relative">
-        <button onClick={() => setIsOpen(!isOpen)} className="p-2 hover:bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label={`Actions for item ${item.product_name}`} aria-haspopup="true" aria-expanded={isOpen}>
+        <button onClick={() => setIsOpen(!isOpen)} className="p-2 hover:bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-gold-400" aria-label={`Actions for item ${item.product_name}`} aria-haspopup="true" aria-expanded={isOpen}>
           <MoreVertical size={20} />
         </button>
         {isOpen && (
@@ -864,114 +863,109 @@ function SalesInventoryPage({ userRole }) {
     setSortConfig((prev) => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
   }, []);
 
-  if (isLoading && !allInventory.length)
-    return <div className="min-h-screen flex items-center justify-center" aria-live="polite"><div className="text-gray-600 text-xl animate-pulse">Loading inventory...</div></div>;
-
+  if (isLoading && !allInventory.length) return (
+    <div className="flex items-center justify-center py-24" aria-live="polite">
+      <div className="text-gray-500 text-lg animate-pulse">Loading inventory...</div>
+    </div>
+  );
   if (error && !showEditForm && !showCreateForm) return <ConnectionError onRetry={refetchData} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Products/Finished Goods Stocks</h1>
-      <div className="max-w-7xl mx-auto">
-        <div className="flex mb-8 gap-6 flex-wrap">
-          <div className="relative flex-grow">
+    <div className="max-w-7xl mx-auto space-y-4">
+        <div className="flex gap-3 flex-wrap items-center">
+          <div className="relative flex-grow min-w-[220px]">
             <label htmlFor="search-input" className="sr-only">Search inventory</label>
-            <input id="search-input" type="text" placeholder="Search by ID, Name, or Code..." value={searchInput} onChange={handleSearchChange} className="w-full p-4 pl-12 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md" />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" aria-hidden="true" />
+            <input id="search-input" type="text" placeholder="Search by ID, Name, or Code..." value={searchInput} onChange={handleSearchChange}
+              className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors" />
+            <Search size={17} className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400" aria-hidden="true" />
           </div>
           <div>
             <label htmlFor="stock-filter" className="sr-only">Filter inventory by stock</label>
-            <select id="stock-filter" value={filterStock} onChange={(e) => setFilterStock(e.target.value)} className="p-4 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md">
+            <select id="stock-filter" value={filterStock} onChange={(e) => setFilterStock(e.target.value)} className="p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm">
               <option value="All">All Stock</option>
-              <option value="In Stock">In Stock (&gt;0)</option>
-              <option value="Out of Stock">Out of Stock (=0)</option>
+              <option value="In Stock">In Stock (&gt; 0)</option>
+              <option value="Out of Stock">Zero Stock (= 0)</option>
             </select>
           </div>
-          <button onClick={() => refetchData()} className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 shadow-md" disabled={isLoading}>Refresh</button>
-          <button onClick={() => setShowCreateForm(true)} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md" disabled={isLoading}>
-            <PlusCircle className="mr-2" /> Add Item
+          <button onClick={() => refetchData()} className="p-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50" disabled={isLoading}>Refresh</button>
+          <button onClick={() => setShowCreateForm(true)} className="px-4 py-3 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center disabled:opacity-50" disabled={isLoading}>
+            <PlusCircle size={18} className="mr-2" /> Add Item
           </button>
-          <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 flex items-center shadow-md" disabled={isLoading}>
-            <Upload className="mr-2" /> Import from Excel
+          <button onClick={() => fileInputRef.current?.click()} className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors flex items-center disabled:opacity-50" disabled={isLoading}>
+            <Upload size={16} className="mr-2" /> Import from Excel
           </button>
-          <input type="file" ref={fileInputRef} onChange={importFromExcel} accept=".xlsx,.xls" className="hidden" />
-          <button onClick={exportToExcel} className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center shadow-md" disabled={isLoading || filteredInventory.length === 0}>
-            <Download className="mr-2" /> Export to Excel
+          <input type="file" ref={fileInputRef} onChange={importFromExcel} accept=".xlsx,.xls" className="hidden" aria-hidden="true" />
+          <button onClick={exportToExcel} className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors flex items-center disabled:opacity-50" disabled={isLoading || filteredInventory.length === 0}>
+            <Download size={16} className="mr-2" /> Export to Excel
           </button>
         </div>
 
         {isLoading && allInventory.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">Refreshing data...</div>
+          <div className="text-gray-500 text-sm text-center" aria-live="polite">Refreshing data...</div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
           <table className="w-full text-left" role="grid" aria-label="Inventory table" ref={tableRef} tabIndex={0}>
-            <thead className="bg-amber-100">
+            <thead className="bg-navy-50">
               <tr role="row">
                 {[
-                  { key: 'product_id', label: 'Product ID' },
                   { key: 'product_code', label: 'Product Code' },
                   { key: 'product_name', label: 'Product Name' },
-                  { key: 'description', label: 'Description' },
                   { key: 'stock_quantity', label: 'Stock (Physical)' },
                   { key: 'returnable_qty', label: 'Returnable Qty' },
                   { key: 'price', label: 'Price' },
                   { key: 'created_at', label: 'Created At (IST)' },
-                  { key: 'qrcode', label: 'QR Code' },
+                  { key: 'details', label: 'Details' },
                   { key: 'actions', label: 'Actions' },
                 ].map(({ key, label }) => (
                   <th key={key}
-                    onClick={() => key !== 'actions' && key !== 'qrcode' && handleSort(key)}
-                    onKeyDown={(e) => key !== 'actions' && key !== 'qrcode' && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSort(key))}
-                    className={`py-5 px-3 ${key !== 'actions' && key !== 'qrcode' ? 'cursor-pointer hover:bg-amber-200 focus:outline-none focus:bg-amber-200' : ''}`}
-                    tabIndex={key !== 'actions' && key !== 'qrcode' ? 0 : undefined}
+                    onClick={() => key !== 'actions' && key !== 'details' && handleSort(key)}
+                    onKeyDown={(e) => key !== 'actions' && key !== 'details' && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSort(key))}
+                    className={`py-3 px-3 text-navy-800 text-sm font-semibold border-b border-navy-100 whitespace-nowrap ${key !== 'actions' && key !== 'details' ? 'cursor-pointer hover:bg-navy-100 transition-colors focus:outline-none focus:bg-navy-100' : ''}`}
+                    tabIndex={key !== 'actions' && key !== 'details' ? 0 : undefined}
                     aria-sort={sortConfig.key === key ? sortConfig.direction : 'none'}
                     role="columnheader"
                   >
                     <div className="flex items-center">
                       {label}
-                      {key !== 'actions' && key !== 'qrcode' && <ArrowDownUp className="ml-2" size={16} aria-hidden="true" />}
+                      {key !== 'actions' && key !== 'details' && <ArrowDownUp size={14} className="ml-2 text-navy-400/50" aria-hidden="true" />}
                     </div>
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {paginatedInventory.map((item) => (
-                <tr key={item.product_id} className="border-t hover:bg-amber-50" role="row">
-                  <td className="py-4 px-3">{item.product_id}</td>
-                  <td className="py-4 px-3 font-mono text-sm">{item.product_code || '-'}</td>
-                  <td className="py-4 px-3">{item.product_name.replace(/<[^>]*>/g, '')}</td>
-                  <td className="py-4 px-3">
-                    {item.description ? (
-                      <button onClick={() => showDescription(item.description)} className="text-amber-600 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center">
-                        <Eye size={16} className="mr-1" /> View
-                      </button>
-                    ) : '-'}
-                  </td>
-                  <td className="py-4 px-3">
+            <tbody className="divide-y divide-navy-100">
+              {paginatedInventory.map(item => (
+                <tr
+                  key={item.product_id}
+                  className="hover:bg-navy-50/60 transition-colors"
+                  role="row"
+                >
+                  <td className="py-3.5 px-3 font-mono text-sm text-gray-600">{item.product_code}</td>
+                  <td className="py-3.5 px-3 text-navy-800 font-medium">{item.product_name.replace(/<[^>]*>/g, '')}</td>
+                  <td className="py-3.5 px-3" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => openQuantityModal(item)}
-                      className={`px-3 py-1 rounded-full text-white text-sm hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-amber-300 ${item.stock_quantity > 0 ? 'bg-green-600 hover:bg-green-700' : item.stock_quantity === 0 ? 'bg-gray-500' : 'bg-red-600'}`}>
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-opacity hover:opacity-80 ${item.stock_quantity > 0 ? 'bg-emerald-100 text-emerald-700' : item.stock_quantity === 0 ? 'bg-gray-100 text-gray-500' : 'bg-red-100 text-red-700'}`}>
                       {item.stock_quantity}
                     </button>
-                    <div className="text-xs text-gray-500 mt-1">Avail: {item.available_quantity ?? item.stock_quantity}</div>
+                    <div className="text-xs text-gray-400 mt-1">Avail: {item.available_quantity ?? item.stock_quantity}</div>
                   </td>
-                  <td className="py-4 px-3">
-                    <span className={`px-3 py-1 rounded-full text-white text-sm ${item.returnable_qty > 0 ? 'bg-indigo-600' : 'bg-gray-400'}`}>{item.returnable_qty}</span>
+                  <td className="py-3.5 px-3">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${item.returnable_qty > 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>{item.returnable_qty}</span>
                   </td>
-                  <td className="py-4 px-3">{formatCurrency(item.price)}</td>
-                  <td className="py-4 px-3">
+                  <td className="py-3.5 px-3 text-gray-600">{formatCurrency(item.price)}</td>
+                  <td className="py-3.5 px-3 text-gray-600">
                     <div className="flex flex-col">
                       <span>{new Date(item.created_at).toLocaleDateString('en-IN')}</span>
-                      <span className="text-sm text-gray-500">{new Date(item.created_at).toLocaleTimeString('en-IN')}</span>
+                      <span className="text-xs text-gray-400">{new Date(item.created_at).toLocaleTimeString('en-IN')}</span>
                     </div>
                   </td>
-                  <td className="py-4 px-3">
-                    <button onClick={() => showBarcode(item.product_code, item.product_name, item.description)} className="text-amber-600 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center">
-                      <Eye size={16} className="mr-1" /> QR Code
+                  <td className="py-3.5 px-3" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => setViewingItem(item)} className="text-navy-800 hover:text-navy-600 font-medium text-sm transition-colors flex items-center">
+                      <Eye size={16} className="mr-1" /> View
                     </button>
                   </td>
-                  <td className="py-4 px-3">
+                  <td className="py-3.5 px-3" onClick={(e) => e.stopPropagation()}>
                     <ActionsDropdown item={item} onEdit={initiateEdit} />
                   </td>
                 </tr>
@@ -980,35 +974,46 @@ function SalesInventoryPage({ userRole }) {
           </table>
 
           {totalItems > 0 && (
-            <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600">Showing {paginatedInventory.length} of {filteredInventory.length} filtered items (Total: {totalItems})</div>
-              <div className="flex space-x-2">
-                <button onClick={() => setPage((p) => (p > 0 ? p - 1 : 0))} disabled={page === 0} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Previous page"><ChevronLeft size={20} /></button>
-                <button onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * itemsPerPage >= filteredInventory.length} className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Next page"><ChevronRight size={20} /></button>
+            <div className="flex flex-wrap gap-2 justify-between items-center p-4 bg-navy-50 border-t border-navy-100">
+              <div className="text-gray-500 text-sm">
+                Showing {paginatedInventory.length} of {filteredInventory.length} filtered items (Total: {totalItems})
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setPage(p => (p > 0 ? p - 1 : 0))} disabled={page === 0}
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors" aria-label="Previous page">
+                  <ChevronLeft size={18} />
+                </button>
+                <button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * itemsPerPage >= filteredInventory.length}
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors" aria-label="Next page">
+                  <ChevronRight size={18} />
+                </button>
               </div>
             </div>
           )}
 
           {filteredInventory.length === 0 && (
-            <div className="text-center py-16 flex flex-col items-center justify-center text-gray-500" role="alert">
-              <Package size={48} className="mb-4 text-gray-400" />
-              <p className="text-lg">No inventory items found.</p>
-              {searchTerm || filterStock !== 'All' ? <p className="mt-2">Try adjusting your search or filters.</p> : (
-                <button onClick={() => setShowCreateForm(true)} className="mt-4 p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center">
-                  <PlusCircle className="mr-2" /> Add Your First Item
+            <div className="text-center py-16 flex flex-col items-center justify-center text-gray-400" role="alert">
+              <Package size={40} className="mb-4 text-gray-300" />
+              <p className="font-medium">No inventory items found.</p>
+              {searchTerm || filterStock !== 'All' ? (
+                <p className="mt-2 text-sm">Try adjusting your search or filters.</p>
+              ) : (
+                <button onClick={() => setShowCreateForm(true)} className="mt-4 px-4 py-2 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center">
+                  <PlusCircle size={16} className="mr-2" /> Add Your First Item
                 </button>
               )}
             </div>
           )}
         </div>
-      </div>
 
       {/* Create Item Modal */}
       {showCreateForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[560px] max-h-[90vh] overflow-y-auto relative" role="dialog" aria-labelledby="create-form-title">
-            <button onClick={() => setShowCreateForm(false)} className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Close create form"><XCircle size={24} /></button>
-            <h2 id="create-form-title" className="text-2xl font-bold mb-6">Add New Item</h2>
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-2xl w-[560px] max-w-full max-h-[90vh] overflow-y-auto relative" role="dialog" aria-labelledby="create-form-title">
+            <button onClick={() => setShowCreateForm(false)} className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors" aria-label="Close create form">
+              <XCircle size={20} />
+            </button>
+            <h2 id="create-form-title" className="font-display text-xl font-bold text-navy-800 mb-5">Add New Item</h2>
             <CreateItemForm
               onSubmit={handleCreateItem}
               onClose={() => setShowCreateForm(false)}
@@ -1022,32 +1027,66 @@ function SalesInventoryPage({ userRole }) {
 
       {/* Edit Item Modal */}
       {showEditForm && selectedItem && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[560px] max-h-[90vh] overflow-y-auto relative" role="dialog" aria-labelledby="edit-form-title">
-            <button onClick={() => setShowEditForm(false)} className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300" aria-label="Close edit form"><XCircle size={24} /></button>
-            <h2 id="edit-form-title" className="text-2xl font-bold mb-6">Edit Item #{selectedItem.product_id}</h2>
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-2xl w-[560px] max-w-full max-h-[90vh] overflow-y-auto relative" role="dialog" aria-labelledby="edit-form-title">
+            <button onClick={() => setShowEditForm(false)} className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors" aria-label="Close edit form">
+              <XCircle size={20} />
+            </button>
+            <h2 id="edit-form-title" className="font-display text-xl font-bold text-navy-800 mb-5">Edit Item #{selectedItem.product_id}</h2>
             <EditItemForm item={selectedItem} onSubmit={confirmEdit} onClose={() => setShowEditForm(false)} />
           </div>
         </div>
       )}
 
-      {/* Description Modal */}
-      {showDescriptionModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative" role="dialog" aria-labelledby="description-modal-title">
-            <button onClick={() => setShowDescriptionModal(false)} className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"><XCircle size={24} /></button>
-            <h2 id="description-modal-title" className="text-2xl font-bold mb-6">Description</h2>
-            <p className="text-gray-700 whitespace-pre-wrap">{selectedDescription || 'No description available'}</p>
+      {/* Item Details Modal */}
+      {viewingItem && (
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto relative" role="dialog" aria-labelledby="item-details-title">
+            <button onClick={() => setViewingItem(null)} className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors" aria-label="Close details"><XCircle size={20} /></button>
+            <h2 id="item-details-title" className="font-display text-xl font-bold text-navy-800 mb-5 pr-8">
+              {viewingItem.product_name.replace(/<[^>]*>/g, '')}
+            </h2>
+            <dl className="space-y-4">
+              {[
+                { label: 'Product ID', value: viewingItem.product_id },
+                { label: 'Product Code', value: viewingItem.product_code },
+                { label: 'Description', value: viewingItem.description },
+                { label: 'Physical Stock', value: viewingItem.stock_quantity },
+                { label: 'Reserved', value: viewingItem.reserved_quantity },
+                { label: 'Available', value: viewingItem.available_quantity },
+                { label: 'Returnable Qty', value: viewingItem.returnable_qty },
+                { label: 'Price', value: formatCurrency(viewingItem.price) },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</dt>
+                  <dd className="text-navy-800 mt-0.5 whitespace-pre-wrap">{value === undefined || value === null || value === '' ? 'N/A' : value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="flex justify-between mt-6">
+              <button
+                onClick={() => {
+                  showBarcode(viewingItem.product_code, viewingItem.product_name, viewingItem.description);
+                  setViewingItem(null);
+                }}
+                className="px-4 py-2 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors"
+              >
+                Show QR Code
+              </button>
+              <button onClick={() => setViewingItem(null)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* QR Code Modal */}
       {showBarcodeModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 overflow-auto">
-          <div className="bg-white p-6 rounded-2xl shadow-xl w-[90%] max-w-[500px] max-h-[90vh] relative flex flex-col" role="dialog" aria-labelledby="qrcode-modal-title">
-            <button onClick={() => setShowBarcodeModal(false)} className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"><XCircle size={24} /></button>
-            <h2 id="qrcode-modal-title" className="text-2xl font-bold mb-4">QR Code for {selectedProductName}</h2>
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 overflow-auto p-4">
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-[500px] max-h-[90vh] relative flex flex-col" role="dialog" aria-labelledby="qrcode-modal-title">
+            <button onClick={() => setShowBarcodeModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"><XCircle size={20} /></button>
+            <h2 id="qrcode-modal-title" className="font-display text-xl font-bold text-navy-800 mb-4 pr-8">QR Code for {selectedProductName}</h2>
             <div className="flex flex-col max-h-[70vh] overflow-y-auto pr-2">
               <div className="mb-4">
                 <p className="text-gray-700"><strong>Product Code:</strong> {selectedBarcode}</p>
@@ -1064,7 +1103,7 @@ function SalesInventoryPage({ userRole }) {
                 link.download = `qrcode_${selectedBarcode}.png`;
                 link.click();
                 notifySuccess('QR code downloaded successfully', { autoClose: 2000 });
-              }} className="w-full p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center justify-center">
+              }} className="w-full px-4 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors flex items-center justify-center">
                 <Download className="mr-2" /> Download QR Code
               </button>
             </div>
@@ -1083,6 +1122,7 @@ function SalesInventoryPage({ userRole }) {
 
 /* ========= QuantityBreakdownModal ========= */
 const QuantityBreakdownModal = ({ product, onClose }) => {
+  const { notifyError } = useNotify();
   const [holds, setHolds] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -1107,33 +1147,33 @@ const QuantityBreakdownModal = ({ product, onClose }) => {
   }, [product.product_id]);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-      <div className="bg-white w-[90%] max-w-[900px] rounded-xl shadow-xl p-6 relative max-h-[90vh] overflow-y-auto">
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"><XCircle size={24} /></button>
-        <h2 className="text-2xl font-bold mb-4 pr-8">Quantity Breakdown — {product.product_name}</h2>
-        <div className="grid grid-cols-4 gap-4 mb-6">
+    <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white w-full max-w-[900px] rounded-xl shadow-2xl p-4 sm:p-6 relative max-h-[90vh] overflow-y-auto">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"><XCircle size={24} /></button>
+        <h2 className="font-display text-xl font-bold text-navy-800 mb-4 pr-8">Quantity Breakdown — {product.product_name}</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
           <Stat label="Physical" value={product.stock_quantity} />
           <Stat label="Reserved" value={product.reserved_quantity || 0} highlight />
           <Stat label="Available" value={product.available_quantity || 0} />
           <Stat label="Returnable" value={product.returnable_qty || 0} />
         </div>
         <div className="text-sm text-gray-600 mb-4"><strong>Formula:</strong> Available = Physical - Reserved</div>
-        <h3 className="text-lg font-semibold mb-3 text-amber-700 flex items-center">
-          <span className="w-2 h-2 bg-amber-600 rounded-full mr-2"></span>Reserved / Blocked Stock
+        <h3 className="text-lg font-semibold mb-3 text-navy-800 flex items-center">
+          <span className="w-2 h-2 bg-gold-500 rounded-full mr-2"></span>Reserved / Blocked Stock
         </h3>
         {loading ? <p className="text-gray-500 py-4">Loading holds…</p> : holds.length === 0 ? (
-          <div className="bg-gray-50 rounded-lg p-4 text-gray-600 text-center"><Package size={32} className="mx-auto mb-2 text-gray-400" /><p>No active reservations</p></div>
+          <div className="bg-navy-50 rounded-lg p-4 text-gray-600 text-center"><Package size={32} className="mx-auto mb-2 text-gray-400" /><p>No active reservations</p></div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border rounded-lg">
-              <thead className="bg-amber-100">
+              <thead className="bg-navy-50 text-navy-800">
                 <tr><th className="p-3 text-left">Reason</th><th className="p-3 text-left">Qty</th><th className="p-3 text-left">For</th><th className="p-3 text-left">Reference</th><th className="p-3 text-left">Created</th></tr>
               </thead>
               <tbody>
                 {holds.map(h => (
-                  <tr key={h.hold_id} className="border-t hover:bg-amber-50">
+                  <tr key={h.hold_id} className="border-t hover:bg-navy-50">
                     <td className="p-3">{h.reason}</td>
-                    <td className="p-3"><span className="px-2 py-1 bg-amber-200 rounded-full text-sm font-medium">{h.quantity}</span></td>
+                    <td className="p-3"><span className="px-2 py-1 bg-gold-400/25 text-gold-600 rounded-full text-sm font-semibold">{h.quantity}</span></td>
                     <td className="p-3">{h.reference_type ? <span className={`px-2 py-1 rounded-full text-xs font-semibold ${h.reference_type === 'ORDER' ? 'bg-blue-100 text-blue-800' : h.reference_type === 'QA' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-700'}`}>{h.reference_type}</span> : '-'}</td>
                     <td className="p-3 text-sm">{h.reference_value ? (h.reference_type === 'ORDER' ? <a href={`/orders?orderId=${h.reference_value}`} className="text-blue-600 hover:underline font-medium">#{h.reference_value}</a> : <span className="font-medium">{h.reference_value}</span>) : '-'}</td>
                     <td className="p-3 text-sm">{new Date(h.created_at).toLocaleDateString('en-IN')}<div className="text-gray-500 text-xs">{new Date(h.created_at).toLocaleTimeString('en-IN')}</div></td>
@@ -1144,7 +1184,7 @@ const QuantityBreakdownModal = ({ product, onClose }) => {
           </div>
         )}
         <div className="mt-6 flex justify-end">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-300">Close</button>
+          <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">Close</button>
         </div>
       </div>
     </div>
@@ -1152,15 +1192,16 @@ const QuantityBreakdownModal = ({ product, onClose }) => {
 };
 
 const Stat = ({ label, value, highlight }) => (
-  <div className={`p-4 rounded-lg text-center ${highlight ? 'bg-amber-200 border-2 border-amber-400' : 'bg-gray-100'}`}>
+  <div className={`p-4 rounded-lg text-center ${highlight ? 'bg-gold-400/25 border border-gold-400/40' : 'bg-navy-50'}`}>
     <div className="text-sm text-gray-600 mb-1">{label}</div>
-    <div className="text-2xl font-bold">{value ?? 0}</div>
+    <div className="text-2xl font-bold text-navy-800">{value ?? 0}</div>
   </div>
 );
 
 
 /* ========= AcceptReturnModal ========= */
 const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
+  const { notifySuccess, notifyError } = useNotify();
   const [qty, setQty] = useState(product.returnable_qty ?? 0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -1181,16 +1222,16 @@ const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-2xl shadow-xl w-[420px] relative">
-        <button onClick={onClose} className="absolute top-3 right-3 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"><XCircle size={22} /></button>
-        <h3 className="text-xl font-semibold mb-3">Accept Return — {product.product_name}</h3>
+    <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white p-4 sm:p-6 rounded-xl shadow-2xl w-[420px] max-w-full max-h-[90vh] overflow-y-auto relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"><XCircle size={20} /></button>
+        <h3 className="font-display text-xl font-bold text-navy-800 mb-3 pr-8">Accept Return — {product.product_name}</h3>
         <p className="text-sm text-gray-600 mb-4">Available to accept: <strong>{product.returnable_qty}</strong></p>
-        <label className="text-sm font-medium">Quantity to accept</label>
-        <input type="number" min={1} max={product.returnable_qty} value={qty} onChange={(e) => setQty(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300 mb-3" />
+        <label className="text-sm font-medium text-navy-800">Quantity to accept</label>
+        <input type="number" min={1} max={product.returnable_qty} value={qty} onChange={(e) => setQty(e.target.value)} className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 mb-3" />
         <div className="flex space-x-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300" disabled={isSubmitting}>Cancel</button>
-          <button onClick={handleAccept} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center" disabled={isSubmitting}>
+          <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors" disabled={isSubmitting}>Cancel</button>
+          <button onClick={handleAccept} className="px-4 py-2 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors flex items-center" disabled={isSubmitting}>
             {isSubmitting ? 'Accepting...' : <><CheckCircle className="mr-2" /> Accept</>}
           </button>
         </div>
@@ -1314,14 +1355,14 @@ const CreateItemForm = ({ onSubmit, onClose, suggestedPartNumber }) => {
             onChange={e => { setPartSearch(e.target.value); setShowPartDropdown(true); if (!partsLoaded && !isPartLoading) loadParts(); }}
             onFocus={() => { setShowPartDropdown(true); if (!partsLoaded && !isPartLoading) loadParts(); }}
             placeholder="Type part code or name..."
-            className="w-full p-2 pl-8 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+            className="w-full p-2.5 pl-8 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" disabled={isSubmitting} />
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
           {showPartDropdown && (
             <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white border rounded-lg shadow-lg">
               {isPartLoading && <div className="px-3 py-2 text-sm text-gray-500">Loading parts...</div>}
               {!isPartLoading && filteredParts.length === 0 && <div className="px-3 py-2 text-sm text-gray-500">No parts found.</div>}
               {!isPartLoading && filteredParts.map(part => (
-                <button key={part.id} type="button" onClick={() => handlePartSelect(part)} className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50">
+                <button key={part.id} type="button" onClick={() => handlePartSelect(part)} className="w-full text-left px-3 py-2 text-sm hover:bg-navy-50">
                   <div className="font-medium">{part.partCode} — {part.name}</div>
                   <div className="text-xs text-gray-500">{part.partTypeName}{part.drawingNo ? ` • Drawing: ${part.drawingNo}` : ''}</div>
                 </button>
@@ -1334,7 +1375,7 @@ const CreateItemForm = ({ onSubmit, onClose, suggestedPartNumber }) => {
 
       <div>
         <label htmlFor="create-product-name" className="text-gray-700 font-medium">Product Name</label>
-        <input id="create-product-name" type="text" name="product_name" value={formData.product_name} onChange={handleChange} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <input id="create-product-name" type="text" name="product_name" value={formData.product_name} onChange={handleChange} className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" disabled={isSubmitting} />
         {errors.product_name && <p className="text-red-600 text-sm mt-1">{errors.product_name}</p>}
       </div>
 
@@ -1357,27 +1398,27 @@ const CreateItemForm = ({ onSubmit, onClose, suggestedPartNumber }) => {
 
       <div>
         <label htmlFor="create-description" className="text-gray-700 font-medium">Description</label>
-        <textarea id="create-description" name="description" value={formData.description} onChange={handleChange} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <textarea id="create-description" name="description" value={formData.description} onChange={handleChange} className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" disabled={isSubmitting} />
       </div>
       <div>
         <label htmlFor="create-stock-quantity" className="text-gray-700 font-medium">Stock Quantity</label>
-        <input id="create-stock-quantity" type="number" name="stock_quantity" value={formData.stock_quantity} onChange={handleChange} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <input id="create-stock-quantity" type="number" name="stock_quantity" value={formData.stock_quantity} onChange={handleChange} className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" disabled={isSubmitting} />
         {errors.stock_quantity && <p className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
       </div>
       <div>
         <label htmlFor="create-returnable-qty" className="text-gray-700 font-medium">Returnable Qty</label>
-        <input id="create-returnable-qty" type="number" name="returnable_qty" value={formData.returnable_qty} onChange={handleChange} min={0} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <input id="create-returnable-qty" type="number" name="returnable_qty" value={formData.returnable_qty} onChange={handleChange} min={0} className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" disabled={isSubmitting} />
         {errors.returnable_qty && <p className="text-red-600 text-sm mt-1">{errors.returnable_qty}</p>}
       </div>
       <div>
         <label htmlFor="create-price" className="text-gray-700 font-medium">Price (₹)</label>
-        <input id="create-price" type="number" name="price" value={formData.price} onChange={handleChange} step="0.01" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <input id="create-price" type="number" name="price" value={formData.price} onChange={handleChange} step="0.01" className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" disabled={isSubmitting} />
         {errors.price && <p className="text-red-600 text-sm mt-1">{errors.price}</p>}
       </div>
 
       <div className="flex justify-end space-x-4">
-        <button type="button" onClick={onClose} className="p-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400" disabled={isSubmitting}>Cancel</button>
-        <button type="button" onClick={handleSave} className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center" disabled={isSubmitting}>
+        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors" disabled={isSubmitting}>Cancel</button>
+        <button type="button" onClick={handleSave} className="px-4 py-2 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center" disabled={isSubmitting}>
           {isSubmitting ? 'Creating...' : 'Create'}
         </button>
       </div>
@@ -1441,7 +1482,7 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
     <form className="space-y-4" onSubmit={e => e.preventDefault()}>
       <div>
         <label htmlFor="edit-product-name" className="text-gray-700 font-medium">Product Name</label>
-        <input id="edit-product-name" type="text" name="product_name" value={formData.product_name} onChange={handleChange} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <input id="edit-product-name" type="text" name="product_name" value={formData.product_name} onChange={handleChange} className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" disabled={isSubmitting} />
         {errors.product_name && <p className="text-red-600 text-sm mt-1">{errors.product_name}</p>}
       </div>
 
@@ -1463,27 +1504,27 @@ const EditItemForm = ({ item, onSubmit, onClose }) => {
 
       <div>
         <label htmlFor="edit-description" className="text-gray-700 font-medium">Description</label>
-        <textarea id="edit-description" name="description" value={formData.description} onChange={handleChange} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <textarea id="edit-description" name="description" value={formData.description} onChange={handleChange} className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" disabled={isSubmitting} />
       </div>
       <div>
         <label htmlFor="edit-stock-quantity" className="text-gray-700 font-medium">Stock Quantity</label>
-        <input id="edit-stock-quantity" type="number" name="stock_quantity" value={formData.stock_quantity} onChange={handleChange} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <input id="edit-stock-quantity" type="number" name="stock_quantity" value={formData.stock_quantity} onChange={handleChange} className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" disabled={isSubmitting} />
         {errors.stock_quantity && <p className="text-red-600 text-sm mt-1">{errors.stock_quantity}</p>}
       </div>
       <div>
         <label htmlFor="edit-returnable-qty" className="text-gray-700 font-medium">Returnable Qty</label>
-        <input id="edit-returnable-qty" type="number" name="returnable_qty" value={formData.returnable_qty} onChange={handleChange} min={0} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <input id="edit-returnable-qty" type="number" name="returnable_qty" value={formData.returnable_qty} onChange={handleChange} min={0} className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" disabled={isSubmitting} />
         {errors.returnable_qty && <p className="text-red-600 text-sm mt-1">{errors.returnable_qty}</p>}
       </div>
       <div>
         <label htmlFor="edit-price" className="text-gray-700 font-medium">Price (₹)</label>
-        <input id="edit-price" type="number" name="price" value={formData.price} onChange={handleChange} step="0.01" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300" disabled={isSubmitting} />
+        <input id="edit-price" type="number" name="price" value={formData.price} onChange={handleChange} step="0.01" className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" disabled={isSubmitting} />
         {errors.price && <p className="text-red-600 text-sm mt-1">{errors.price}</p>}
       </div>
 
       <div className="flex justify-end space-x-4">
-        <button type="button" onClick={onClose} className="p-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400" disabled={isSubmitting}>Cancel</button>
-        <button type="button" onClick={handleSave} className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center" disabled={isSubmitting}>
+        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors" disabled={isSubmitting}>Cancel</button>
+        <button type="button" onClick={handleSave} className="px-4 py-2 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors flex items-center" disabled={isSubmitting}>
           {isSubmitting ? 'Saving...' : 'Save'}
         </button>
       </div>

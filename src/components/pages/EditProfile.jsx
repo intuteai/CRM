@@ -85,9 +85,8 @@ function EditProfile() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 flex items-center justify-center p-8">
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md transform transition-all duration-300 animate-fade-in">
-        <h2 className="text-3xl font-bold text-gray-800 mb-8 text-center tracking-tight">Edit Profile</h2>
+    <div className="max-w-7xl mx-auto space-y-4">
+      <div className="bg-white rounded-xl shadow-sm border border-navy-100 p-8 w-full max-w-md mx-auto">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="relative">
             <label htmlFor="oldPassword" className="block text-gray-700 font-medium mb-2">
@@ -98,7 +97,7 @@ function EditProfile() {
               type={showOldPassword ? 'text' : 'password'}
               value={oldPassword}
               onChange={(e) => setOldPassword(e.target.value)}
-              className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-gray-50 shadow-sm transition-all duration-200 disabled:bg-gray-200"
+              className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors disabled:bg-gray-100"
               required
               disabled={isLoading}
               aria-label="Enter your old password"
@@ -106,7 +105,7 @@ function EditProfile() {
             <button
               type="button"
               onClick={() => setShowOldPassword(!showOldPassword)}
-              className="absolute right-3 top-11 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-full p-1 disabled:opacity-50"
+              className="absolute right-3 top-11 text-gray-400 hover:text-navy-800 focus:outline-none focus:ring-2 focus:ring-gold-400 rounded-full p-1 transition-colors disabled:opacity-50"
               disabled={isLoading}
               aria-label={showOldPassword ? 'Hide old password' : 'Show old password'}
             >
@@ -123,7 +122,7 @@ function EditProfile() {
               type={showNewPassword ? 'text' : 'password'}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-gray-50 shadow-sm transition-all duration-200 disabled:bg-gray-200"
+              className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors disabled:bg-gray-100"
               required
               disabled={isLoading}
               aria-label="Enter your new password"
@@ -131,7 +130,7 @@ function EditProfile() {
             <button
               type="button"
               onClick={() => setShowNewPassword(!showNewPassword)}
-              className="absolute right-3 top-11 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-full p-1 disabled:opacity-50"
+              className="absolute right-3 top-11 text-gray-400 hover:text-navy-800 focus:outline-none focus:ring-2 focus:ring-gold-400 rounded-full p-1 transition-colors disabled:opacity-50"
               disabled={isLoading}
               aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
             >
@@ -148,7 +147,7 @@ function EditProfile() {
               type={showConfirmPassword ? 'text' : 'password'}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 bg-gray-50 shadow-sm transition-all duration-200 disabled:bg-gray-200"
+              className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors disabled:bg-gray-100"
               required
               disabled={isLoading}
               aria-label="Confirm your new password"
@@ -156,7 +155,7 @@ function EditProfile() {
             <button
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3 top-11 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-full p-1 disabled:opacity-50"
+              className="absolute right-3 top-11 text-gray-400 hover:text-navy-800 focus:outline-none focus:ring-2 focus:ring-gold-400 rounded-full p-1 transition-colors disabled:opacity-50"
               disabled={isLoading}
               aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
             >
@@ -166,9 +165,7 @@ function EditProfile() {
 
           <button
             type="submit"
-            className={`w-full bg-gradient-to-r from-amber-400 to-amber-500 text-gray-900 font-semibold py-3 rounded-lg shadow-md hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 transform hover:-translate-y-1 ${
-              isLoading ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
+            className="w-full bg-navy-800 text-white font-semibold py-3 rounded-lg hover:bg-navy-700 focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isLoading}
             aria-label="Update password"
           >

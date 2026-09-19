@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { formatDate as importedFormatDate } from '../../utils/helpers';
-import { ArrowDownUp, RefreshCw, Search, Edit2, MoreVertical, XCircle, X } from 'lucide-react';
+import { ArrowDownUp, RefreshCw, Search, Edit2, Eye, MoreVertical, XCircle, X } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { useNotify } from '../../hooks/useNotify';
@@ -31,6 +31,17 @@ const formatINR = (value) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+};
+
+const ORDER_STATUS_COLORS = {
+  Pending: 'bg-gold-400/25 text-gold-600',
+  Processing: 'bg-blue-100 text-blue-700',
+  Testing: 'bg-purple-100 text-purple-700',
+  'Ready for Shipment': 'bg-teal-100 text-teal-700',
+  Shipped: 'bg-indigo-100 text-indigo-700',
+  'Partially Delivered': 'bg-violet-100 text-violet-700',
+  Delivered: 'bg-emerald-100 text-emerald-700',
+  Cancelled: 'bg-red-100 text-red-700',
 };
 
 // Debounce Hook
@@ -65,6 +76,54 @@ function throttle(func, limit) {
   };
 }
 
+function ActionsDropdown({ invoice, onView, onEdit }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target))
+        setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-2 hover:bg-navy-50 rounded-full transition-colors"
+        aria-label={`Actions for invoice ${invoice.invoice_id}`}
+      >
+        <MoreVertical size={20} className="text-gray-500" />
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg border border-navy-100 py-1">
+          <button
+            onClick={() => {
+              onView(invoice);
+              setIsOpen(false);
+            }}
+            className="flex items-center w-full px-4 py-2 text-sm text-navy-800 hover:bg-navy-50 transition-colors"
+          >
+            <Eye size={16} className="mr-2" /> View
+          </button>
+          <button
+            onClick={() => {
+              onEdit(invoice);
+              setIsOpen(false);
+            }}
+            className="flex items-center w-full px-4 py-2 text-sm text-navy-800 hover:bg-navy-50 transition-colors"
+          >
+            <Edit2 size={16} className="mr-2" /> Edit
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CustomerInvoicesPage({ socket: providedSocket }) {
   const [invoices, setInvoices] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -74,6 +133,7 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
   const [showModal, setShowModal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [viewingInvoice, setViewingInvoice] = useState(null);
   const [formData, setFormData] = useState({
     invoice_number: '',
     issue_date: '',
@@ -349,48 +409,6 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
     [selectedInvoice, formData]
   );
 
-  const ActionsDropdown = useCallback(
-    ({ invoice, onEdit }) => {
-      const [isOpen, setIsOpen] = useState(false);
-      const dropdownRef = useRef(null);
-
-      useEffect(() => {
-        const handleClickOutside = (event) => {
-          if (dropdownRef.current && !dropdownRef.current.contains(event.target))
-            setIsOpen(false);
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-      }, []);
-
-      return (
-        <div ref={dropdownRef} className="relative">
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="p-2 hover:bg-gray-100 rounded-full"
-            aria-label={`Actions for invoice ${invoice.invoice_id}`}
-          >
-            <MoreVertical size={20} />
-          </button>
-          {isOpen && (
-            <div className="absolute right-0 z-10 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
-              <button
-                onClick={() => {
-                  onEdit(invoice);
-                  setIsOpen(false);
-                }}
-                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-              >
-                <Edit2 size={16} className="mr-2" /> Edit
-              </button>
-            </div>
-          )}
-        </div>
-      );
-    },
-    []
-  );
-
   const handlePrevPage = useCallback(() => {
     console.log('Previous page clicked', { cursor, cursorStack });
     if (cursorStack.length > 0) {
@@ -425,11 +443,8 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
 
   if (isLoading && !invoices.length) {
     return (
-      <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
-        aria-live="polite"
-      >
-        <div className="text-gray-600 text-xl animate-pulse">Loading Invoices...</div>
+      <div className="flex items-center justify-center py-24" aria-live="polite">
+        <div className="text-gray-500 text-lg animate-pulse">Loading Invoices...</div>
       </div>
     );
   }
@@ -438,14 +453,11 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
 
   if (invoices.length === 0 && !isLoading) {
     return (
-      <div
-        className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center"
-        role="status"
-      >
-        <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
-          <RefreshCw className="mx-auto mb-4 text-gray-400" size={48} />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">No Invoices Yet</h2>
-          <p className="text-gray-600 mb-6">
+      <div className="flex items-center justify-center py-24" role="status">
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-navy-100 text-center">
+          <RefreshCw className="mx-auto mb-4 text-gray-300" size={40} />
+          <h2 className="font-display text-xl font-bold text-navy-800 mb-2">No Invoices Yet</h2>
+          <p className="text-gray-500 mb-6">
             Your database is empty. Invoices will appear here once created!
           </p>
         </div>
@@ -454,218 +466,190 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-        Customer Invoices
-      </h1>
-      <div className="max-w-7xl mx-auto">
-        <div className="flex mb-8 gap-6 flex-wrap">
-          <div className="relative flex-grow">
-            <label htmlFor="search-invoices" className="sr-only">
-              Search Invoices
-            </label>
-            <input
-              id="search-invoices"
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search by Invoice ID, Number, Customer ID, Order ID, or Total Value..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
-            />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                aria-label="Clear search"
-              >
-                <X size={20} />
-              </button>
-            )}
-          </div>
-          <button
-            onClick={handleRefresh}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg flex items-center"
-            disabled={isLoading}
-            aria-label="Refresh invoices"
-          >
-            <RefreshCw size={20} className="mr-2" />
-            {isLoading && invoices.length > 0 ? 'Refreshing...' : 'Refresh'}
-          </button>
+    <div className="max-w-7xl mx-auto space-y-4">
+      <div className="flex gap-3 flex-wrap">
+        <div className="relative flex-grow min-w-[220px]">
+          <label htmlFor="search-invoices" className="sr-only">
+            Search Invoices
+          </label>
+          <input
+            id="search-invoices"
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search by Invoice ID, Number, Customer ID, Order ID, or Total Value..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="w-full p-3 pl-11 pr-10 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
+          />
+          <Search size={17} className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-navy-800 transition-colors"
+              aria-label="Clear search"
+            >
+              <X size={18} />
+            </button>
+          )}
         </div>
+        <button
+          onClick={handleRefresh}
+          className="flex items-center justify-center gap-2 px-5 py-3 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={isLoading}
+          aria-label="Refresh invoices"
+        >
+          <RefreshCw size={16} />
+          {isLoading && invoices.length > 0 ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
 
-        {isLoading && invoices.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">
-            Refreshing data...
+      {isLoading && invoices.length > 0 && (
+        <div className="text-gray-500 text-sm text-center" aria-live="polite">
+          Refreshing data...
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
+        <table
+          className="w-full text-left border-collapse"
+          role="grid"
+          aria-label="Customer Invoices table"
+          ref={tableRef}
+          tabIndex={0}
+        >
+          <thead>
+            <tr className="bg-navy-50" role="row">
+              {[
+                { key: 'invoice_id', label: 'Invoice ID' },
+                { key: 'invoice_number', label: 'Invoice Number' },
+                { key: 'customer_name', label: 'Customer Name' },
+                { key: 'order_status', label: 'Order Status' },
+                { key: 'total_value', label: 'Total Value' },
+                { key: 'issue_date', label: 'Issue Date' },
+                { key: 'actions', label: 'Actions' },
+              ].map(({ key, label }) => (
+                <th
+                  key={key}
+                  className={`py-3 px-3 text-navy-800 text-sm font-semibold ${
+                    key !== 'actions' ? 'cursor-pointer hover:bg-navy-100' : ''
+                  } transition-colors whitespace-nowrap`}
+                  onClick={() => key !== 'actions' && handleSort(key)}
+                  aria-sort={
+                    sortConfig.key === key
+                      ? sortConfig.direction === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  }
+                  scope="col"
+                >
+                  <div className="flex items-center justify-between">
+                    <span>{label}</span>
+                    {key !== 'actions' && (
+                      <ArrowDownUp
+                        size={14}
+                        className={`ml-2 ${
+                          sortConfig.key === key ? 'text-gold-500' : 'text-navy-400/50'
+                        }`}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sortedInvoices.map((invoice) => (
+              <tr
+                key={invoice.invoice_id}
+                className="border-t border-navy-100 hover:bg-navy-50/60 transition-colors"
+                role="row"
+              >
+                <td className="py-3.5 px-3 text-navy-800 font-medium">{invoice.invoice_id}</td>
+                <td className="py-3.5 px-3 text-gray-600">{invoice.invoice_number}</td>
+                <td className="py-3.5 px-3 text-gray-600 min-w-[160px] lg:min-w-0">{invoice.customer_name || 'N/A'}</td>
+                <td className="py-3.5 px-3 text-gray-600">
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                      ORDER_STATUS_COLORS[invoice.order_status] || 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {invoice.order_status || 'N/A'}
+                  </span>
+                </td>
+                <td className="py-3.5 px-3 text-gray-600">
+                  {formatINR(parseFloat(invoice.total_value))}
+                </td>
+                <td className="py-3.5 px-3 text-gray-600">
+                  {invoice.issue_date ? formatDate(invoice.issue_date) : 'N/A'}
+                </td>
+                <td className="py-3.5 px-3 text-gray-600">
+                  <ActionsDropdown invoice={invoice} onView={setViewingInvoice} onEdit={handleEdit} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {totalItems > 0 && (
+          <div className="flex justify-between items-center flex-wrap gap-2 p-4 bg-navy-50 border-t border-navy-100">
+            <div className="text-gray-500 text-sm">
+              Showing {invoices.length} of {totalItems} invoices
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handlePrevPage}
+                disabled={cursorStack.length === 0 && cursor === null}
+                className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
+                aria-label="Previous page"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                onClick={handleNextPage}
+                disabled={invoices.length < limit || isLoading || cursor === null}
+                className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
+                aria-label="Next page"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
-          <table
-            className="w-full text-left border-collapse"
-            role="grid"
-            aria-label="Customer Invoices table"
-            ref={tableRef}
-            tabIndex={0}
+        {sortedInvoices.length === 0 && (
+          <div
+            className="text-center py-12 text-gray-400 flex flex-col items-center"
+            role="alert"
           >
-            <thead>
-              <tr
-                className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50"
-                role="row"
-              >
-                {[
-                  { key: 'sr_no', label: 'Sr. No.' },
-                  { key: 'invoice_id', label: 'Invoice ID' },
-                  { key: 'invoice_number', label: 'Invoice Number' },
-                  { key: 'customer_name', label: 'Customer Name' },
-                  { key: 'order_id', label: 'Order ID' },
-                  { key: 'order_status', label: 'Order Status' },
-                  { key: 'total_value', label: 'Total Value' },
-                  { key: 'issue_date', label: 'Issue Date' },
-                  { key: 'link_pdf', label: 'PDF Link' },
-                  { key: 'actions', label: 'Actions' },
-                ].map(({ key, label }) => (
-                  <th
-                    key={key}
-                    className={`py-5 px-3 text-gray-800 text-base font-semibold ${
-                      key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''
-                    } transition-all duration-200`}
-                    onClick={() => key !== 'actions' && handleSort(key)}
-                    aria-sort={
-                      sortConfig.key === key
-                        ? sortConfig.direction === 'asc'
-                          ? 'ascending'
-                          : 'descending'
-                        : 'none'
-                    }
-                    scope="col"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span>{label}</span>
-                      {key !== 'actions' && (
-                        <ArrowDownUp
-                          size={16}
-                          className={`ml-2 text-gray-600 ${
-                            sortConfig.key === key ? 'text-gray-900' : 'opacity-50'
-                          }`}
-                          aria-hidden="true"
-                        />
-                      )}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sortedInvoices.map((invoice) => (
-                <tr
-                  key={invoice.invoice_id}
-                  className="border-t hover:bg-amber-50 transition-all duration-200"
-                  role="row"
-                >
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.sr_no}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.invoice_id}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">{invoice.invoice_number}</td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    {invoice.customer_name || 'N/A'}
-                  </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    {invoice.order_id || 'N/A'}
-                  </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    {invoice.order_status || 'N/A'}
-                  </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    {formatINR(parseFloat(invoice.total_value))}
-                  </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    {invoice.issue_date ? formatDate(invoice.issue_date) : 'N/A'}
-                  </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    {invoice.link_pdf ? (
-                      <a
-                        href={invoice.link_pdf}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 underline"
-                      >
-                        View PDF
-                      </a>
-                    ) : (
-                      'N/A'
-                    )}
-                  </td>
-                  <td className="py-4 px-3 text-gray-600 text-base">
-                    <ActionsDropdown invoice={invoice} onEdit={handleEdit} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {totalItems > 0 && (
-            <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600">
-                Showing {invoices.length} of {totalItems} invoices
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={handlePrevPage}
-                  disabled={cursorStack.length === 0 && cursor === null}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <button
-                  onClick={handleNextPage}
-                  disabled={invoices.length < limit || isLoading || cursor === null}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                  aria-label="Next page"
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {sortedInvoices.length === 0 && (
-            <div
-              className="text-center py-12 text-gray-500 flex flex-col items-center"
-              role="alert"
-            >
-              <Search className="mb-4 text-gray-400" size={48} />
-              <p className="text-lg">No invoices found matching your search.</p>
-            </div>
-          )}
-        </div>
+            <Search className="mb-4 text-gray-300" size={40} />
+            <p>No invoices found matching your search.</p>
+          </div>
+        )}
       </div>
 
       {showModal && selectedInvoice && (
         <div
-          className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4"
           role="dialog"
           aria-labelledby="edit-invoice-title"
         >
-          <div className="bg-white p-8 rounded-2xl shadow-2xl w-[500px] relative">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto relative">
             <button
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+              className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
               aria-label="Close edit modal"
             >
-              <XCircle size={24} />
+              <XCircle size={20} />
             </button>
-            <h2
-              id="edit-invoice-title"
-              className="text-2xl font-bold text-gray-800 mb-6"
-            >
+            <h2 id="edit-invoice-title" className="font-display text-xl font-bold text-navy-800 mb-5">
               Edit Invoice #{selectedInvoice.invoice_id}
             </h2>
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
-                <label className="block text-gray-700 font-medium mb-2">
+                <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                   Invoice Number
                 </label>
                 <input
@@ -676,19 +660,19 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
                     setFormData({ ...formData, invoice_number: e.target.value })
                   }
                   required
-                  className="w-full p-3 border rounded-lg shadow-sm"
+                  className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                 />
               </div>
               <div>
-                <label className="block text-gray-700 font-medium mb-2">
+                <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                   Total Value
                 </label>
-                <p className="w-full p-3 bg-gray-100 rounded-lg shadow-sm">
+                <p className="w-full p-3 border border-navy-100 rounded-lg bg-gray-50 text-navy-800">
                   {formatINR(parseFloat(selectedInvoice.total_value))}
                 </p>
               </div>
               <div>
-                <label className="block text-gray-700 font-medium mb-2">
+                <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                   Issue Date
                 </label>
                 <input
@@ -697,11 +681,11 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
                   onChange={(e) =>
                     setFormData({ ...formData, issue_date: e.target.value })
                   }
-                  className="w-full p-3 border rounded-lg shadow-sm"
+                  className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                 />
               </div>
               <div>
-                <label className="block text-gray-700 font-medium mb-2">
+                <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                   PDF Link
                 </label>
                 <input
@@ -711,13 +695,13 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
                   onChange={(e) =>
                     setFormData({ ...formData, link_pdf: e.target.value })
                   }
-                  className="w-full p-3 border rounded-lg shadow-sm"
+                  className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                 />
               </div>
               <button
                 type="submit"
                 disabled={uploading}
-                className="w-full bg-amber-500 text-white py-3 rounded-lg hover:bg-amber-600 transition-all duration-300 font-semibold"
+                className="w-full bg-navy-800 text-white py-3 rounded-lg font-semibold hover:bg-navy-700 transition-colors disabled:opacity-50"
               >
                 {uploading ? 'Updating...' : 'Update'}
               </button>
@@ -726,7 +710,72 @@ function CustomerInvoicesPage({ socket: providedSocket }) {
         </div>
       )}
 
-</div>
+      {viewingInvoice && (
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto relative">
+            <button
+              onClick={() => setViewingInvoice(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+            <h2 className="font-display text-xl font-bold text-navy-800 mb-5">
+              Invoice #{viewingInvoice.invoice_id}
+            </h2>
+            <dl className="space-y-4">
+              {[
+                { label: 'Sr. No.', value: viewingInvoice.sr_no },
+                { label: 'Invoice Number', value: viewingInvoice.invoice_number },
+                { label: 'Customer Name', value: viewingInvoice.customer_name },
+                { label: 'Order ID', value: viewingInvoice.order_id },
+                { label: 'Order Status', value: viewingInvoice.order_status },
+                {
+                  label: 'Total Value',
+                  value: viewingInvoice.total_value
+                    ? formatINR(parseFloat(viewingInvoice.total_value))
+                    : null,
+                },
+                {
+                  label: 'Issue Date',
+                  value: viewingInvoice.issue_date ? formatDate(viewingInvoice.issue_date) : null,
+                },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</dt>
+                  <dd className="text-navy-800 mt-0.5 break-words">{value || 'N/A'}</dd>
+                </div>
+              ))}
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">PDF Link</dt>
+                <dd className="text-navy-800 mt-0.5">
+                  {viewingInvoice.link_pdf ? (
+                    <a
+                      href={viewingInvoice.link_pdf}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline"
+                    >
+                      View PDF
+                    </a>
+                  ) : (
+                    'N/A'
+                  )}
+                </dd>
+              </div>
+            </dl>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setViewingInvoice(null)}
+                className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

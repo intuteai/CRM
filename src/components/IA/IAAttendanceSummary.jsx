@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { Search, Download, Loader2, Sparkles } from 'lucide-react';
+import { Search, Download, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { debounce } from 'lodash';
 import { useNotify } from '../../hooks/useNotify';
+import PeoplePage from '../shared/PeoplePage';
 
 const todayIST = () => {
   return new Intl.DateTimeFormat('en-CA', {
@@ -254,159 +255,134 @@ function IAAttendanceSummary({ socket }) {
   const currentToday = todayIST();
   const isViewingToday = !dateFilter || dateFilter === currentToday;
 
+  const subtitle = (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      <span>
+        {search
+          ? `Search: "${search}"${dateFilter && dateFilter !== currentToday ? ` • ${formatDisplayDate(dateFilter)}` : ''}`
+          : isViewingToday
+          ? 'Today'
+          : `Attendance for ${formatDisplayDate(dateFilter)}`}
+      </span>
+      {isViewingToday && (
+        <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+          </span>
+          Live
+        </span>
+      )}
+      {total > 0 && (
+        <span className="text-gray-400">
+          {total} record{total > 1 ? 's' : ''}
+          {lastUpdate && ` · Updated ${formatISTTime(lastUpdate)}`}
+        </span>
+      )}
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-25 to-gray-100 relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-96 h-96 bg-amber-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
-      <div className="absolute top-0 right-0 w-96 h-96 bg-orange-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000"></div>
-      <div className="absolute -bottom-32 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
-
-      <div className="relative z-10 p-6">
-        <div className="text-center mb-12 mt-8">
-          <div className="inline-flex items-center justify-center mb-4">
-            <div className="p-3 bg-gradient-to-r from-amber-400 to-orange-400 rounded-2xl shadow-lg">
-              <Sparkles className="w-8 h-8 text-white animate-pulse" />
-            </div>
-          </div>
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-gray-800 via-gray-700 to-amber-700 bg-clip-text text-transparent mb-4 tracking-tight">
-            Attendance Summary
-          </h1>
-          <div className="flex items-center justify-center gap-3 mb-2">
-            <p className="text-gray-600 text-lg font-light">
-              {search
-                ? `Search: "${search}"${dateFilter && dateFilter !== currentToday ? ` • ${formatDisplayDate(dateFilter)}` : ''}`
-                : isViewingToday
-                ? 'Today'
-                : `Attendance for ${formatDisplayDate(dateFilter)}`}
-            </p>
-            {isViewingToday && (
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                </span>
-                <span className="text-sm text-green-600 font-medium">Live</span>
-              </div>
-            )}
-          </div>
-          {total > 0 && (
-            <div className="flex items-center justify-center gap-4 mt-2">
-              <p className="text-sm text-gray-500">
-                {total} record{total > 1 ? 's' : ''}
-              </p>
-              {lastUpdate && (
-                <p className="text-xs text-gray-400 flex items-center gap-1">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  Updated: {formatISTTime(lastUpdate)}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="max-w-6xl mx-auto mb-8 flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search name, email, ID..."
-              className="w-full pl-10 pr-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 focus:outline-none transition-all"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+    <PeoplePage title="Attendance Summary" subtitle={subtitle}>
+      <div className="mb-5 flex flex-col sm:flex-row gap-3">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-[17px] h-[17px]" />
           <input
-            type="date"
-            className="px-4 py-3 rounded-xl border border-amber-200 focus:ring-4 focus:ring-amber-300 transition-all"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value || todayIST())}
-            max={todayIST()}
+            type="text"
+            placeholder="Search name, email, ID..."
+            className="w-full pl-11 pr-4 py-3 rounded-lg border border-navy-100 bg-white shadow-sm focus:ring-2 focus:ring-gold-400 focus:outline-none transition-colors"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
-          <button
-            onClick={exportCSV}
-            disabled={data.length === 0}
-            className="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-400 text-white font-medium rounded-xl shadow-lg hover:shadow-xl flex items-center gap-2 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-          >
-            <Download className="w-5 h-5" /> Export CSV
-          </button>
         </div>
-
-        <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-amber-100 to-orange-50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Date</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Emp ID</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Name</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Status</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Mode</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">In</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Out</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {data.length === 0 && !loading ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-16 text-center text-gray-500 text-lg">
-                      {search || (dateFilter && dateFilter !== currentToday)
-                        ? 'No records match your filter'
-                        : 'No attendance recorded yet today'}
-                    </td>
-                  </tr>
-                ) : (
-                  data.map((r) => (
-                    <tr key={r.attendance_id} className="hover:bg-amber-50 transition-colors">
-                      <td className="px-6 py-4 text-sm text-gray-800">{formatDisplayDate(r.date)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{r.employee_id || '-'}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{r.name}</td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
-                            r.status === 'present'
-                              ? 'bg-green-100 text-green-800'
-                              : r.status === 'absent'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 capitalize">{r.mode || '-'}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {r.check_in ? formatTime(r.check_in) : '-'}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {r.check_out ? formatTime(r.check_out) : '-'}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {hasMore && data.length > 0 && (
-            <div className="p-6 text-center">
-              <button
-                onClick={debouncedLoadMore}
-                disabled={loading}
-                className="px-8 py-3 bg-amber-500 text-white rounded-xl hover:bg-amber-600 disabled:opacity-50 flex items-center gap-2 mx-auto transition-all shadow-md"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" /> Loading more...
-                  </>
-                ) : (
-                  'Load More Records'
-                )}
-              </button>
-            </div>
-          )}
-        </div>
+        <input
+          type="date"
+          className="px-4 py-3 rounded-lg border border-navy-100 bg-white shadow-sm focus:ring-2 focus:ring-gold-400 focus:outline-none transition-colors"
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value || todayIST())}
+          max={todayIST()}
+        />
+        <button
+          onClick={exportCSV}
+          disabled={data.length === 0}
+          className="px-5 py-3 bg-navy-800 text-white font-medium rounded-lg hover:bg-navy-700 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Download className="w-4 h-4" /> Export CSV
+        </button>
       </div>
 
-</div>
+      <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-navy-50">
+              <tr>
+                {['Date', 'Emp ID', 'Name', 'Status', 'Mode', 'In', 'Out'].map((h) => (
+                  <th key={h} className="px-5 py-3 text-left text-sm font-semibold text-navy-800 whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-navy-100">
+              {data.length === 0 && !loading ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-14 text-center text-gray-400">
+                    {search || (dateFilter && dateFilter !== currentToday)
+                      ? 'No records match your filter'
+                      : 'No attendance recorded yet today'}
+                  </td>
+                </tr>
+              ) : (
+                data.map((r) => (
+                  <tr key={r.attendance_id} className="hover:bg-navy-50/60 transition-colors">
+                    <td className="px-5 py-3.5 text-navy-800 whitespace-nowrap">{formatDisplayDate(r.date)}</td>
+                    <td className="px-5 py-3.5 text-gray-600 whitespace-nowrap">{r.employee_id || '-'}</td>
+                    <td className="px-5 py-3.5 font-medium text-navy-800">{r.name}</td>
+                    <td className="px-5 py-3.5">
+                      <span
+                        className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          r.status === 'present'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : r.status === 'absent'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {r.status}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 text-gray-600 capitalize whitespace-nowrap">{r.mode || '-'}</td>
+                    <td className="px-5 py-3.5 text-gray-600 whitespace-nowrap">
+                      {r.check_in ? formatTime(r.check_in) : '-'}
+                    </td>
+                    <td className="px-5 py-3.5 text-gray-600 whitespace-nowrap">
+                      {r.check_out ? formatTime(r.check_out) : '-'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Only show "Load More" when there's actually more data AND we have existing data */}
+        {hasMore && data.length > 0 && (
+          <div className="p-5 text-center border-t border-navy-100">
+            <button
+              onClick={debouncedLoadMore}
+              disabled={loading}
+              className="px-6 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 disabled:opacity-50 flex items-center gap-2 mx-auto transition-colors"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading more...
+                </>
+              ) : (
+                'Load More Records'
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    </PeoplePage>
   );
 }
 

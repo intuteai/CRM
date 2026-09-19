@@ -46,31 +46,29 @@ function NotesModal({ recipe, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4"
       role="dialog" aria-modal="true" aria-labelledby="notes-modal-title"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md relative">
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b">
-          <div className="flex items-center gap-2">
-            <FileText size={18} className="text-amber-500" />
-            <h2 id="notes-modal-title" className="text-lg font-bold text-gray-800">Recipe Notes</h2>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-300 rounded" aria-label="Close notes">
-            <XCircle size={22} />
-          </button>
+      <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors" aria-label="Close notes">
+          <XCircle size={22} />
+        </button>
+        <div className="flex items-center gap-2 mb-4">
+          <FileText size={18} className="text-gold-500" />
+          <h2 id="notes-modal-title" className="font-display text-xl font-bold text-navy-800">Recipe Notes</h2>
         </div>
-        <div className="px-6 pt-4 pb-2">
+        <div className="mb-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Recipe</div>
-          <div className="text-sm font-medium text-gray-700">
+          <div className="text-sm font-medium text-navy-800">
             {recipe.customer_name} &rarr; {recipe.product_name}
             <span className="ml-2 font-mono text-gray-400 text-xs">({recipe.product_code})</span>
           </div>
         </div>
-        <div className="px-6 pt-3 pb-6">
+        <div className="mb-2">
           <div className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">Notes</div>
           {recipe.notes ? (
-            <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap bg-amber-50 border border-amber-100 rounded-lg p-4">
+            <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap bg-navy-50 border border-navy-100 rounded-lg p-4">
               {recipe.notes}
             </p>
           ) : (
@@ -79,8 +77,8 @@ function NotesModal({ recipe, onClose }) {
             </p>
           )}
         </div>
-        <div className="px-6 pb-5 flex justify-end">
-          <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 text-sm font-medium">
+        <div className="flex justify-end mt-4">
+          <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium">
             Close
           </button>
         </div>
@@ -123,19 +121,19 @@ function SearchableDropdown({
   return (
     <div ref={containerRef} className={`relative ${className}`}>
       <button type="button" disabled={disabled} onClick={() => !disabled && setOpen(o => !o)}
-        className={`w-full flex items-center justify-between p-2 border rounded-lg bg-white text-left focus:outline-none focus:ring-2 focus:ring-amber-300 transition
-          ${hasError ? 'border-red-400' : 'border-gray-300'}
-          ${disabled ? 'bg-gray-100 cursor-not-allowed opacity-70' : 'hover:border-amber-400 cursor-pointer'}`}>
-        <span className={selectedLabel ? 'text-gray-800' : 'text-gray-400'}>{selectedLabel || placeholder}</span>
+        className={`w-full flex items-center justify-between p-2.5 border rounded-lg bg-white text-left focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors
+          ${hasError ? 'border-red-400' : 'border-navy-100'}
+          ${disabled ? 'bg-gray-100 cursor-not-allowed opacity-70' : 'hover:border-gold-400 cursor-pointer'}`}>
+        <span className={selectedLabel ? 'text-navy-800' : 'text-gray-400'}>{selectedLabel || placeholder}</span>
         <ChevronDown size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
-          <div className="p-2 border-b border-gray-100">
+        <div className="absolute z-50 mt-1 w-full bg-white border border-navy-100 rounded-lg shadow-lg">
+          <div className="p-2 border-b border-navy-100">
             <div className="relative">
               <input ref={searchRef} type="text" value={search} onChange={e => setSearch(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                className="w-full pl-8 pr-3 py-1.5 text-sm border border-navy-100 rounded-md focus:outline-none focus:ring-2 focus:ring-gold-400" />
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             </div>
           </div>
@@ -146,8 +144,8 @@ function SearchableDropdown({
               filtered.map(o => (
                 <li key={o.value} role="option" aria-selected={String(o.value) === String(value)}
                   onClick={() => handleSelect(o.value)}
-                  className={`px-4 py-2 text-sm cursor-pointer hover:bg-amber-50 transition-colors
-                    ${String(o.value) === String(value) ? 'bg-amber-100 font-medium text-amber-800' : 'text-gray-700'}`}>
+                  className={`px-4 py-2 text-sm cursor-pointer hover:bg-navy-50 transition-colors
+                    ${String(o.value) === String(value) ? 'bg-gold-400/25 font-medium text-gold-600' : 'text-gray-700'}`}>
                   {o.label}
                 </li>
               ))
@@ -165,13 +163,14 @@ function useDropdownData() {
   const [customers, setCustomers] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { notifyError } = useNotify();
 
   useEffect(() => {
     apiFetch('/api/motor-recipes/dropdown-data')
       .then(({ customers, inventory }) => { setCustomers(customers); setInventory(inventory); })
       .catch(err => notifyError(`Failed to load dropdown data: ${err.message}`))
       .finally(() => setLoading(false));
-  }, []);
+  }, [notifyError]);
 
   return { customers, inventory, dropdownLoading: loading };
 }
@@ -248,7 +247,7 @@ function RecipeForm({ initial, customers, inventory, onSubmit, onClose, isSubmit
   };
 
   const inputCls = (field) =>
-    `w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300 ${errors[field] ? 'border-red-400' : 'border-gray-300'}`;
+    `w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${errors[field] ? 'border-red-400' : 'border-navy-100'}`;
 
   const customerOptions = customers.map(c => ({ value: c.customer_id, label: c.customer_name }));
   const inventoryOptions = inventory.map(p => ({ value: p.product_id, label: `${p.product_code} — ${p.product_name}` }));
@@ -256,7 +255,7 @@ function RecipeForm({ initial, customers, inventory, onSubmit, onClose, isSubmit
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Customer <span className="text-red-500">*</span></label>
+        <label className="block text-sm font-medium text-navy-800 mb-1">Customer <span className="text-red-500">*</span></label>
         <SearchableDropdown options={customerOptions} value={form.customer_id}
           onChange={handleDropdownChange('customer_id')} placeholder="— Select customer —"
           searchPlaceholder="Search customers…" disabled={isEdit || isSubmitting} hasError={!!errors.customer_id} />
@@ -264,7 +263,7 @@ function RecipeForm({ initial, customers, inventory, onSubmit, onClose, isSubmit
         {errors.customer_id && <p className="text-red-600 text-sm mt-1">{errors.customer_id}</p>}
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Motor (Finished Goods) <span className="text-red-500">*</span></label>
+        <label className="block text-sm font-medium text-navy-800 mb-1">Motor (Finished Goods) <span className="text-red-500">*</span></label>
         <SearchableDropdown options={inventoryOptions} value={form.product_id}
           onChange={handleDropdownChange('product_id')} placeholder="— Select motor —"
           searchPlaceholder="Search by code or name…" disabled={isEdit || isSubmitting} hasError={!!errors.product_id} />
@@ -273,29 +272,31 @@ function RecipeForm({ initial, customers, inventory, onSubmit, onClose, isSubmit
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">No. of Turns <span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-navy-800 mb-1">No. of Turns <span className="text-red-500">*</span></label>
           <input type="number" name="num_turns" value={form.num_turns} onChange={handleChange}
             min={1} placeholder="e.g. 120" disabled={isSubmitting} className={inputCls('num_turns')} />
           {errors.num_turns && <p className="text-red-600 text-sm mt-1">{errors.num_turns}</p>}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">No. of Coils <span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-navy-800 mb-1">No. of Coils <span className="text-red-500">*</span></label>
           <input type="number" name="num_coils" value={form.num_coils} onChange={handleChange}
             min={1} placeholder="e.g. 6" disabled={isSubmitting} className={inputCls('num_coils')} />
           {errors.num_coils && <p className="text-red-600 text-sm mt-1">{errors.num_coils}</p>}
         </div>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+        <label className="block text-sm font-medium text-navy-800 mb-1">Notes (optional)</label>
         <textarea name="notes" value={form.notes} onChange={handleChange} rows={3} disabled={isSubmitting}
           placeholder="Any additional winding instructions…"
-          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-300 resize-none" />
+          className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 resize-none" />
       </div>
       <div className="flex justify-end gap-3 pt-2">
         <button type="button" onClick={onClose} disabled={isSubmitting}
-          className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">Cancel</button>
+          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
         <button type="button" onClick={handleSubmit} disabled={isSubmitting}
-          className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center gap-2">
+          className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50 ${
+            isEdit ? 'bg-navy-800 text-white hover:bg-navy-700' : 'bg-gold-500 text-navy-900 hover:bg-gold-400'
+          }`}>
           {isSubmitting ? 'Saving…' : isEdit ? 'Update Recipe' : 'Create Recipe'}
         </button>
       </div>
@@ -318,19 +319,19 @@ function ActionsDropdown({ recipe, onEdit, onDelete, canDelete }) {
   return (
     <div ref={ref} className="relative">
       <button onClick={() => setOpen(o => !o)}
-        className="p-2 hover:bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-amber-300"
+        className="p-2 hover:bg-navy-50 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gold-400"
         aria-label="Row actions">
-        <MoreVertical size={18} />
+        <MoreVertical size={18} className="text-gray-500" />
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-44 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5">
+        <div className="absolute right-0 z-20 mt-1 w-44 bg-white shadow-lg rounded-lg border border-navy-100">
           <button onClick={() => { onEdit(recipe); setOpen(false); }}
-            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+            className="flex items-center w-full px-4 py-2 text-sm text-navy-800 hover:bg-navy-50 transition-colors">
             <Edit2 size={15} className="mr-2" /> Edit
           </button>
           {canDelete && (
             <button onClick={() => { onDelete(recipe); setOpen(false); }}
-              className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50">
+              className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50 transition-colors">
               <Trash2 size={15} className="mr-2" /> Delete
             </button>
           )}
@@ -461,7 +462,7 @@ function MotorRecipesPage({ userRole }) {
   // ── guards ────────────────────────────────────────────────────────────────
   if (!ALLOWED_ROLES.includes(userRole)) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-800 text-2xl" role="alert">
+      <div className="flex items-center justify-center py-24 text-navy-800 text-xl" role="alert">
         Access Denied
       </div>
     );
@@ -469,8 +470,8 @@ function MotorRecipesPage({ userRole }) {
 
   if (loading && !recipes.length) {
     return (
-      <div className="min-h-screen flex items-center justify-center" aria-live="polite">
-        <div className="text-gray-600 text-xl animate-pulse">Loading motor recipes…</div>
+      <div className="flex items-center justify-center py-24" aria-live="polite">
+        <div className="text-gray-500 text-lg animate-pulse">Loading motor recipes…</div>
       </div>
     );
   }
@@ -490,44 +491,41 @@ function MotorRecipesPage({ userRole }) {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">Motor Recipes</h1>
-
-      <div className="max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto space-y-4">
         {/* toolbar */}
-        <div className="flex flex-wrap gap-4 mb-8 items-center">
+        <div className="flex flex-wrap gap-4 items-center">
           <div className="relative flex-grow min-w-[220px]">
             <input type="text" value={searchInput} onChange={handleSearchChange}
               placeholder="Search customer, motor, code…"
-              className="w-full p-4 pl-12 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md" />
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={17} />
           </div>
           <div className="min-w-[220px]">
             <SearchableDropdown options={customerFilterOptions} value={filterCustomer}
               onChange={(val) => setFilterCustomer(val)}
-              placeholder="All Customers" searchPlaceholder="Search customers…" className="shadow-md" />
+              placeholder="All Customers" searchPlaceholder="Search customers…" className="shadow-sm" />
           </div>
           <button onClick={refetch} disabled={loading}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 shadow-md"
+            className="p-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
             title="Refresh">
             <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
           </button>
           {canWrite && (
             <button onClick={() => setShowCreate(true)} disabled={dropdownLoading}
-              className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-300 flex items-center gap-2 shadow-md">
+              className="px-4 py-3 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center gap-2 disabled:opacity-50">
               <PlusCircle size={18} /> Add Recipe
             </button>
           )}
         </div>
 
         {loading && recipes.length > 0 && (
-          <div className="text-gray-500 text-sm mb-4 text-center animate-pulse" aria-live="polite">Refreshing…</div>
+          <div className="text-gray-500 text-sm text-center" aria-live="polite">Refreshing…</div>
         )}
 
         {/* table */}
-        <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
           <table className="w-full text-left" role="grid" aria-label="Motor recipes table">
-            <thead className="bg-amber-100">
+            <thead className="bg-navy-50">
               <tr>
                 {columns.map(col => (
                   <th key={col.key}
@@ -535,43 +533,43 @@ function MotorRecipesPage({ userRole }) {
                     onKeyDown={e => !col.noSort && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSort(col.key))}
                     tabIndex={col.noSort ? undefined : 0}
                     aria-sort={!col.noSort && sortConfig.key === col.key ? sortConfig.direction : undefined}
-                    className={`py-4 px-4 font-semibold text-gray-700 text-sm whitespace-nowrap
-                      ${!col.noSort ? 'cursor-pointer hover:bg-amber-200 focus:outline-none focus:bg-amber-200' : ''}`}>
+                    className={`py-3 px-4 font-semibold text-navy-800 text-sm whitespace-nowrap border-b border-navy-100
+                      ${!col.noSort ? 'cursor-pointer hover:bg-navy-100 transition-colors focus:outline-none focus:bg-navy-100' : ''}`}>
                     <div className="flex items-center gap-1">
                       {col.label}
-                      {!col.noSort && <ArrowDownUp size={14} className="text-gray-400" />}
+                      {!col.noSort && <ArrowDownUp size={14} className="text-navy-400/50" />}
                     </div>
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-navy-100">
               {paginated.map(recipe => (
-                <tr key={recipe.recipe_id} className="border-t hover:bg-amber-50 transition-colors">
-                  <td className="py-4 px-4 text-gray-500 text-sm">{recipe.recipe_id}</td>
-                  <td className="py-4 px-4 font-medium text-gray-800">{recipe.customer_name}</td>
-                  <td className="py-4 px-4 font-mono text-sm text-gray-600">{recipe.product_code}</td>
-                  <td className="py-4 px-4 text-gray-800">{recipe.product_name}</td>
-                  <td className="py-4 px-4">
-                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">{recipe.num_turns}</span>
+                <tr key={recipe.recipe_id} className="hover:bg-navy-50/60 transition-colors">
+                  <td className="py-3.5 px-4 text-gray-500 text-sm">{recipe.recipe_id}</td>
+                  <td className="py-3.5 px-4 font-medium text-navy-800">{recipe.customer_name}</td>
+                  <td className="py-3.5 px-4 font-mono text-sm text-gray-600">{recipe.product_code}</td>
+                  <td className="py-3.5 px-4 text-gray-600">{recipe.product_name}</td>
+                  <td className="py-3.5 px-4">
+                    <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">{recipe.num_turns}</span>
                   </td>
-                  <td className="py-4 px-4">
-                    <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm font-semibold">{recipe.num_coils}</span>
+                  <td className="py-3.5 px-4">
+                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">{recipe.num_coils}</span>
                   </td>
-                  <td className="py-4 px-4">
+                  <td className="py-3.5 px-4">
                     <button onClick={() => setNotesRecipe(recipe)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-amber-300
-                        ${recipe.notes ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
+                        ${recipe.notes ? 'bg-gold-400/25 text-gold-600 hover:bg-gold-400/35' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
                       aria-label={recipe.notes ? 'View notes' : 'No notes'}>
                       <FileText size={13} />
                       {recipe.notes ? 'View' : 'None'}
                     </button>
                   </td>
-                  <td className="py-4 px-4 text-sm text-gray-500">
+                  <td className="py-3.5 px-4 text-sm text-gray-500">
                     <div>{new Date(recipe.updated_at).toLocaleDateString('en-IN')}</div>
-                    <div className="text-xs">{new Date(recipe.updated_at).toLocaleTimeString('en-IN')}</div>
+                    <div className="text-xs text-gray-400">{new Date(recipe.updated_at).toLocaleTimeString('en-IN')}</div>
                   </td>
-                  <td className="py-4 px-4">
+                  <td className="py-3.5 px-4">
                     <ActionsDropdown recipe={recipe} onEdit={r => setEditRecipe(r)}
                       onDelete={handleDelete} canDelete={canDelete} />
                   </td>
@@ -582,18 +580,18 @@ function MotorRecipesPage({ userRole }) {
 
           {/* pagination */}
           {filtered.length > 0 && (
-            <div className="flex justify-between items-center px-6 py-4 bg-gray-50 border-t">
-              <span className="text-sm text-gray-600">
+            <div className="flex justify-between items-center px-6 py-4 bg-navy-50 border-t border-navy-100">
+              <span className="text-sm text-gray-500">
                 Showing {paginated.length} of {filtered.length} recipes
                 {filtered.length !== total ? ` (${total} total)` : ''}
               </span>
               <div className="flex gap-2">
                 <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-40 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-40 hover:bg-navy-100 transition-colors"
                   aria-label="Previous page"><ChevronLeft size={18} /></button>
                 <button onClick={() => setPage(p => p + 1)}
                   disabled={(page + 1) * ITEMS_PER_PAGE >= filtered.length}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-40 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-40 hover:bg-navy-100 transition-colors"
                   aria-label="Next page"><ChevronRight size={18} /></button>
               </div>
             </div>
@@ -602,20 +600,19 @@ function MotorRecipesPage({ userRole }) {
           {/* empty state */}
           {filtered.length === 0 && !loading && (
             <div className="flex flex-col items-center justify-center py-20 text-gray-400" role="alert">
-              <Wrench size={48} className="mb-4" />
-              <p className="text-lg font-medium">No motor recipes found</p>
+              <Wrench size={40} className="mb-4 text-gray-300" />
+              <p className="font-medium">No motor recipes found</p>
               {(searchTerm || filterCustomer) ? (
                 <p className="text-sm mt-1">Try clearing your search or filter.</p>
               ) : canWrite ? (
                 <button onClick={() => setShowCreate(true)}
-                  className="mt-4 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center gap-2">
+                  className="mt-4 px-4 py-2 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center gap-2">
                   <PlusCircle size={16} /> Add First Recipe
                 </button>
               ) : null}
             </div>
           )}
         </div>
-      </div>
 
       {/* Create Modal */}
       {showCreate && canWrite && (
@@ -645,12 +642,12 @@ function MotorRecipesPage({ userRole }) {
 
 function Modal({ title, onClose, children }) {
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto relative">
-        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b">
-          <h2 className="text-xl font-bold text-gray-800">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-300 rounded" aria-label="Close">
-            <XCircle size={24} />
+    <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto relative">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-navy-100">
+          <h2 className="font-display text-xl font-bold text-navy-800">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-navy-800 transition-colors" aria-label="Close">
+            <XCircle size={22} />
           </button>
         </div>
         <div className="px-6 py-5">{children}</div>

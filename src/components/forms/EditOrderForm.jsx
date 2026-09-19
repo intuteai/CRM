@@ -193,31 +193,49 @@ function EditOrderForm({
     }
   };
 
+  const selectStyles = {
+    container: (base) => ({ ...base, width: "100%" }),
+    control: (base, state) => ({
+      ...base,
+      minHeight: "48px",
+      fontSize: "15px",
+      borderColor: state.isFocused ? "#f2c14e" : "#d7deea",
+      boxShadow: state.isFocused ? "0 0 0 2px rgba(242,193,78,0.4)" : "none",
+      "&:hover": { borderColor: "#f2c14e" },
+    }),
+    menu: (base) => ({ ...base, zIndex: 9999 }),
+    option: (base, state) => ({
+      ...base,
+      backgroundColor: state.isSelected ? "#0b1a33" : state.isFocused ? "#eef1f6" : "white",
+      color: state.isSelected ? "white" : "#0f172a",
+    }),
+  };
+
   return (
     <div
-      className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4"
       role="dialog"
       aria-labelledby="edit-order-title"
     >
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-[600px] max-w-full max-h-[80vh] overflow-y-auto relative">
+      <div className="bg-white p-6 rounded-xl shadow-2xl w-[600px] max-w-full max-h-[90vh] sm:max-h-[80vh] overflow-y-auto relative">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+          className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
           aria-label="Close form"
         >
-          <XCircle size={24} />
+          <XCircle size={20} />
         </button>
         <h2
           id="edit-order-title"
-          className="text-2xl font-bold mb-6 text-gray-800"
+          className="font-display text-xl font-bold text-navy-800 mb-5"
         >
           Edit Order #{order.id}
         </h2>
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label
               htmlFor="targetDeliveryDate"
-              className="text-gray-700 font-medium"
+              className="text-sm font-medium text-navy-800 mb-1 block"
             >
               Target Delivery Date
             </label>
@@ -227,14 +245,14 @@ function EditOrderForm({
               name="targetDeliveryDate"
               value={editedOrder.targetDeliveryDate}
               onChange={handleInputChange}
-              className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300"
+              className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
             />
           </div>
 
           <div>
             <label
               htmlFor="paymentStatus"
-              className="text-gray-700 font-medium"
+              className="text-sm font-medium text-navy-800 mb-1 block"
             >
               Payment Status
             </label>
@@ -243,7 +261,7 @@ function EditOrderForm({
               name="paymentStatus"
               value={editedOrder.paymentStatus}
               onChange={handleInputChange}
-              className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300"
+              className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
             >
               <option value="Pending">Pending</option>
               <option value="Paid">Paid</option>
@@ -251,7 +269,7 @@ function EditOrderForm({
           </div>
 
           <div>
-            <label htmlFor="status" className="text-gray-700 font-medium">
+            <label htmlFor="status" className="text-sm font-medium text-navy-800 mb-1 block">
               Status
             </label>
             <select
@@ -259,7 +277,7 @@ function EditOrderForm({
               name="status"
               value={editedOrder.status}
               onChange={handleInputChange}
-              className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300"
+              className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 disabled:bg-gray-100"
               disabled={order.status === "Cancelled" || isDispatched}
             >
               <option value="Pending">Pending</option>
@@ -273,7 +291,7 @@ function EditOrderForm({
           </div>
 
           <div>
-            <label htmlFor="statusReason" className="text-gray-700 font-medium">
+            <label htmlFor="statusReason" className="text-sm font-medium text-navy-800 mb-1 block">
               Status Reason
               {editedOrder.status === "Partially Delivered" && (
                 <span className="text-red-500 ml-1">*</span>
@@ -290,17 +308,17 @@ function EditOrderForm({
                   ? "Required — explain what was partially delivered and why"
                   : "Optional — add a note about the current status"
               }
-              className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"
+              className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 resize-none"
             />
           </div>
 
           {/* ITEMS */}
           <div>
-            <label className="text-gray-700 font-medium">Items</label>
+            <label className="text-sm font-medium text-navy-800 mb-1 block">Items</label>
 
             {/* Banner: explain why items are locked before the user tries to edit */}
             {isDispatched && (
-              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1 mb-3">
+              <p className="text-sm text-gold-600 bg-gold-400/15 border border-gold-400/40 rounded-lg px-3 py-2 mt-1 mb-3">
                 Items are locked — this order has already been {order.status.toLowerCase()}.
                 Changes to line items are no longer permitted.
               </p>
@@ -317,7 +335,7 @@ function EditOrderForm({
                 <div key={idx} className="mb-4">
                   <div className="flex flex-wrap gap-2 items-center">
                     {/* Product select – react-select with search & code */}
-                    <div className="flex-[2] min-w-[380px]">
+                    <div className="flex-[2] min-w-[min(380px,100%)]">
                       <Select
                         options={availableProducts
                           .filter((p) => p && typeof p.product_id !== "undefined")
@@ -362,22 +380,15 @@ function EditOrderForm({
                           </div>
                         )}
                         styles={{
+                          ...selectStyles,
                           container: (base) => ({
-                            ...base,
-                            width: "100%",
-                            minWidth: "380px",
+                            ...selectStyles.container(base),
+                            minWidth: "min(380px, 100%)",
                           }),
-                          control: (base) => ({
-                            ...base,
-                            minHeight: "48px",
-                            fontSize: "15px",
+                          control: (base, state) => ({
+                            ...selectStyles.control(base, state),
                             paddingLeft: "4px",
                             ...(isDispatched ? { backgroundColor: "#f3f4f6" } : {}),
-                          }),
-                          menu: (base) => ({
-                            ...base,
-                            zIndex: 9999,
-                            width: "100%",
                           }),
                         }}
                       />
@@ -392,7 +403,7 @@ function EditOrderForm({
                         handleItemChange(idx, "quantity", e.target.value)
                       }
                       disabled={isDispatched}
-                      className={`flex-1 min-w-[110px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 ${
+                      className={`flex-1 min-w-[110px] p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${
                         isDispatched ? "bg-gray-100 cursor-not-allowed" : ""
                       }`}
                       min="1"
@@ -408,7 +419,7 @@ function EditOrderForm({
                         handleItemChange(idx, "price", e.target.value)
                       }
                       disabled={isDispatched}
-                      className={`flex-1 min-w-[130px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 ${
+                      className={`flex-1 min-w-[130px] p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${
                         isDispatched ? "bg-gray-100 cursor-not-allowed" : ""
                       }`}
                       min="0.01"
@@ -421,22 +432,22 @@ function EditOrderForm({
                       <button
                         type="button"
                         onClick={() => removeItem(idx)}
-                        className="p-2 text-red-500 hover:text-red-700"
+                        className="p-2 text-red-500 hover:text-red-700 transition-colors"
                         aria-label="Remove item"
                       >
-                        <Trash2 size={20} />
+                        <Trash2 size={18} />
                       </button>
                     )}
                   </div>
 
                   {/* ✅ NEW: Show available quantity warning */}
                   {item.product_id && !isDispatched && (
-                    <div className="text-xs text-gray-600 mt-1 ml-1">
-                      Available: <span className={`font-semibold ${availableQty > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className="text-xs text-gray-500 mt-1 ml-1">
+                      Available: <span className={`font-semibold ${availableQty > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                         {availableQty}
                       </span> units
                       {selectedProduct?.reserved_quantity > 0 && (
-                        <span className="text-amber-600 ml-2">
+                        <span className="text-gold-600 ml-2">
                           (Reserved: {selectedProduct.reserved_quantity})
                         </span>
                       )}
@@ -451,15 +462,15 @@ function EditOrderForm({
               <button
                 type="button"
                 onClick={addItem}
-                className="mt-2 flex items-center text-amber-500 hover:text-amber-700"
+                className="mt-2 flex items-center gap-2 text-navy-800 hover:text-navy-600 font-medium transition-colors"
               >
-                <PlusCircle className="mr-2" size={20} /> Add Item
+                <PlusCircle size={18} /> Add Item
               </button>
             )}
           </div>
 
           {formErrors.length > 0 && (
-            <div className="text-red-700 bg-red-100 p-3 rounded-lg">
+            <div className="text-red-700 bg-red-50 text-sm p-3 rounded-lg">
               {formErrors.map((error, idx) => (
                 <p key={idx}>{error}</p>
               ))}
@@ -473,7 +484,7 @@ function EditOrderForm({
               order.status === "Delivered" ||
               order.status === "Cancelled"
             }
-            className="w-full p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-300"
+            className="w-full p-3.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors disabled:bg-gray-200 disabled:text-gray-400"
           >
             {isSubmitting ? "Updating..." : "Update Order"}
           </button>

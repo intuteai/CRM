@@ -165,21 +165,39 @@ function CreateOrderForm({
       (opt) => String(opt.value) === String(newOrder.customerId)
     ) || null;
 
+  const selectStyles = {
+    container: (base) => ({ ...base, width: "100%" }),
+    control: (base, state) => ({
+      ...base,
+      minHeight: "48px",
+      fontSize: "15px",
+      borderColor: state.isFocused ? "#f2c14e" : "#d7deea",
+      boxShadow: state.isFocused ? "0 0 0 2px rgba(242,193,78,0.4)" : "none",
+      "&:hover": { borderColor: "#f2c14e" },
+    }),
+    menu: (base) => ({ ...base, zIndex: 9999 }),
+    option: (base, state) => ({
+      ...base,
+      backgroundColor: state.isSelected ? "#0b1a33" : state.isFocused ? "#eef1f6" : "white",
+      color: state.isSelected ? "white" : "#0f172a",
+    }),
+  };
+
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-[600px] max-w-full max-h-[80vh] overflow-y-auto relative">
+    <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white p-6 rounded-xl shadow-2xl w-[600px] max-w-full max-h-[90vh] sm:max-h-[80vh] overflow-y-auto relative">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-500"
+          className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
           aria-label="Close form"
         >
-          <XCircle size={24} />
+          <XCircle size={20} />
         </button>
-        <h2 className="text-2xl font-bold mb-6">Create New Order</h2>
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <h2 className="font-display text-xl font-bold text-navy-800 mb-5">Create New Order</h2>
+        <form onSubmit={handleSubmit} className="space-y-5">
           {/* 🔍 Searchable Customer Select */}
           <div>
-            <label className="text-gray-700 font-medium mb-1 block">
+            <label className="text-sm font-medium text-navy-800 mb-1 block">
               Customer
             </label>
             <Select
@@ -201,26 +219,12 @@ function CreateOrderForm({
                   phone.includes(input)
                 );
               }}
-              styles={{
-                container: (base) => ({
-                  ...base,
-                  width: "100%",
-                }),
-                control: (base) => ({
-                  ...base,
-                  minHeight: "48px",
-                  fontSize: "15px",
-                }),
-                menu: (base) => ({
-                  ...base,
-                  zIndex: 9999,
-                }),
-              }}
+              styles={selectStyles}
             />
           </div>
 
           <div>
-            <label className="text-gray-700 font-medium">
+            <label className="text-sm font-medium text-navy-800 mb-1 block">
               Target Delivery Date
             </label>
             <input
@@ -228,12 +232,12 @@ function CreateOrderForm({
               name="targetDeliveryDate"
               value={newOrder.targetDeliveryDate}
               onChange={handleInputChange}
-              className="w-full p-3 border rounded-lg"
+              className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
             />
           </div>
 
           <div>
-            <label className="text-gray-700 font-medium">Items</label>
+            <label className="text-sm font-medium text-navy-800 mb-1 block">Items</label>
             {newOrder.items.map((item, idx) => {
               // ✅ NEW: Show available quantity for selected product
               const selectedProduct = availableProducts.find(
@@ -245,7 +249,7 @@ function CreateOrderForm({
                 <div key={idx} className="mb-4">
                   <div className="flex flex-wrap gap-2 items-center">
                     {/* Product select – wide */}
-                    <div className="flex-[2] min-w-[380px]">
+                    <div className="flex-[2] min-w-[min(380px,100%)]">
                       <Select
                         options={availableProducts.map((p) => ({
                           value: String(p.product_id),
@@ -290,21 +294,14 @@ function CreateOrderForm({
                         isClearable
                         backspaceRemovesValue
                         styles={{
+                          ...selectStyles,
                           container: (base) => ({
-                            ...base,
-                            width: "100%",
-                            minWidth: "380px",
+                            ...selectStyles.container(base),
+                            minWidth: "min(380px, 100%)",
                           }),
-                          control: (base) => ({
-                            ...base,
-                            minHeight: "48px",
-                            fontSize: "15px",
+                          control: (base, state) => ({
+                            ...selectStyles.control(base, state),
                             paddingLeft: "4px",
-                          }),
-                          menu: (base) => ({
-                            ...base,
-                            zIndex: 9999,
-                            width: "100%",
                           }),
                         }}
                       />
@@ -318,7 +315,7 @@ function CreateOrderForm({
                       onChange={(e) =>
                         handleItemChange(idx, "quantity", e.target.value)
                       }
-                      className="flex-1 min-w-[110px] p-3 border rounded-lg"
+                      className="flex-1 min-w-[110px] p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                       min="1"
                       required
                     />
@@ -331,7 +328,7 @@ function CreateOrderForm({
                       onChange={(e) =>
                         handleItemChange(idx, "price", e.target.value)
                       }
-                      className="flex-1 min-w-[130px] p-3 border rounded-lg"
+                      className="flex-1 min-w-[130px] p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                       min="0.01"
                       step="0.01"
                       required
@@ -341,22 +338,22 @@ function CreateOrderForm({
                       <button
                         type="button"
                         onClick={() => removeItem(idx)}
-                        className="p-2 text-red-500 hover:text-red-700"
+                        className="p-2 text-red-500 hover:text-red-700 transition-colors"
                         aria-label="Remove item"
                       >
-                        <Trash2 size={20} />
+                        <Trash2 size={18} />
                       </button>
                     )}
                   </div>
-                  
+
                   {/* ✅ NEW: Show available quantity warning */}
                   {item.product_id && (
-                    <div className="text-xs text-gray-600 mt-1 ml-1">
-                      Available: <span className={`font-semibold ${availableQty > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className="text-xs text-gray-500 mt-1 ml-1">
+                      Available: <span className={`font-semibold ${availableQty > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                         {availableQty}
                       </span> units
                       {selectedProduct?.reserved_quantity > 0 && (
-                        <span className="text-amber-600 ml-2">
+                        <span className="text-gold-600 ml-2">
                           (Reserved: {selectedProduct.reserved_quantity})
                         </span>
                       )}
@@ -369,14 +366,14 @@ function CreateOrderForm({
             <button
               type="button"
               onClick={addItem}
-              className="mt-2 flex items-center text-amber-500 hover:text-amber-700"
+              className="mt-2 flex items-center gap-2 text-navy-800 hover:text-navy-600 font-medium transition-colors"
             >
-              <PlusCircle className="mr-2" size={20} /> Add Item
+              <PlusCircle size={18} /> Add Item
             </button>
           </div>
 
           {formErrors.length > 0 && (
-            <div className="text-red-700">
+            <div className="text-red-700 text-sm">
               {formErrors.map((error, idx) => (
                 <p key={idx}>{error}</p>
               ))}
@@ -385,7 +382,7 @@ function CreateOrderForm({
           <button
             type="submit"
             disabled={isSubmitting || !newOrder.customerId}
-            className="w-full p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:bg-gray-400"
+            className="w-full p-3.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors disabled:bg-gray-200 disabled:text-gray-400"
           >
             {isSubmitting ? "Submitting..." : "Create Order"}
           </button>

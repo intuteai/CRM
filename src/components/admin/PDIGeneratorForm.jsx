@@ -275,10 +275,10 @@ const defaultForm = () => ({
 });
 
 const INPUT_CLS =
-  'w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400';
+  'w-full border border-navy-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400';
 const SELECT_CLS =
-  'border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400';
-const TH_CLS = 'py-2 px-2 text-xs font-semibold text-gray-700 bg-amber-100 border border-gray-200 whitespace-nowrap';
+  'border border-navy-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400';
+const TH_CLS = 'py-2 px-2 text-xs font-semibold text-navy-800 bg-navy-50 border border-navy-100 whitespace-nowrap';
 const TD_CLS = 'py-1 px-1 border border-gray-100 text-sm text-gray-500 text-center';
 
 // Shared by every spec-row tolerance group in this form (7 total after this
@@ -363,7 +363,7 @@ function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, 
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} overflow-hidden ${
-          dragActive ? 'border-amber-400 bg-amber-50' : images.length ? 'border-gray-200' : 'border-gray-300'
+          dragActive ? 'border-gold-400 bg-gold-400/10' : images.length ? 'border-navy-100' : 'border-navy-100'
         }`}
       >
         {images.length > 0 ? (
@@ -386,7 +386,7 @@ function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, 
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="aspect-square rounded border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:text-amber-500 hover:border-amber-300"
+                className="aspect-square rounded border-2 border-dashed border-navy-100 flex items-center justify-center text-gray-400 hover:text-gold-600 hover:border-gold-400"
                 title="Add more photos"
                 aria-label="Add more photos"
               >
@@ -400,7 +400,7 @@ function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, 
               <button
                 type="button"
                 onClick={() => cameraInputRef.current?.click()}
-                className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+                className="flex flex-col items-center gap-1.5 hover:text-gold-600 transition-colors"
               >
                 <Camera size={26} />
                 <span className="text-xs font-medium">Take Photo</span>
@@ -409,7 +409,7 @@ function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, 
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex flex-col items-center gap-1.5 hover:text-amber-500 transition-colors"
+                className="flex flex-col items-center gap-1.5 hover:text-gold-600 transition-colors"
               >
                 <ImageIcon size={26} />
                 <span className="text-xs font-medium">Choose Files</span>
@@ -474,8 +474,8 @@ function CropModal({ imageSrc, onCancel, onApply }) {
     <Modal
       isOpen
       onRequestClose={onCancel}
-      overlayClassName="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-[60] p-4"
-      className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-auto outline-none"
+      overlayClassName="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-[60] p-4"
+      className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-auto outline-none max-h-[95vh] overflow-y-auto"
       contentLabel="Crop Image"
     >
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -514,7 +514,7 @@ function CropModal({ imageSrc, onCancel, onApply }) {
             type="button"
             onClick={handleApply}
             disabled={busy || !croppedAreaPixels}
-            className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+            className="px-4 py-2 bg-navy-800 text-white rounded-lg hover:bg-navy-700 transition-colors disabled:opacity-50 text-sm font-semibold"
           >
             {busy ? 'Processing...' : 'Apply'}
           </button>
@@ -878,26 +878,26 @@ export default function PDIGeneratorForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">
+    <div className="max-w-3xl mx-auto space-y-6">
+      <h1 className="font-display text-2xl font-bold text-navy-800">
         PDI Generator
       </h1>
 
-      <div className="max-w-3xl mx-auto">
+      <div>
         {/* Info card */}
         <div
           onClick={handleOpen}
-          className="bg-white rounded-2xl shadow-lg p-8 cursor-pointer hover:shadow-xl transition-shadow border-2 border-dashed border-amber-300 flex items-center gap-6"
+          className="bg-white rounded-xl shadow-sm p-5 sm:p-8 cursor-pointer hover:shadow-md transition-shadow border-2 border-dashed border-gold-400 flex items-center gap-4 sm:gap-6"
         >
-          <div className="p-4 bg-amber-100 rounded-xl">
-            <ClipboardCheck size={40} className="text-amber-600" />
+          <div className="p-3 sm:p-4 bg-gold-400/25 rounded-xl shrink-0">
+            <ClipboardCheck size={40} className="text-gold-600" />
           </div>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">New Pre-Dispatch Inspection</h2>
+          <div className="min-w-0">
+            <h2 className="font-display text-xl sm:text-2xl font-bold text-navy-800">New Pre-Dispatch Inspection</h2>
             <p className="text-gray-500 mt-1">
               Fill in motor data and generate a 3-page PDI report PDF (Format No: CASPL/QA/F/14)
             </p>
-            <span className="inline-block mt-3 px-4 py-1.5 bg-amber-500 text-white rounded-lg text-sm font-medium">
+            <span className="inline-block mt-3 px-4 py-1.5 bg-gold-500 text-navy-900 rounded-lg text-sm font-semibold">
               + Create PDI
             </span>
           </div>
@@ -911,24 +911,24 @@ export default function PDIGeneratorForm() {
       <Modal
         isOpen={isOpen}
         onRequestClose={handleClose}
-        overlayClassName="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-start justify-center z-50 overflow-y-auto py-8"
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 outline-none"
+        overlayClassName="fixed inset-0 bg-navy-900/50 flex items-start justify-center z-50 overflow-y-auto py-4 sm:py-8"
+        className="bg-white rounded-xl shadow-2xl w-full min-w-0 max-w-5xl mx-4 outline-none"
         contentLabel="PDI Generator Form"
       >
         <form onSubmit={handleFinalize}>
           {/* Modal header */}
-          <div className="flex items-center justify-between px-8 py-5 border-b border-gray-100">
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-8 py-4 sm:py-5 border-b border-navy-100">
             <div className="flex items-center gap-3">
-              <FileText className="text-amber-500" size={24} />
+              <FileText className="text-gold-500" size={24} />
               <div>
-                <h2 className="text-xl font-bold text-gray-800">Pre-Dispatch Inspection (PDI)</h2>
+                <h2 className="font-display text-xl font-bold text-navy-800">Pre-Dispatch Inspection (PDI)</h2>
                 <p className="text-xs text-gray-400">Format No: CASPL/QA/F/14 · Rev. No:00 · Eff. Dt:01/01/2022</p>
               </div>
             </div>
-            <button type="button" onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            <button type="button" onClick={handleClose} className="shrink-0 px-2 text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
           </div>
 
-          <div className="px-8 py-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          <div className="px-4 sm:px-8 py-5 sm:py-6 space-y-6 max-h-[62vh] sm:max-h-[80vh] overflow-y-auto">
 
             {/* ── Header fields ── */}
             <div className="grid grid-cols-2 gap-4">
@@ -972,8 +972,8 @@ export default function PDIGeneratorForm() {
                     onClick={() => setActiveTab(tab.key)}
                     className={`px-5 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
                       activeTab === tab.key
-                        ? 'border-amber-500 text-amber-600 bg-amber-50'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                        ? 'border-navy-800 text-navy-800 bg-navy-50'
+                        : 'border-transparent text-gray-500 hover:text-navy-800 hover:bg-navy-50'
                     }`}
                   >
                     {tab.label}
@@ -991,7 +991,7 @@ export default function PDIGeneratorForm() {
                     type="button"
                     onClick={addRow}
                     disabled={form.rows.length >= MAX_ROWS}
-                    className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium whitespace-nowrap"
+                    className="flex items-center gap-1 px-3 py-2 sm:py-1.5 border border-navy-100 text-navy-800 rounded-lg hover:bg-navy-50 transition-colors disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium whitespace-nowrap"
                   >
                     <Plus size={14} /> Add Row
                   </button>
@@ -1009,7 +1009,7 @@ export default function PDIGeneratorForm() {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="bg-amber-50">
+                      <tr className="bg-navy-50">
                         <td className={TD_CLS} colSpan={3}>
                           <span className="font-semibold text-gray-700 text-xs">Specification</span>
                         </td>
@@ -1137,11 +1137,11 @@ export default function PDIGeneratorForm() {
             {/* ── Mechanical Tab ── */}
             {activeTab === 'mechanical' && (
               <div className="space-y-5">
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <h3 className="text-xs font-semibold text-amber-800 mb-2">
+                <div className="bg-gold-400/15 border border-gold-400/40 rounded-lg p-3">
+                  <h3 className="text-xs font-semibold text-gold-600 mb-2">
                     Specification Row (printed in the mechanical table below — free text, varies by product)
                   </h3>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Motor Length</label>
                       <ToleranceSpecInput
@@ -1204,7 +1204,7 @@ export default function PDIGeneratorForm() {
                     type="button"
                     onClick={addRow}
                     disabled={form.rows.length >= MAX_ROWS}
-                    className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium whitespace-nowrap"
+                    className="flex items-center gap-1 px-3 py-2 sm:py-1.5 border border-navy-100 text-navy-800 rounded-lg hover:bg-navy-50 transition-colors disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium whitespace-nowrap"
                   >
                     <Plus size={14} /> Add Row
                   </button>
@@ -1288,7 +1288,7 @@ export default function PDIGeneratorForm() {
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">General Checks</h3>
 
-                  <div className="grid grid-cols-2 gap-4 mb-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Power Cable Length</label>
                       <input
@@ -1382,12 +1382,12 @@ export default function PDIGeneratorForm() {
                       type="button"
                       onClick={addPhoto}
                       disabled={form.photos.length >= MAX_PHOTOS}
-                      className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium whitespace-nowrap"
+                      className="flex items-center gap-1 px-3 py-2 sm:py-1.5 border border-navy-100 text-navy-800 rounded-lg hover:bg-navy-50 transition-colors disabled:opacity-40 disabled:hover:bg-transparent text-xs font-medium whitespace-nowrap"
                     >
                       <Plus size={14} /> Add Photo
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {form.photos.map((photo, idx) => (
                       <div key={photo.id} className="space-y-1.5">
                         <div className="flex items-center gap-2">
@@ -1426,7 +1426,7 @@ export default function PDIGeneratorForm() {
             )}
 
             {/* ── Signatures ── */}
-            <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-100 pt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Prepared By</label>
                 <input className={INPUT_CLS} value={form.prepared_by} onChange={(e) => setField('prepared_by', e.target.value)} placeholder="Name / Designation" />
@@ -1439,7 +1439,7 @@ export default function PDIGeneratorForm() {
           </div>
 
           {/* Modal footer */}
-          <div className="flex justify-between gap-3 px-8 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+          <div className="grid grid-cols-2 sm:flex sm:justify-between gap-3 px-4 sm:px-8 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
             <button
               type="button"
               onClick={handleSave}
@@ -1448,14 +1448,14 @@ export default function PDIGeneratorForm() {
             >
               {saving ? 'Saving...' : 'Save'}
             </button>
-            <div className="flex gap-3">
+            <div className="contents sm:flex sm:gap-3">
               <button type="button" onClick={handleClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm">
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-semibold"
+                className="col-span-2 sm:col-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-50 text-sm font-semibold"
               >
                 <Download size={16} />
                 {loading ? 'Finalizing...' : 'Finalize & Generate PDF'}

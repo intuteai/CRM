@@ -9,14 +9,14 @@ import ConnectionError from '../pages/ConnectionError.jsx';
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 const ORDER_STATUS_COLORS = {
-  Pending:               'bg-amber-500',
-  Processing:            'bg-yellow-600',
-  Testing:               'bg-purple-600',
-  'Ready for Shipment':  'bg-teal-600',
-  Shipped:               'bg-blue-600',
-  'Partially Delivered': 'bg-indigo-500',
-  Delivered:             'bg-green-600',
-  Cancelled:             'bg-red-600',
+  Pending:               'bg-gold-400/25 text-gold-600',
+  Processing:            'bg-blue-100 text-blue-700',
+  Testing:               'bg-purple-100 text-purple-700',
+  'Ready for Shipment':  'bg-teal-100 text-teal-700',
+  Shipped:               'bg-indigo-100 text-indigo-700',
+  'Partially Delivered': 'bg-violet-100 text-violet-700',
+  Delivered:             'bg-emerald-100 text-emerald-700',
+  Cancelled:             'bg-red-100 text-red-700',
 };
 
 // Utility functions
@@ -65,7 +65,7 @@ const useFetchData = ({ limit, cursor }) => {
         : `${BASE_URL}/api/orders?limit=${limit}&force_refresh=${forceRefresh}`;
       const [ordersRes, productsRes] = await Promise.all([
         fetch(url, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`${BASE_URL}/api/inventory/stock?force_refresh=${forceRefresh}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${BASE_URL}/api/inventory/available?force_refresh=${forceRefresh}`, { headers: { 'Authorization': `Bearer ${token}` } }),
       ]);
 
       const [ordersData, productsData] = await Promise.all([
@@ -76,7 +76,7 @@ const useFetchData = ({ limit, cursor }) => {
       const validOrders = (ordersData.orders || []).filter(o => o && typeof o.id !== 'undefined');
       setOrders(validOrders);
       setTotalOrders(ordersData.total || 0);
-      const validProducts = (productsData || []).filter(p => p && typeof p.product_id !== 'undefined');
+      const validProducts = (productsData.data || []).filter(p => p && typeof p.product_id !== 'undefined');
       setProducts(validProducts);
     } catch (err) {
       setError(err.message);
@@ -144,7 +144,8 @@ function CustomerOrdersPage() {
       const cacheKey = `${productId}`;
       if (cache[cacheKey] !== undefined) return cache[cacheKey];
       const product = products.find(p => String(p.product_id) === String(productId));
-      return (cache[cacheKey] = product ? product.stock_quantity : 0);
+      // Orders are checked against what is free (stock minus active holds), so show and validate that.
+      return (cache[cacheKey] = product ? Number(product.available_quantity ?? product.stock_quantity ?? 0) : 0);
     };
   }, [products]);
 
@@ -227,19 +228,18 @@ function CustomerOrdersPage() {
   }, [sortedOrders, searchTerm, filterStatus]);
 
   if (isLoading && !orders.length) return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" aria-live="polite">
-      <div className="text-gray-600 text-xl animate-pulse">Loading orders...</div>
+    <div className="flex items-center justify-center py-24" aria-live="polite">
+      <div className="text-gray-500 text-lg">Loading orders...</div>
     </div>
   );
 
   if (error && !showCreateForm) return <ConnectionError onRetry={refetchData} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">My Orders</h1>
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center mb-8 gap-4 flex-wrap">
-          <div className="relative flex-1 min-w-0">
+    <div className="max-w-6xl mx-auto space-y-6">
+      <div>
+        <div className="flex items-center mb-6 gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[220px]">
             <label htmlFor="search-orders" className="sr-only">Search Orders</label>
             <input
               id="search-orders"
@@ -247,9 +247,9 @@ function CustomerOrdersPage() {
               placeholder="Search by Order ID or Customer Name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value.toLowerCase())}
-              className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
+              className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
             />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <Search size={17} className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
           <div>
             <label htmlFor="status-filter" className="sr-only">Filter by Status</label>
@@ -257,7 +257,7 @@ function CustomerOrdersPage() {
               id="status-filter"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="p-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md w-40"
+              className="p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm w-44"
             >
               <option value="All">All Status</option>
               <option value="Pending">Pending</option>
@@ -270,7 +270,7 @@ function CustomerOrdersPage() {
           </div>
           <button
             onClick={() => refetchData(true)}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg w-32"
+            className="px-5 py-3 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
             disabled={isLoading}
             aria-label="Refresh orders"
           >
@@ -278,28 +278,28 @@ function CustomerOrdersPage() {
           </button>
           <button
             onClick={() => setShowCreateForm(true)}
-            className="p-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg shadow-md hover:shadow-lg hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 font-semibold flex items-center w-44"
+            className="px-5 py-3 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center disabled:opacity-50"
             disabled={products.length === 0 || isLoading}
             aria-label="Create new order"
           >
-            <PlusCircle className="mr-2" /> Create Order
+            <PlusCircle size={18} className="mr-2" /> Create Order
           </button>
         </div>
 
         {isLoading && orders.length > 0 && (
-          <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">Refreshing data...</div>
+          <div className="text-gray-500 text-sm mb-4 text-center" aria-live="polite">Refreshing data...</div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
-          <table 
-            className="w-full text-left border-collapse" 
-            role="grid" 
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
+          <table
+            className="w-full text-left border-collapse"
+            role="grid"
             aria-label="Customer orders table"
             ref={tableRef}
             tabIndex={0}
           >
             <thead>
-              <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50" role="row">
+              <tr className="bg-navy-50" role="row">
                 {[
                   { key: 'id', label: 'Order ID' },
                   { key: 'items', label: 'Items' },
@@ -312,17 +312,17 @@ function CustomerOrdersPage() {
                   <th
                     key={key}
                     onClick={() => key !== 'items' && handleSort(key)}
-                    className={`py-4 px-6 text-gray-800 text-base font-semibold ${key !== 'items' ? 'cursor-pointer hover:bg-amber-300' : ''} transition-all duration-200`}
+                    className={`py-3 px-5 text-navy-800 text-sm font-semibold whitespace-nowrap border-b border-navy-100 ${key !== 'items' ? 'cursor-pointer hover:bg-navy-100' : ''} transition-colors`}
                     aria-sort={sortConfig.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
                     scope="col"
                   >
                     <div className="flex items-center justify-between">
                       <span>{label}</span>
                       {key !== 'items' && (
-                        <ArrowDownUp 
-                          size={16} 
-                          className={`ml-2 text-gray-600 ${sortConfig.key === key ? 'text-gray-900' : 'opacity-50'}`} 
-                          aria-hidden="true" 
+                        <ArrowDownUp
+                          size={15}
+                          className={`ml-2 ${sortConfig.key === key ? 'text-gold-500' : 'text-navy-400/50'}`}
+                          aria-hidden="true"
                         />
                       )}
                     </div>
@@ -330,29 +330,29 @@ function CustomerOrdersPage() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-navy-100">
               {filteredOrders.map(order => (
-                <tr key={order.id} className="border-t hover:bg-amber-50 transition-all duration-200" role="row">
-                  <td className="py-4 px-6 text-gray-600 text-base">{order.id}</td>
-                  <td className="py-4 px-6 text-gray-600 text-base">
+                <tr key={order.id} className="hover:bg-navy-50/60 transition-colors" role="row">
+                  <td className="py-3.5 px-5 text-navy-800 font-medium">{order.id}</td>
+                  <td className="py-3.5 px-5 text-gray-600 min-w-[180px] lg:min-w-0">
                     <ul className="space-y-1">
                       {order.items.map((item, idx) => (
                         <li key={idx} className="text-sm">{item.productName} (Qty: {item.quantity})</li>
                       ))}
                     </ul>
                   </td>
-                  <td className="py-4 px-6 text-gray-600 text-base">{formatCurrency(calculateTotalAmount(order.items))}</td>
-                  <td className="py-4 px-6 text-gray-600 text-base">
-                    <span className={`px-3 py-1 rounded-full text-white text-sm font-medium ${ORDER_STATUS_COLORS[order.status] || 'bg-gray-500'}`}>
+                  <td className="py-3.5 px-5 text-gray-600">{formatCurrency(calculateTotalAmount(order.items))}</td>
+                  <td className="py-3.5 px-5">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${ORDER_STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-500'}`}>
                       {order.status || 'Unknown'}
                     </span>
                     {order.statusReason && (
-                      <p className="text-xs text-gray-500 mt-1 italic">{order.statusReason}</p>
+                      <p className="text-xs text-gray-400 mt-1 italic">{order.statusReason}</p>
                     )}
                   </td>
-                  <td className="py-4 px-6 text-gray-600 text-base">{order.targetDeliveryDate ? formatDate(order.targetDeliveryDate) : 'Not Set'}</td>
-                  <td className="py-4 px-6 text-gray-600 text-base">{order.paymentStatus || 'N/A'}</td>
-                  <td className="py-4 px-6 text-gray-600 text-base">
+                  <td className="py-3.5 px-5 text-gray-600">{order.targetDeliveryDate ? formatDate(order.targetDeliveryDate) : 'Not Set'}</td>
+                  <td className="py-3.5 px-5 text-gray-600">{order.paymentStatus || 'N/A'}</td>
+                  <td className="py-3.5 px-5 text-gray-600">
                     {new Date(order.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
                   </td>
                 </tr>
@@ -361,48 +361,48 @@ function CustomerOrdersPage() {
           </table>
 
           {filteredOrders.length > 0 ? (
-            <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600">
+            <div className="flex justify-between items-center flex-wrap gap-2 p-4 bg-navy-50 border-t border-navy-100">
+              <div className="text-gray-500 text-sm">
                 Showing {filteredOrders.length} of {totalOrders} orders
               </div>
-              <div className="flex space-x-2">
+              <div className="flex gap-2">
                 <button
                   onClick={() => setCursor(null)}
                   disabled={!cursor}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                   aria-label="Previous page"
                 >
-                  <ChevronLeft size={20} />
+                  <ChevronLeft size={18} />
                 </button>
                 <button
                   onClick={() => setCursor(orders[orders.length - 1]?.createdAt)}
                   disabled={orders.length < ordersPerPage || totalOrders <= orders.length}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                   aria-label="Next page"
                 >
-                  <ChevronRight size={20} />
+                  <ChevronRight size={18} />
                 </button>
               </div>
             </div>
           ) : (
-            <div className="text-center py-12 text-gray-500 flex flex-col items-center" role="alert">
-              <Filter className="mb-4 text-gray-400" size={48} />
-              <p className="text-lg">No orders found matching your search or filter.</p>
+            <div className="text-center py-12 text-gray-400 flex flex-col items-center" role="alert">
+              <Filter className="mb-4 text-gray-300" size={40} />
+              <p>No orders found matching your search or filter.</p>
             </div>
           )}
         </div>
 
         {showCreateForm && (
-          <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50" role="dialog" aria-labelledby="create-order-title">
-            <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-lg relative overflow-y-auto max-h-[90vh]">
+          <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4" role="dialog" aria-labelledby="create-order-title">
+            <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg relative overflow-y-auto max-h-[90vh]">
               <button
                 onClick={() => setShowCreateForm(false)}
-                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
                 aria-label="Close create order form"
               >
-                <XCircle size={24} />
+                <XCircle size={20} />
               </button>
-              <h2 id="create-order-title" className="text-2xl font-bold mb-6 text-gray-800 border-b border-amber-100 pb-3">Create New Order</h2>
+              <h2 id="create-order-title" className="font-display text-xl font-bold text-navy-800 mb-5 pr-8">Create New Order</h2>
               {formErrors.length > 0 && (
                 <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded-lg mb-4 text-sm" role="alert">
                   {formErrors.map((err, idx) => <p key={idx}>{err}</p>)}
@@ -410,13 +410,13 @@ function CustomerOrdersPage() {
               )}
               <form onSubmit={handleCreateOrder} className="space-y-5">
                 <div className="space-y-2">
-                  <label htmlFor="targetDeliveryDate" className="text-gray-700 font-medium">Target Delivery Date</label>
+                  <label htmlFor="targetDeliveryDate" className="text-navy-800 text-sm font-medium">Target Delivery Date</label>
                   <input
                     id="targetDeliveryDate"
                     type="date"
                     value={newOrder.targetDeliveryDate}
                     onChange={(e) => setNewOrder(prev => ({ ...prev, targetDeliveryDate: e.target.value }))}
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-base bg-white shadow-sm transition-all duration-200"
+                    className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
                     min={formatDate(new Date())}
                     required
                     disabled={isSubmitting}
@@ -424,7 +424,7 @@ function CustomerOrdersPage() {
                   />
                 </div>
                 <div className="space-y-3">
-                  <label className="text-gray-700 font-medium">Items</label>
+                  <label className="text-navy-800 text-sm font-medium">Items</label>
                   {newOrder.items.map((item, idx) => (
                     <div key={idx} className="flex space-x-3 items-center">
                       <select
@@ -437,7 +437,7 @@ function CustomerOrdersPage() {
                             return { ...prev, items };
                           });
                         }}
-                        className="w-2/3 p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-base bg-white shadow-sm transition-all duration-200 disabled:bg-gray-200"
+                        className="w-2/3 p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors disabled:bg-gray-100"
                         required
                         disabled={isSubmitting}
                         aria-label={`Select product for item ${idx + 1}`}
@@ -451,7 +451,7 @@ function CustomerOrdersPage() {
                               value={product.product_id}
                               disabled={totalStock <= 0}
                             >
-                              {product.product_name} (Stock: {totalStock})
+                              {product.product_name} (Available: {totalStock})
                             </option>
                           );
                         })}
@@ -468,7 +468,7 @@ function CustomerOrdersPage() {
                             return { ...prev, items };
                           });
                         }}
-                        className="w-1/3 p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-base bg-white shadow-sm transition-all duration-200 disabled:bg-gray-200"
+                        className="w-1/3 p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors disabled:bg-gray-100"
                         min="1"
                         max={getTotalStock(item.product_id) || 999}
                         required
@@ -479,7 +479,7 @@ function CustomerOrdersPage() {
                         <button
                           type="button"
                           onClick={() => setNewOrder(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }))}
-                          className="text-red-500 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-full p-1 disabled:opacity-50"
+                          className="text-red-500 hover:text-red-700 focus:outline-none rounded-full p-1 disabled:opacity-50"
                           disabled={isSubmitting}
                           aria-label={`Remove item ${idx + 1}`}
                         >
@@ -491,18 +491,18 @@ function CustomerOrdersPage() {
                   <button
                     type="button"
                     onClick={() => setNewOrder(prev => ({ ...prev, items: [...prev.items, { product_id: '', quantity: 1 }] }))}
-                    className="bg-amber-100 hover:bg-amber-200 text-amber-800 px-4 py-2 rounded-lg font-medium flex items-center transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-300 disabled:bg-gray-200"
+                    className="bg-gold-400/25 hover:bg-gold-400/40 text-gold-600 px-4 py-2 rounded-lg font-medium flex items-center transition-colors disabled:opacity-50"
                     disabled={isSubmitting || products.length === 0}
                     aria-label="Add another item"
                   >
                     <PlusCircle className="mr-1" size={20} /> Add Item
                   </button>
                 </div>
-                <div className="flex justify-end space-x-4 mt-6 pt-4 border-t border-gray-100">
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-navy-100">
                   <button
                     type="button"
                     onClick={() => setShowCreateForm(false)}
-                    className="px-5 py-3 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-300 disabled:bg-gray-400"
+                    className="px-5 py-2.5 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50"
                     disabled={isSubmitting}
                     aria-label="Cancel order creation"
                   >
@@ -510,7 +510,7 @@ function CustomerOrdersPage() {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg shadow-md hover:bg-amber-700 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 font-semibold disabled:bg-gray-400 disabled:shadow-none"
+                    className="px-5 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors disabled:opacity-50"
                     disabled={isSubmitting || isLoading || products.length === 0}
                     aria-label="Submit order"
                   >
@@ -522,7 +522,7 @@ function CustomerOrdersPage() {
           </div>
         )}
       </div>
-</div>
+    </div>
   );
 }
 

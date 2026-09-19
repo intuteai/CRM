@@ -350,13 +350,13 @@ function ProductCodeBuilder({
               onChange?.(e.target.value);
             }}
             placeholder="Enter 11-char code manually"
-            className="flex-1 p-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-amber-300"
+            className="flex-1 p-2 border border-navy-100 rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
             disabled={disabled}
           />
           <button
             type="button"
             onClick={() => setManualMode(false)}
-            className="text-xs px-3 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 whitespace-nowrap"
+            className="text-xs px-3 py-2 bg-navy-50 text-navy-800 rounded-lg hover:bg-navy-100 transition-colors whitespace-nowrap"
           >
             ← Use Builder
           </button>
@@ -367,7 +367,7 @@ function ProductCodeBuilder({
   }
 
   return (
-    <div className="border-2 border-amber-200 rounded-xl bg-gradient-to-br from-amber-50 to-white p-4 space-y-4 shadow-sm">
+    <div className="border border-navy-100 rounded-xl bg-white p-3 sm:p-4 space-y-4 shadow-sm">
       {/* ── Live Preview ── */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
@@ -379,7 +379,7 @@ function ProductCodeBuilder({
               ✓ 11 / 11
             </span>
           ) : (
-            <span className="text-xs bg-amber-100 text-amber-700 border border-amber-300 px-2 py-1 rounded-full">
+            <span className="text-xs bg-gold-400/25 text-gold-600 border border-gold-400/40 px-2 py-1 rounded-full">
               {
                 [
                   seg_part,
@@ -396,7 +396,7 @@ function ProductCodeBuilder({
         </div>
 
         {/* Code display */}
-        <div className="flex items-center gap-1 bg-white border-2 border-amber-300 rounded-xl px-4 py-3 shadow-inner justify-center font-mono text-2xl tracking-[0.2em] select-all overflow-x-auto">
+        <div className="flex items-center gap-1 bg-white border-2 border-navy-100 rounded-xl px-2 sm:px-4 py-3 shadow-inner justify-center font-mono text-lg sm:text-2xl tracking-[0.1em] sm:tracking-[0.2em] select-all overflow-x-auto">
           <span className={`${SEG.part}  font-black`}>{seg_part}</span>
           <span className="text-gray-200 font-thin">·</span>
           <span className={`${SEG.chart} font-black`}>
@@ -439,7 +439,7 @@ function ProductCodeBuilder({
         </div>
       </div>
 
-      <hr className="border-amber-100" />
+      <hr className="border-navy-100" />
 
       {/* ── ① Part Number ── */}
       <div>
@@ -487,7 +487,7 @@ function ProductCodeBuilder({
             — 2-char pair, auto-fills Sub Code
           </span>
         </label>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
           {PRODUCT_CHARTS.map((c) => (
             <button
               key={c.symbol}
@@ -610,10 +610,10 @@ function ProductCodeBuilder({
         </div>
       </div>
 
-      <hr className="border-amber-100" />
+      <hr className="border-navy-100" />
 
       {/* ── ④⑤⑥ Store / Column / Row ── */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {/* Store */}
         <div>
           <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
@@ -679,7 +679,7 @@ function ProductCodeBuilder({
                 key={r}
                 type="button"
                 onClick={() => !disabled && setRowNum(r)}
-                className={`py-1 rounded border text-xs font-bold transition-all duration-100
+                className={`py-1.5 sm:py-1 rounded border text-xs font-bold transition-all duration-100
                   ${
                     rowNum === r
                       ? "border-teal-500 bg-teal-100 text-teal-800"
@@ -763,6 +763,82 @@ const acceptReturnApi = async (productId, quantity) => {
   return data;
 };
 
+/* Row actions dropdown — top-level component (not recreated on every render) */
+function StockActionsDropdown({ item, onEdit, onDelete, onUploadPhoto, onOpenAccept }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, []);
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="p-2 hover:bg-navy-50 rounded-full transition-colors"
+        aria-label={`Actions for ${item.productName}`}
+      >
+        <MoreVertical size={20} className="text-gray-500" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 w-56 bg-white shadow-lg rounded-lg border border-navy-100 py-1 z-10">
+          <button
+            onClick={() => {
+              onEdit(item);
+              setOpen(false);
+            }}
+            className="flex w-full px-4 py-2 text-sm text-navy-800 hover:bg-navy-50 items-center transition-colors"
+          >
+            <Edit2 size={16} className="mr-2" /> Edit
+          </button>
+
+          <label className="flex w-full px-4 py-2 text-sm text-navy-800 hover:bg-navy-50 items-center cursor-pointer transition-colors">
+            <Upload size={16} className="mr-2" /> Upload Photo
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onUploadPhoto(item.productId, file);
+                setOpen(false);
+              }}
+            />
+          </label>
+
+          <button
+            onClick={() => {
+              onDelete(item.productId);
+              setOpen(false);
+            }}
+            className="flex w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 items-center transition-colors"
+          >
+            <XCircle size={16} className="mr-2" /> Delete
+          </button>
+
+          <button
+            onClick={() => {
+              onOpenAccept(item);
+              setOpen(false);
+            }}
+            disabled={(item.returnableQty || 0) <= 0}
+            className={`flex w-full px-4 py-2 text-sm items-center transition-colors ${(item.returnableQty || 0) <= 0 ? "text-gray-400 cursor-not-allowed" : "text-navy-800 hover:bg-navy-50"}`}
+          >
+            <CheckCircle size={16} className="mr-2" /> Accept Return
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ==========================
    Main StockPage component
    ========================== */
@@ -795,8 +871,7 @@ function StockPage({ socket }) {
   const [partNumberAuto, setPartNumberAuto] = useState(true);
   const [partNumberAvailable, setPartNumberAvailable] = useState(true);
   const [formErrors, setFormErrors] = useState({});
-  const [showDescriptionModal, setShowDescriptionModal] = useState(false);
-  const [selectedDescription, setSelectedDescription] = useState("");
+  const [viewingItem, setViewingItem] = useState(null);
   const [uploadingId, setUploadingId] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -1332,11 +1407,6 @@ function StockPage({ socket }) {
     [fetchStock],
   );
 
-  const showDescription = useCallback((desc) => {
-    setSelectedDescription(desc);
-    setShowDescriptionModal(true);
-  }, []);
-
   // Form Validation (includes returnableQty)
   const validateForm = useCallback(() => {
     const errors = {};
@@ -1474,85 +1544,6 @@ function StockPage({ socket }) {
     }
   }, []);
 
-  // Actions Dropdown (includes Accept Return)
-  const ActionsDropdown = ({ item }) => {
-    const [open, setOpen] = useState(false);
-    const menuRef = useRef(null);
-
-    useEffect(() => {
-      const handleOutside = (e) => {
-        if (menuRef.current && !menuRef.current.contains(e.target))
-          setOpen(false);
-      };
-      document.addEventListener("mousedown", handleOutside);
-      return () => document.removeEventListener("mousedown", handleOutside);
-    }, []);
-
-    const openAccept = () => {
-      setAcceptProduct(item);
-      setShowAcceptModal(true);
-      setOpen(false);
-    };
-
-    return (
-      <div ref={menuRef} className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="p-2 hover:bg-gray-100 rounded-full transition"
-        >
-          <MoreVertical size={20} />
-        </button>
-
-        {open && (
-          <div className="absolute right-0 mt-2 w-56 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5 z-10">
-            <button
-              onClick={() => {
-                handleEdit(item);
-                setOpen(false);
-              }}
-              className="flex w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 items-center"
-            >
-              <Edit2 size={16} className="mr-2" /> Edit
-            </button>
-
-            <label className="flex w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 items-center cursor-pointer">
-              <Upload size={16} className="mr-2" /> Upload Photo
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) uploadPhoto(item.productId, file);
-                  setOpen(false);
-                }}
-              />
-            </label>
-
-            <button
-              onClick={() => {
-                handleDelete(item.productId);
-                setOpen(false);
-              }}
-              className="flex w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 items-center"
-            >
-              <XCircle size={16} className="mr-2" /> Delete
-            </button>
-
-            <button
-              onClick={() => openAccept()}
-              disabled={(item.returnableQty || 0) <= 0}
-              className={`flex w-full px-4 py-2 text-sm items-center ${(item.returnableQty || 0) <= 0 ? "text-gray-400 cursor-not-allowed" : "text-green-700 hover:bg-green-50"}`}
-            >
-              <CheckCircle size={16} className="mr-2" /> Accept Return
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   // After accept: safe local update (does NOT overwrite qtyRequired unless server explicitly returns it)
   const handleAfterAccept = useCallback(
     (productId, acceptedQty, serverResp = {}) => {
@@ -1591,26 +1582,26 @@ function StockPage({ socket }) {
   // Render
   if (isLoading && !stockItems.length) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center">
-        <div className="text-gray-600 text-xl animate-pulse">
+      <div className="flex items-center justify-center py-24">
+        <div className="flex items-center gap-3 text-gray-500 text-lg">
+          <svg className="animate-spin h-6 w-6 text-gold-500" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
           Loading Stock...
         </div>
       </div>
     );
   }
 
-  if (error && !showModal && !showDescriptionModal) return <ConnectionError onRetry={fetchStock} />;
+  if (error && !showModal && !viewingItem) return <ConnectionError onRetry={fetchStock} />;
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-        <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center tracking-tight">
-          Raw Material Inventory
-        </h1>
-        <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto space-y-4">
           {/* Toolbar */}
-          <div className="flex mb-8 gap-4 flex-wrap">
-            <div className="relative flex-grow">
+          <div className="flex gap-3 flex-wrap items-center">
+            <div className="relative flex-grow min-w-[220px]">
               <input
                 id="search-stock"
                 ref={searchInputRef}
@@ -1621,43 +1612,35 @@ function StockPage({ socket }) {
                 onKeyDown={(e) =>
                   e.key === "Escape" && (setSearchInput(""), setSearchTerm(""))
                 }
-                className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md"
+                className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
               />
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               {searchInput && (
                 <button
                   onClick={() => {
                     setSearchInput("");
                     setSearchTerm("");
                   }}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-navy-800 transition-colors"
+                  aria-label="Clear search"
                 >
-                  <X size={20} />
+                  <X size={16} />
                 </button>
               )}
             </div>
             <button
-              onClick={() => {
-                setModalMode("create");
-                handleCreate();
-              }}
-              className="p-4 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center shadow-md"
-            >
-              <Plus size={20} className="mr-2" /> Create Product
-            </button>
-            <button
               onClick={fetchStock}
               disabled={isLoading}
-              className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 flex items-center shadow-md"
+              className="flex items-center gap-2 px-4 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
             >
-              <RefreshCw size={20} className="mr-2" />{" "}
+              <RefreshCw size={16} />
               {isLoading ? "Refreshing..." : "Refresh"}
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md"
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
             >
-              <Upload size={20} className="mr-2" /> Import Excel
+              <Upload size={16} /> Import Excel
             </button>
             <input
               type="file"
@@ -1669,20 +1652,29 @@ function StockPage({ socket }) {
             <button
               onClick={exportToExcel}
               disabled={!filteredStock.length}
-              className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md"
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Download size={20} className="mr-2" /> Export Excel
+              <Download size={16} /> Export Excel
+            </button>
+            <button
+              onClick={() => {
+                setModalMode("create");
+                handleCreate();
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors ml-auto"
+            >
+              <Plus size={16} /> Create Product
             </button>
           </div>
 
           {/* Table */}
           {filteredStock.length === 0 && !isLoading ? (
-            <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
-              <Search className="mx-auto mb-4 text-gray-400" size={48} />
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">
+            <div className="bg-white p-8 rounded-xl shadow-sm border border-navy-100 text-center">
+              <Search className="mx-auto mb-4 text-gray-300" size={40} />
+              <h2 className="font-display text-xl font-bold text-navy-800 mb-2">
                 No Items Found
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-gray-500 mb-6">
                 {searchTerm
                   ? "Try adjusting your search."
                   : "Start by creating a product!"}
@@ -1693,66 +1685,65 @@ function StockPage({ socket }) {
                     setModalMode("create");
                     handleCreate();
                   }}
-                  className="p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto"
+                  className="px-5 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center gap-2 mx-auto"
                 >
-                  <Plus className="mr-2" /> Create First Product
+                  <Plus size={16} /> Create First Product
                 </button>
               )}
             </div>
           ) : (
-            <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
+            <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
               <table
                 className="w-full text-left border-collapse"
                 ref={tableRef}
                 tabIndex={0}
               >
                 <thead>
-                  <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50">
+                  <tr className="bg-navy-50 text-navy-800">
                     {[
                       { key: "productId", label: "ID" },
                       { key: "productName", label: "Name" },
-                      // { key: "location", label: "Location" },
                       { key: "stockQuantity", label: "Stock" },
                       { key: "returnableQty", label: "Returnable Qty" },
-                      { key: "qtyRequired", label: "Req" },
                       { key: "price", label: "Price (₹)" },
-                      { key: "productCode", label: "Code" },
-                      { key: "description", label: "Desc" },
-                      { key: "createdAt", label: "Created" },
+                      { key: "view", label: "View" },
                       { key: "actions", label: "Actions" },
-                    ].map(({ key, label }) => (
-                      <th
-                        key={key}
-                        className={`py-5 px-3 text-gray-800 font-semibold text-base ${key !== "actions" ? "cursor-pointer hover:bg-amber-300" : ""}`}
-                        onClick={() => key !== "actions" && sortData(key)}
-                        onKeyDown={(e) =>
-                          (e.key === "Enter" || e.key === " ") &&
-                          key !== "actions" &&
-                          sortData(key)
-                        }
-                        tabIndex={key !== "actions" ? 0 : -1}
-                        aria-sort={
-                          sortConfig.key === key
-                            ? sortConfig.direction === "asc"
-                              ? "ascending"
-                              : "descending"
-                            : "none"
-                        }
-                      >
-                        <div className="flex items-center justify-between">
-                          {label}
-                          {key !== "actions" && (
-                            <ArrowDownUp
-                              size={16}
-                              className={`ml-2 text-gray-600 ${sortConfig.key === key ? "text-gray-900" : "opacity-50"}`}
-                            />
-                          )}
-                        </div>
-                      </th>
-                    ))}
+                    ].map(({ key, label }) => {
+                      const sortable = key !== "view" && key !== "actions";
+                      return (
+                        <th
+                          key={key}
+                          className={`px-5 py-3 text-sm font-semibold whitespace-nowrap border-b border-navy-100 transition-colors ${sortable ? "cursor-pointer hover:bg-navy-100" : ""}`}
+                          onClick={() => sortable && sortData(key)}
+                          onKeyDown={(e) =>
+                            (e.key === "Enter" || e.key === " ") &&
+                            sortable &&
+                            sortData(key)
+                          }
+                          tabIndex={sortable ? 0 : -1}
+                          aria-sort={
+                            sortConfig.key === key
+                              ? sortConfig.direction === "asc"
+                                ? "ascending"
+                                : "descending"
+                              : "none"
+                          }
+                        >
+                          <div className="flex items-center justify-between">
+                            {label}
+                            {sortable && (
+                              <ArrowDownUp
+                                size={15}
+                                className={`ml-2 ${sortConfig.key === key ? "text-gold-500" : "text-navy-400/50"}`}
+                              />
+                            )}
+                          </div>
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-navy-100">
                   {paginatedStock.map((item) => {
                     const stockClass =
                       item.stockQuantity >= item.qtyRequired
@@ -1762,18 +1753,18 @@ function StockPage({ socket }) {
                     return (
                       <tr
                         key={item.productId}
-                        className="border-t hover:bg-amber-50"
+                        className="hover:bg-navy-50/60 transition-colors"
                       >
-                        <td className="py-4 px-3 text-gray-600">
+                        <td className="px-5 py-3.5 text-navy-800 font-medium">
                           {item.productId}
                         </td>
-                        <td className="py-4 px-3 text-gray-600 font-medium">
+                        <td className="px-5 py-3.5">
                           <div className="flex items-center gap-3">
                             {weservImageUrl ? (
                               <img
                                 src={weservImageUrl}
                                 alt={item.productName}
-                                className="w-10 h-10 rounded-md object-cover border cursor-pointer hover:opacity-80 transition"
+                                className="w-10 h-10 shrink-0 rounded-md object-cover border border-navy-100 cursor-pointer hover:opacity-80 transition-colors"
                                 onClick={() => {
                                   setSelectedImage({
                                     url: weservImageUrl,
@@ -1786,12 +1777,12 @@ function StockPage({ socket }) {
                                 }}
                               />
                             ) : (
-                              <div className="w-10 h-10 rounded-md bg-gray-100 border flex items-center justify-center text-sm text-gray-400">
+                              <div className="w-10 h-10 shrink-0 rounded-md bg-gray-100 border border-navy-100 flex items-center justify-center text-xs text-gray-400">
                                 No
                               </div>
                             )}
                             <div>
-                              <div className="font-medium">
+                              <div className="font-medium text-navy-800">
                                 {item.productName}
                               </div>
                               <div className="text-xs text-gray-500">
@@ -1800,64 +1791,54 @@ function StockPage({ socket }) {
                             </div>
                           </div>
                         </td>
-                        {/* <td className="py-4 px-3 text-gray-600">
-                          {item.location || (
-                            <span className="text-gray-400 italic">
-                              Not set
-                            </span>
-                          )}
-                        </td> */}
-                        <td className={`py-4 px-3 font-medium ${stockClass}`}>
+                        <td className={`px-5 py-3.5 font-medium ${stockClass}`}>
                           {item.stockQuantity}
                           {item.stockQuantity < item.qtyRequired && (
-                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-800">
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">
                               Low
                             </span>
                           )}
                         </td>
 
                         {/* Returnable Qty (clickable -> opens edit modal) */}
-                        <td className="py-4 px-3">
+                        <td className="px-5 py-3.5">
                           <button
                             onClick={() => handleEdit(item)}
                             title="Click to edit returnable qty"
-                            className={`px-3 py-1 rounded-full text-white text-sm ${item.returnableQty > 0 ? "bg-indigo-600 hover:brightness-110" : "bg-gray-400 hover:brightness-110"}`}
+                            className={`px-3 py-1 rounded-full text-white text-sm transition-colors ${item.returnableQty > 0 ? "bg-indigo-600 hover:bg-indigo-700" : "bg-gray-400 hover:bg-gray-500"}`}
                           >
                             {item.returnableQty ?? 0}
                           </button>
                         </td>
 
-                        <td className="py-4 px-3 text-gray-600">
-                          {item.qtyRequired}
-                        </td>
-                        <td className="py-4 px-3 text-gray-600">
+                        <td className="px-5 py-3.5 text-gray-600">
                           ₹{Number(item.price).toFixed(2)}
                         </td>
-                        <td className="py-4 px-3 text-gray-600 font-mono">
-                          {item.productCode}
+                        <td className="px-5 py-3.5">
+                          <button
+                            onClick={() => setViewingItem(item)}
+                            className="flex items-center gap-1.5 text-navy-800 hover:text-navy-600 font-medium text-sm transition-colors"
+                            aria-label={`View details for ${item.productName}`}
+                          >
+                            <Eye size={15} /> View
+                          </button>
                         </td>
-                        <td className="py-4 px-3">
-                          {item.description ? (
-                            <button
-                              onClick={() => showDescription(item.description)}
-                              className="text-amber-600 hover:text-amber-800 flex items-center"
-                            >
-                              <Eye size={16} className="mr-1" /> View
-                            </button>
-                          ) : (
-                            "-"
-                          )}
-                        </td>
-                        <td className="py-4 px-3 text-gray-600 text-sm">
-                          {formatDate(item.createdAt)}
-                        </td>
-                        <td className="py-4 px-3">
+                        <td className="px-5 py-3.5">
                           <div className="flex items-center gap-2">
-                            <ActionsDropdown item={item} />
+                            <StockActionsDropdown
+                              item={item}
+                              onEdit={handleEdit}
+                              onDelete={handleDelete}
+                              onUploadPhoto={uploadPhoto}
+                              onOpenAccept={(it) => {
+                                setAcceptProduct(it);
+                                setShowAcceptModal(true);
+                              }}
+                            />
                             {uploadingId === item.productId && (
-                              <div className="text-sm text-amber-600 animate-pulse">
+                              <span className="text-sm text-gold-600 animate-pulse">
                                 Uploading...
-                              </div>
+                              </span>
                             )}
                           </div>
                         </td>
@@ -1867,63 +1848,63 @@ function StockPage({ socket }) {
                 </tbody>
               </table>
 
-              <div className="flex justify-between items-center p-4 bg-gray-50">
-                <div className="text-gray-600">
+              <div className="flex flex-wrap gap-3 justify-between items-center p-4 bg-navy-50 border-t border-navy-100">
+                <div className="text-gray-500 text-sm">
                   Showing {paginatedStock.length} of {filteredStock.length}{" "}
                   (Total: {totalItems})
                 </div>
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-3 sm:gap-6">
+                  <div className="flex items-center gap-4 text-sm text-gray-600">
                     <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-full bg-green-500 mr-1.5"></div>{" "}
+                      <div className="w-2.5 h-2.5 rounded-full bg-green-500 mr-1.5"></div>{" "}
                       In Stock
                     </div>
                     <div className="flex items-center">
-                      <div className="w-3 h-3 rounded-full bg-red-500 mr-1.5"></div>{" "}
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500 mr-1.5"></div>{" "}
                       Low
                     </div>
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="flex gap-2">
                     <button
                       onClick={() => setPage((p) => Math.max(0, p - 1))}
                       disabled={page === 0}
-                      className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
+                      className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                     >
-                      <ChevronLeft size={20} />
+                      <ChevronLeft size={18} />
                     </button>
                     <button
                       onClick={() => setPage((p) => p + 1)}
                       disabled={
                         (page + 1) * itemsPerPage >= filteredStock.length
                       }
-                      className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
+                      className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                     >
-                      <ChevronRight size={20} />
+                      <ChevronRight size={18} />
                     </button>
                   </div>
                 </div>
               </div>
             </div>
           )}
-        </div>
 
         {/* Create/Edit Modal */}
         {showModal && (
           <div
-            className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4"
             role="dialog"
           >
             <div
-              className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto relative"
+              className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto relative"
               ref={modalRef}
             >
               <button
                 onClick={() => setShowModal(false)}
-                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+                className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
+                aria-label="Close"
               >
-                <XCircle size={24} />
+                <XCircle size={22} />
               </button>
-              <h2 className="text-2xl font-bold text-gray-800 mb-6">
+              <h2 className="font-display text-xl font-bold text-navy-800 mb-5">
                 {modalMode === "create"
                   ? "Create Product"
                   : `Edit #${selectedItem?.productId}`}
@@ -1931,7 +1912,7 @@ function StockPage({ socket }) {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Part search */}
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Search Part (optional)
                   </label>
                   <div className="relative" ref={partDropdownRef}>
@@ -1945,14 +1926,14 @@ function StockPage({ socket }) {
                         if (!partsLoaded && !isPartLoading) loadParts();
                       }}
                       placeholder="Type part code or name..."
-                      className="w-full p-3 pl-9 border rounded-lg focus:ring-2 focus:ring-amber-300"
+                      className="w-full p-3 pl-9 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                     />
                     <Search
                       size={16}
                       className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
                     />
                     {showPartDropdown && (
-                      <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white border rounded-lg shadow-lg">
+                      <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white border border-navy-100 rounded-lg shadow-lg">
                         {isPartLoading && (
                           <div className="px-3 py-2 text-sm text-gray-500">
                             Loading parts...
@@ -1969,9 +1950,9 @@ function StockPage({ socket }) {
                               key={part.id}
                               type="button"
                               onClick={() => handlePartSelect(part)}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-amber-50"
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-navy-50/60 transition-colors"
                             >
-                              <div className="font-medium">
+                              <div className="font-medium text-navy-800">
                                 {part.partCode} — {part.name}
                               </div>
                               <div className="text-xs text-gray-500">
@@ -1992,7 +1973,7 @@ function StockPage({ socket }) {
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Product Name *
                   </label>
                   <input
@@ -2002,7 +1983,7 @@ function StockPage({ socket }) {
                     onChange={(e) =>
                       setFormData({ ...formData, productName: e.target.value })
                     }
-                    className={`w-full p-3 border rounded-lg ${formErrors.productName ? "border-red-500" : ""}`}
+                    className={`w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.productName ? "border-red-500" : "border-navy-100"}`}
                     required
                   />
                   {formErrors.productName && (
@@ -2013,7 +1994,7 @@ function StockPage({ socket }) {
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Product Code *
                   </label>
                   <ProductCodeBuilder
@@ -2034,23 +2015,8 @@ function StockPage({ socket }) {
                   />
                 </div>
 
-                {/* <div>
-                  <label className="block text-gray-700 font-medium mb-1">
-                    Location
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Warehouse A, Shelf 12"
-                    value={formData.location}
-                    onChange={(e) =>
-                      setFormData({ ...formData, location: e.target.value })
-                    }
-                    className="w-full p-3 border rounded-lg"
-                  />
-                </div> */}
-
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Price (₹) *
                   </label>
                   <input
@@ -2061,7 +2027,7 @@ function StockPage({ socket }) {
                     onChange={(e) =>
                       setFormData({ ...formData, price: e.target.value })
                     }
-                    className={`w-full p-3 border rounded-lg ${formErrors.price ? "border-red-500" : ""}`}
+                    className={`w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.price ? "border-red-500" : "border-navy-100"}`}
                     required
                   />
                   {formErrors.price && (
@@ -2072,7 +2038,7 @@ function StockPage({ socket }) {
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     {modalMode === "create"
                       ? "Initial Stock"
                       : "Stock Quantity"}
@@ -2088,7 +2054,7 @@ function StockPage({ socket }) {
                         stockQuantity: e.target.value,
                       })
                     }
-                    className={`w-full p-3 border rounded-lg ${formErrors.stockQuantity ? "border-red-500" : ""}`}
+                    className={`w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.stockQuantity ? "border-red-500" : "border-navy-100"}`}
                     required={modalMode === "create"}
                   />
                   {formErrors.stockQuantity && (
@@ -2099,7 +2065,7 @@ function StockPage({ socket }) {
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Qty Required
                   </label>
                   <input
@@ -2109,12 +2075,12 @@ function StockPage({ socket }) {
                     onChange={(e) =>
                       setFormData({ ...formData, qtyRequired: e.target.value })
                     }
-                    className="w-full p-3 border rounded-lg"
+                    className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Returnable Qty
                   </label>
                   <input
@@ -2127,7 +2093,7 @@ function StockPage({ socket }) {
                         returnableQty: e.target.value,
                       })
                     }
-                    className={`w-full p-3 border rounded-lg ${formErrors.returnableQty ? "border-red-500" : ""}`}
+                    className={`w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.returnableQty ? "border-red-500" : "border-navy-100"}`}
                   />
                   {formErrors.returnableQty && (
                     <p className="text-red-500 text-sm mt-1">
@@ -2141,7 +2107,7 @@ function StockPage({ socket }) {
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-medium mb-1">
+                  <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Description
                   </label>
                   <textarea
@@ -2149,7 +2115,7 @@ function StockPage({ socket }) {
                     onChange={(e) =>
                       setFormData({ ...formData, description: e.target.value })
                     }
-                    className="w-full p-3 border rounded-lg"
+                    className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                     rows="2"
                   />
                 </div>
@@ -2158,13 +2124,13 @@ function StockPage({ socket }) {
                   <button
                     type="button"
                     onClick={() => setShowModal(false)}
-                    className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                    className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold"
+                    className="px-5 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors"
                   >
                     {modalMode === "create" ? "Create" : "Update"}
                   </button>
@@ -2174,20 +2140,58 @@ function StockPage({ socket }) {
           </div>
         )}
 
-        {/* Description Modal */}
-        {showDescriptionModal && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative">
+        {/* View Details Modal */}
+        {viewingItem && (
+          <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto relative">
               <button
-                onClick={() => setShowDescriptionModal(false)}
-                className="absolute top-4 right-4 hover:text-gray-700"
+                onClick={() => setViewingItem(null)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
+                aria-label="Close"
               >
-                <XCircle size={24} />
+                <X size={18} />
               </button>
-              <h2 className="text-2xl font-bold mb-4">Description</h2>
-              <p className="text-gray-700 whitespace-pre-wrap">
-                {selectedDescription || "None"}
-              </p>
+              <h2 className="font-display text-xl font-bold text-navy-800 mb-5">
+                {viewingItem.productName || "Product Details"}
+              </h2>
+              <dl className="space-y-4">
+                {[
+                  { label: "Product ID", value: viewingItem.productId },
+                  { label: "Product Code", value: viewingItem.productCode },
+                  {
+                    label: "Price (₹)",
+                    value: `₹${Number(viewingItem.price).toFixed(2)}`,
+                  },
+                  { label: "Stock Quantity", value: viewingItem.stockQuantity },
+                  {
+                    label: "Returnable Qty",
+                    value: viewingItem.returnableQty ?? 0,
+                  },
+                  { label: "Qty Required", value: viewingItem.qtyRequired },
+                  { label: "Description", value: viewingItem.description },
+                  {
+                    label: "Created At",
+                    value: formatDate(viewingItem.createdAt),
+                  },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      {label}
+                    </dt>
+                    <dd className="text-navy-800 mt-0.5 whitespace-pre-wrap">
+                      {value || value === 0 ? value : "N/A"}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => setViewingItem(null)}
+                  className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -2195,13 +2199,13 @@ function StockPage({ socket }) {
         {/* Image Modal */}
         {showImageModal && selectedImage && (
           <div
-            className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-navy-900/90 flex items-center justify-center z-50 p-4"
             onClick={() => setShowImageModal(false)}
           >
             <div className="relative max-w-7xl max-h-full">
               <button
                 onClick={() => setShowImageModal(false)}
-                className="absolute -top-12 right-0 text-white hover:text-gray-300 transition"
+                className="absolute -top-12 right-0 text-white hover:text-gold-400 transition-colors"
               >
                 <XCircle size={32} />
               </button>
@@ -2270,50 +2274,52 @@ const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-60">
-      <div className="bg-white p-6 rounded-2xl shadow-xl w-[420px] relative">
+    <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-[420px] max-w-full max-h-[90vh] overflow-y-auto relative">
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 text-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
           aria-label="Close accept return modal"
         >
           <XCircle size={22} />
         </button>
-        <h3 className="text-xl font-semibold mb-3">
+        <h3 className="font-display text-xl font-bold text-navy-800 mb-3">
           Accept Return — {product.productName}
         </h3>
         <p className="text-sm text-gray-600 mb-4">
           Available to accept: <strong>{product.returnableQty}</strong>
         </p>
 
-        <label className="text-sm font-medium">Quantity to accept</label>
+        <label className="text-sm font-semibold text-navy-800 mb-1.5 block">
+          Quantity to accept
+        </label>
         <input
           type="number"
           min={1}
           max={product.returnableQty}
           value={qty}
           onChange={(e) => setQty(e.target.value)}
-          className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-300 mb-3"
+          className="w-full p-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 mb-3"
         />
 
-        <div className="flex space-x-3 justify-end">
+        <div className="flex gap-3 justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
             disabled={isSubmitting}
           >
             Cancel
           </button>
           <button
             onClick={handleAccept}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center"
+            className="px-4 py-2 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors flex items-center gap-2"
             disabled={isSubmitting}
           >
             {isSubmitting ? (
               "Accepting..."
             ) : (
               <>
-                <CheckCircle className="mr-2" /> Accept
+                <CheckCircle size={16} /> Accept
               </>
             )}
           </button>

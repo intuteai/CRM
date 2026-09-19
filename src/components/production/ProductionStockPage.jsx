@@ -345,13 +345,13 @@ function ProductCodeBuilder({
               onChange?.(e.target.value);
             }}
             placeholder="Enter 11-char code manually"
-            className="flex-1 p-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-amber-300"
+            className="flex-1 p-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-gold-400"
             disabled={disabled}
           />
           <button
             type="button"
             onClick={() => setManualMode(false)}
-            className="text-xs px-3 py-2 bg-amber-100 text-amber-800 rounded-lg hover:bg-amber-200 whitespace-nowrap"
+            className="text-xs px-3 py-2 bg-gold-400/25 text-gold-600 rounded-lg hover:bg-navy-50 whitespace-nowrap"
           >
             ← Use Builder
           </button>
@@ -362,7 +362,7 @@ function ProductCodeBuilder({
   }
 
   return (
-    <div className="border-2 border-amber-200 rounded-xl bg-gradient-to-br from-amber-50 to-white p-4 space-y-4 shadow-sm">
+    <div className="border-2 border-navy-100 rounded-xl bg-navy-50 p-4 space-y-4 shadow-sm">
       {/* ── Live Preview ── */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
@@ -374,7 +374,7 @@ function ProductCodeBuilder({
               ✓ 11 / 11
             </span>
           ) : (
-            <span className="text-xs bg-amber-100 text-amber-700 border border-amber-300 px-2 py-1 rounded-full">
+            <span className="text-xs bg-gold-400/25 text-gold-600 border border-gold-400 px-2 py-1 rounded-full">
               {
                 [
                   seg_part,
@@ -391,7 +391,7 @@ function ProductCodeBuilder({
         </div>
 
         {/* Code display */}
-        <div className="flex items-center gap-1 bg-white border-2 border-amber-300 rounded-xl px-4 py-3 shadow-inner justify-center font-mono text-2xl tracking-[0.2em] select-all overflow-x-auto">
+        <div className="flex items-center gap-1 bg-white border-2 border-gold-400 rounded-xl px-4 py-3 shadow-inner justify-center font-mono text-2xl tracking-[0.2em] select-all overflow-x-auto">
           <span className={`${SEG.part}  font-black`}>{seg_part}</span>
           <span className="text-gray-200 font-thin">·</span>
           <span className={`${SEG.chart} font-black`}>
@@ -434,7 +434,7 @@ function ProductCodeBuilder({
         </div>
       </div>
 
-      <hr className="border-amber-100" />
+      <hr className="border-navy-100" />
 
       {/* ── ① Part Number ── */}
       <div>
@@ -602,7 +602,7 @@ function ProductCodeBuilder({
         </div>
       </div>
 
-      <hr className="border-amber-100" />
+      <hr className="border-navy-100" />
 
       {/* ── ④⑤⑥ Store / Column / Row ── */}
       <div className="grid grid-cols-3 gap-4">
@@ -792,8 +792,7 @@ function ProductionStockPage() {
   const [formErrors, setFormErrors] = useState({});
   const [partNumberAuto, setPartNumberAuto] = useState(true);
   const [partNumberAvailable, setPartNumberAvailable] = useState(true);
-  const [showDescriptionModal, setShowDescriptionModal] = useState(false);
-  const [selectedDescription, setSelectedDescription] = useState("");
+  const [viewingItem, setViewingItem] = useState(null);
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const [selectedBarcode, setSelectedBarcode] = useState("");
   const [selectedProductName, setSelectedProductName] = useState("");
@@ -1082,11 +1081,6 @@ function ProductionStockPage() {
     }));
   }, []);
 
-  const showDescription = useCallback((desc) => {
-    setSelectedDescription(desc || "No description");
-    setShowDescriptionModal(true);
-  }, []);
-
   const showBarcode = useCallback((code, name, desc, location, price) => {
     setSelectedBarcode(code);
     setSelectedProductName(name);
@@ -1113,13 +1107,13 @@ function ProductionStockPage() {
           <MoreVertical size={20} />
         </button>
         {open && (
-          <div className="absolute right-0 mt-2 w-48 bg-white shadow-lg rounded-lg ring-1 ring-black ring-opacity-5 z-10">
+          <div className="absolute right-0 mt-2 w-48 bg-white shadow-lg rounded-lg border border-navy-100 z-10">
             <button
               onClick={() => {
                 onEdit(item);
                 setOpen(false);
               }}
-              className="flex w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 items-center"
+              className="flex w-full px-4 py-2 text-sm text-navy-800 hover:bg-navy-50 transition-colors items-center"
             >
               <Edit2 size={16} className="mr-2" /> Edit
             </button>
@@ -1262,278 +1256,252 @@ function ProductionStockPage() {
 
   if (isLoading && !stockItems.length) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 flex items-center justify-center">
-        <div className="text-gray-600 text-xl animate-pulse">
+      <div className="flex items-center justify-center py-24">
+        <div className="text-gray-500 text-lg">
           Loading production materials...
         </div>
       </div>
     );
   }
 
-  if (error && !showModal && !showDescriptionModal && !showBarcodeModal) return <ConnectionError onRetry={refetchData} />;
+  if (error && !showModal && !viewingItem && !showBarcodeModal) return <ConnectionError onRetry={refetchData} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <h1 className="text-4xl font-bold text-gray-800 mb-10 text-center">
-        Production Raw Material Inventory
-      </h1>
-      <div className="max-w-7xl mx-auto">
-        <div className="flex mb-8 gap-4 flex-wrap">
-          <div className="relative flex-grow">
-            <input
-              type="text"
-              placeholder="Search by ID, Name, Code..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) =>
-                e.key === "Escape" && (setSearchInput(""), setSearchTerm(""))
-              }
-              ref={searchInputRef}
-              className="w-full p-4 pl-12 border rounded-lg focus:ring-2 focus:ring-amber-300 shadow-md"
-            />
-            <Search
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-              size={20}
-            />
-            {searchInput && (
-              <button
-                onClick={() => {
-                  setSearchInput("");
-                  setSearchTerm("");
-                }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <XCircle size={20} />
-              </button>
-            )}
-          </div>
-          <button
-            onClick={refetchData}
-            disabled={isLoading}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 flex items-center shadow-md"
-          >
-            Refresh
-          </button>
-          <button
-            onClick={handleCreate}
-            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md"
-          >
-            <PlusCircle className="mr-2" size={20} /> Add Item
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md"
-          >
-            <Upload className="mr-2" size={20} /> Import
-          </button>
+    <div className="max-w-7xl mx-auto space-y-4">
+      <div className="flex gap-3 flex-wrap items-center">
+        <div className="relative flex-grow min-w-[220px]">
           <input
-            type="file"
-            ref={fileInputRef}
-            onChange={importFromExcel}
-            accept=".xlsx,.xls"
-            className="hidden"
+            type="text"
+            placeholder="Search by ID, Name, Code..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) =>
+              e.key === "Escape" && (setSearchInput(""), setSearchTerm(""))
+            }
+            ref={searchInputRef}
+            className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
           />
-          <button
-            onClick={exportToExcel}
-            disabled={!filteredStock.length}
-            className="p-4 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center shadow-md"
-          >
-            <Download className="mr-2" size={20} /> Export
-          </button>
-        </div>
-
-        {filteredStock.length === 0 && !isLoading ? (
-          <div className="bg-white p-16 rounded-2xl shadow-lg text-center">
-            <Package size={48} className="mx-auto mb-4 text-gray-400" />
-            <p className="text-lg text-gray-600">No materials found.</p>
-            {!searchTerm && (
-              <button
-                onClick={handleCreate}
-                className="mt-4 p-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto"
-              >
-                <PlusCircle className="mr-2" /> Add First Item
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl shadow-lg overflow-x-auto">
-            <table
-              className="w-full text-left min-w-[1300px]"
-              ref={tableRef}
-              tabIndex={0}
+          <Search
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+            size={17}
+          />
+          {searchInput && (
+            <button
+              onClick={() => {
+                setSearchInput("");
+                setSearchTerm("");
+              }}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-navy-800 transition-colors"
+              aria-label="Clear search"
             >
-              <thead className="bg-amber-100">
-                <tr>
-                  {[
-                    { key: "productId", label: "ID" },
-                    { key: "productCode", label: "Code" },
-                    { key: "productName", label: "Name" },
-                    { key: "description", label: "Desc" },
-                    { key: "stockQuantity", label: "Stock" },
-                    { key: "qtyRequired", label: "Req" },
-                    { key: "price", label: "Price" },
-                    { key: "createdAt", label: "Created" },
-                    { key: "qrcode", label: "QR" },
-                    { key: "actions", label: "Actions" },
-                  ].map(({ key, label }) => (
-                    <th
-                      key={key}
-                      onClick={() =>
-                        key !== "actions" && key !== "qrcode" && handleSort(key)
-                      }
-                      className={`py-5 px-3 text-base font-medium ${key !== "actions" && key !== "qrcode" ? "cursor-pointer hover:bg-amber-200" : ""}`}
-                      tabIndex={key !== "actions" && key !== "qrcode" ? 0 : -1}
-                    >
-                      <div className="flex items-center">
-                        {label}
-                        {key !== "actions" && key !== "qrcode" && (
-                          <ArrowDownUp className="ml-2" size={16} />
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedStock.map((item) => {
-                  const isLow = item.stockQuantity < item.qtyRequired;
-                  return (
-                    <tr
-                      key={item.productId}
-                      className="border-t hover:bg-amber-50"
-                    >
-                      <td className="py-4 px-3 text-gray-700">
-                        {item.productId}
-                      </td>
-                      <td className="py-4 px-3 text-gray-700 font-mono">
-                        {item.productCode}
-                      </td>
-                      <td className="py-4 px-3 text-gray-700 font-medium">
-                        {item.productName}
-                      </td>
-                      <td className="py-4 px-3">
-                        {item.description ? (
-                          <button
-                            onClick={() => showDescription(item.description)}
-                            className="text-amber-600 hover:text-amber-800 flex items-center"
-                          >
-                            <Eye size={16} className="mr-1" /> View
-                          </button>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
-                      <td className="py-4 px-3">
-                        <span
-                          className={`px-3 py-1 rounded-full text-white text-sm ${isLow ? "bg-red-500" : "bg-green-500"}`}
-                        >
-                          {item.stockQuantity}
-                        </span>
-                      </td>
-                      <td className="py-4 px-3 text-gray-700">
-                        {item.qtyRequired}
-                      </td>
-                      <td className="py-4 px-3 text-gray-700">
-                        {formatCurrency(item.price)}
-                      </td>
-                      <td className="py-4 px-3 text-sm text-gray-600">
-                        {formatDate(item.createdAt)}
-                      </td>
-                      <td className="py-4 px-3">
-                        <button
-                          onClick={() =>
-                            showBarcode(
-                              item.productCode,
-                              item.productName,
-                              item.description,
-                              item.location,
-                              item.price,
-                            )
-                          }
-                          className="text-amber-600 hover:text-amber-800 flex items-center"
-                        >
-                          <Eye size={16} className="mr-1" /> QR
-                        </button>
-                      </td>
-                      <td className="py-4 px-3 sticky right-0 bg-white">
-                        <ActionsDropdown item={item} onEdit={handleEdit} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+              <XCircle size={18} />
+            </button>
+          )}
+        </div>
+        <button
+          onClick={refetchData}
+          disabled={isLoading}
+          className="px-4 py-3 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50 flex items-center"
+        >
+          Refresh
+        </button>
+        <button
+          onClick={handleCreate}
+          className="px-4 py-3 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center"
+        >
+          <PlusCircle className="mr-2" size={18} /> Add Item
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors flex items-center"
+        >
+          <Upload className="mr-2" size={16} /> Import
+        </button>
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={importFromExcel}
+          accept=".xlsx,.xls"
+          className="hidden"
+        />
+        <button
+          onClick={exportToExcel}
+          disabled={!filteredStock.length}
+          className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center"
+        >
+          <Download className="mr-2" size={16} /> Export
+        </button>
+      </div>
 
-            <div className="flex justify-between items-center p-4 bg-gray-50">
-              <div className="text-gray-600">
-                Showing {paginatedStock.length} of {filteredStock.length}{" "}
-                (Total: {totalItems})
+      {filteredStock.length === 0 && !isLoading ? (
+        <div className="bg-white p-12 rounded-xl shadow-sm border border-navy-100 text-center">
+          <Package size={40} className="mx-auto mb-4 text-gray-300" />
+          <p className="text-gray-500">No materials found.</p>
+          {!searchTerm && (
+            <button
+              onClick={handleCreate}
+              className="mt-4 px-4 py-2 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center mx-auto"
+            >
+              <PlusCircle className="mr-2" size={16} /> Add First Item
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-x-auto">
+          <table
+            className="w-full text-left"
+            ref={tableRef}
+            tabIndex={0}
+          >
+            <thead className="bg-navy-50">
+              <tr>
+                {[
+                  { key: "productId", label: "ID" },
+                  { key: "productCode", label: "Code" },
+                  { key: "productName", label: "Name" },
+                  { key: "stockQuantity", label: "Stock" },
+                  { key: "qtyRequired", label: "Req" },
+                  { key: "price", label: "Price" },
+                  { key: "details", label: "Details" },
+                  { key: "actions", label: "Actions" },
+                ].map(({ key, label }) => (
+                  <th
+                    key={key}
+                    onClick={() =>
+                      key !== "actions" && key !== "details" && handleSort(key)
+                    }
+                    className={`py-3 px-3 text-sm font-semibold text-navy-800 border-b border-navy-100 whitespace-nowrap ${key !== "actions" && key !== "details" ? "cursor-pointer hover:bg-navy-100 transition-colors" : ""}`}
+                    tabIndex={key !== "actions" && key !== "details" ? 0 : -1}
+                  >
+                    <div className="flex items-center">
+                      {label}
+                      {key !== "actions" && key !== "details" && (
+                        <ArrowDownUp className="ml-2 text-navy-400/50" size={14} />
+                      )}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-navy-100">
+              {paginatedStock.map((item) => {
+                const isLow = item.stockQuantity < item.qtyRequired;
+                return (
+                  <tr
+                    key={item.productId}
+                    className="hover:bg-navy-50/60 transition-colors"
+                  >
+                    <td className="py-3.5 px-3 text-navy-800 font-medium">
+                      {item.productId}
+                    </td>
+                    <td className="py-3.5 px-3 text-gray-600 font-mono text-sm">
+                      {item.productCode}
+                    </td>
+                    <td className="py-3.5 px-3 text-navy-800 font-medium">
+                      {item.productName}
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold ${isLow ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
+                      >
+                        {item.stockQuantity}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-gray-600">
+                      {item.qtyRequired}
+                    </td>
+                    <td className="py-3.5 px-3 text-gray-600">
+                      {formatCurrency(item.price)}
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <button
+                        onClick={() => setViewingItem(item)}
+                        className="text-navy-800 hover:text-navy-600 font-medium text-sm transition-colors flex items-center"
+                      >
+                        <Eye size={16} className="mr-1" /> View
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-3 sticky right-0 bg-white">
+                      <ActionsDropdown item={item} onEdit={handleEdit} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          <div className="flex justify-between items-center p-4 bg-navy-50 border-t border-navy-100">
+            <div className="text-gray-500 text-sm">
+              Showing {paginatedStock.length} of {filteredStock.length}{" "}
+              (Total: {totalItems})
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="flex gap-4 text-sm text-gray-500">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500 mr-1.5"></div>{" "}
+                  In Stock
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 rounded-full bg-red-500 mr-1.5"></div>{" "}
+                  Low
+                </div>
               </div>
-              <div className="flex items-center gap-6">
-                <div className="flex gap-4">
-                  <div className="flex items-center">
-                    <div className="w-3 h-3 rounded-full bg-green-500 mr-1.5"></div>{" "}
-                    In Stock
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-3 h-3 rounded-full bg-red-500 mr-1.5"></div>{" "}
-                    Low
-                  </div>
-                </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    disabled={page === 0}
-                    className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
-                  >
-                    <ChevronLeft size={20} />
-                  </button>
-                  <button
-                    onClick={() => setPage((p) => p + 1)}
-                    disabled={(page + 1) * itemsPerPage >= filteredStock.length}
-                    className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100"
-                  >
-                    <ChevronRight size={20} />
-                  </button>
-                </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={(page + 1) * itemsPerPage >= filteredStock.length}
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
+                  aria-label="Next page"
+                >
+                  <ChevronRight size={18} />
+                </button>
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50 overflow-y-auto py-10">
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 overflow-y-auto py-10 px-4">
           <div
-            className="bg-white p-8 rounded-2xl shadow-xl w-[520px] max-h-[90vh] overflow-y-auto relative"
+            className="bg-white p-6 rounded-xl shadow-2xl w-[520px] max-w-full max-h-[90vh] overflow-y-auto relative"
             ref={modalRef}
           >
             <button
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4"
+              className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
+              aria-label="Close"
             >
-              <XCircle size={24} />
+              <XCircle size={20} />
             </button>
-            <h2 className="text-2xl font-bold mb-6">
+            <h2 className="font-display text-xl font-bold text-navy-800 mb-5 pr-8">
               {modalMode === "create"
                 ? "Add Item"
                 : `Edit #${selectedItem?.productId}`}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block font-medium mb-1">Product Name *</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Product Name *</label>
                 <input
                   type="text"
                   value={formData.productName}
                   onChange={(e) =>
                     setFormData({ ...formData, productName: e.target.value })
                   }
-                  className={`w-full p-3 border rounded-lg ${formErrors.productName ? "border-red-500" : ""}`}
+                  className={`w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.productName ? "border-red-500" : "border-navy-100"}`}
                   required
                 />
               </div>
               <div>
-                <label className="block font-medium mb-1">
+                <label className="block text-sm font-medium text-navy-800 mb-1">
                   Product Code (11 chars) *
                 </label>
                 <ProductCodeBuilder
@@ -1557,7 +1525,7 @@ function ProductionStockPage() {
                 )}
               </div>
               <div>
-                <label className="block font-medium mb-1">Price (₹) *</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Price (₹) *</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1566,12 +1534,12 @@ function ProductionStockPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, price: e.target.value })
                   }
-                  className={`w-full p-3 border rounded-lg ${formErrors.price ? "border-red-500" : ""}`}
+                  className={`w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.price ? "border-red-500" : "border-navy-100"}`}
                   required
                 />
               </div>
               <div>
-                <label className="block font-medium mb-1">
+                <label className="block text-sm font-medium text-navy-800 mb-1">
                   {modalMode === "create" ? "Initial Stock" : "Stock Quantity"}
                 </label>
                 <input
@@ -1582,12 +1550,12 @@ function ProductionStockPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, stockQuantity: e.target.value })
                   }
-                  className={`w-full p-3 border rounded-lg ${formErrors.stockQuantity ? "border-red-500" : ""}`}
+                  className={`w-full p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.stockQuantity ? "border-red-500" : "border-navy-100"}`}
                   required={modalMode === "create"}
                 />
               </div>
               <div>
-                <label className="block font-medium mb-1">Qty Required</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Qty Required</label>
                 <input
                   type="number"
                   min="0"
@@ -1596,17 +1564,17 @@ function ProductionStockPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, qtyRequired: e.target.value })
                   }
-                  className="w-full p-3 border rounded-lg"
+                  className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                 />
               </div>
               <div>
-                <label className="block font-medium mb-1">Description</label>
+                <label className="block text-sm font-medium text-navy-800 mb-1">Description</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  className="w-full p-3 border rounded-lg"
+                  className="w-full p-2.5 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
                   rows="2"
                 />
               </div>
@@ -1614,13 +1582,13 @@ function ProductionStockPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                  className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold"
+                  className={`px-5 py-2.5 rounded-lg font-semibold transition-colors ${modalMode === "create" ? "bg-gold-500 text-navy-900 hover:bg-gold-400" : "bg-navy-800 text-white hover:bg-navy-700"}`}
                 >
                   {modalMode === "create" ? "Create" : "Update"}
                 </button>
@@ -1630,33 +1598,73 @@ function ProductionStockPage() {
         </div>
       )}
 
-      {showDescriptionModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative">
+      {viewingItem && (
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto relative" role="dialog" aria-labelledby="stock-details-title">
             <button
-              onClick={() => setShowDescriptionModal(false)}
-              className="absolute top-4 right-4"
+              onClick={() => setViewingItem(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
+              aria-label="Close details"
             >
-              <XCircle size={24} />
+              <XCircle size={20} />
             </button>
-            <h2 className="text-2xl font-bold mb-4">Description</h2>
-            <p className="text-gray-700 whitespace-pre-wrap">
-              {selectedDescription}
-            </p>
+            <h2 id="stock-details-title" className="font-display text-xl font-bold text-navy-800 mb-5 pr-8">
+              {viewingItem.productName || "Material Details"}
+            </h2>
+            <dl className="space-y-4">
+              {[
+                { label: "Product ID", value: viewingItem.productId },
+                { label: "Product Code", value: viewingItem.productCode },
+                { label: "Description", value: viewingItem.description },
+                { label: "Stock Quantity", value: viewingItem.stockQuantity },
+                { label: "Qty Required", value: viewingItem.qtyRequired },
+                { label: "Price", value: formatCurrency(viewingItem.price) },
+                { label: "Created", value: formatDate(viewingItem.createdAt) },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</dt>
+                  <dd className="text-navy-800 mt-0.5 whitespace-pre-wrap">{value === undefined || value === null || value === "" ? "N/A" : value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="flex justify-between mt-6">
+              <button
+                onClick={() => {
+                  showBarcode(
+                    viewingItem.productCode,
+                    viewingItem.productName,
+                    viewingItem.description,
+                    viewingItem.location,
+                    viewingItem.price,
+                  );
+                  setViewingItem(null);
+                }}
+                className="px-4 py-2 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors"
+              >
+                Show QR Code
+              </button>
+              <button
+                onClick={() => setViewingItem(null)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {showBarcodeModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-2xl shadow-xl w-[500px] relative">
+        <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-xl shadow-2xl w-[500px] max-w-full max-h-[90vh] overflow-y-auto relative">
             <button
               onClick={() => setShowBarcodeModal(false)}
-              className="absolute top-4 right-4"
+              className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
+              aria-label="Close"
             >
-              <XCircle size={24} />
+              <XCircle size={20} />
             </button>
-            <h2 className="text-2xl font-bold mb-4">
+            <h2 className="font-display text-xl font-bold text-navy-800 mb-4 pr-8">
               QR: {selectedProductName}
             </h2>
             <div className="space-y-1 text-sm text-gray-700 mb-4">
@@ -1680,7 +1688,7 @@ function ProductionStockPage() {
                 a.click();
                 notifySuccess("Downloaded!");
               }}
-              className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 flex items-center mx-auto"
+              className="px-4 py-2 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors flex items-center mx-auto"
             >
               <Download className="mr-2" /> Download
             </button>

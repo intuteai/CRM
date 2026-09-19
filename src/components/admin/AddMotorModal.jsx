@@ -6,20 +6,20 @@ const getBackendUrl = () => import.meta.env.VITE_BACKEND_URL || "";
 
 // Modal component (reused from CreateMotorProcess for consistency)
 const Modal = ({ title, onClose, children, widthClass = "max-w-2xl" }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+  <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
     <div className={`w-full ${widthClass}`}>
-      <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200">
+      <div className="relative bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 text-gray-500 hover:text-gray-700"
+          className="absolute right-4 top-4 text-gray-400 hover:text-navy-800 transition-colors"
           aria-label="Close"
         >
           <X size={22} />
         </button>
-        <div className="p-6 border-b">
-          <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
+        <div className="p-4 sm:p-6 border-b border-navy-100">
+          <h3 className="font-display text-xl font-bold text-navy-800 pr-8">{title}</h3>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-4 sm:p-6">{children}</div>
       </div>
     </div>
   </div>
@@ -94,14 +94,14 @@ function AddMotorModal({ orderId, customerName, onClose, onCreated }) {
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-navy-800 mb-1">
             Motor Name
           </label>
           <input
             type="text"
             value={instanceName}
             onChange={(e) => setInstanceName(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-300"
+            className="w-full px-3 py-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
             placeholder="e.g., Motor A"
             disabled={busy}
           />
@@ -111,14 +111,14 @@ function AddMotorModal({ orderId, customerName, onClose, onCreated }) {
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
             disabled={busy}
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60"
+            className="px-4 py-2 rounded-lg bg-gold-500 text-navy-900 hover:bg-gold-400 transition-colors disabled:opacity-60"
             disabled={busy}
           >
             {busy ? "Creating…" : "Create Motor"}

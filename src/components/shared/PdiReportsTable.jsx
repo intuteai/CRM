@@ -73,18 +73,18 @@ function ReportActions({ report, canManage, duplicatingIds, onResume, onViewDown
   return (
     <div className="flex items-center gap-1">
       {canManage && (
-        <button onClick={() => onResume(report)} className="p-2 hover:bg-amber-100 rounded-full text-amber-700" title="Resume in Generator" aria-label={`Resume PDI report ${report.pdi_no || report.report_id}`}>
+        <button onClick={() => onResume(report)} className="p-2 hover:bg-navy-50 rounded-full text-navy-800 transition-colors" title="Resume in Generator" aria-label={`Resume PDI report ${report.pdi_no || report.report_id}`}>
           <Pencil size={18} />
         </button>
       )}
-      <button onClick={() => onViewDownload(report)} className="p-2 hover:bg-amber-100 rounded-full text-amber-700" title="View / Download PDF" aria-label={`View PDI report ${report.pdi_no || report.report_id}`}>
+      <button onClick={() => onViewDownload(report)} className="p-2 hover:bg-navy-50 rounded-full text-navy-800 transition-colors" title="View / Download PDF" aria-label={`View PDI report ${report.pdi_no || report.report_id}`}>
         <Eye size={18} />
       </button>
       {canManage && (
         <button
           onClick={() => onDuplicate(report)}
           disabled={duplicatingIds.has(report.report_id)}
-          className="p-2 hover:bg-amber-100 rounded-full text-amber-700 disabled:opacity-40 disabled:hover:bg-transparent"
+          className="p-2 hover:bg-navy-50 rounded-full text-navy-800 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
           title="Duplicate as New PDI"
           aria-label={`Duplicate PDI report ${report.pdi_no || report.report_id}`}
         >
@@ -526,8 +526,8 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
 
   if (isLoading && !pdiReports.length) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8 flex items-center justify-center" aria-live="polite">
-        <div className="text-gray-600 text-xl animate-pulse">Loading PDI Reports...</div>
+      <div className="flex items-center justify-center py-24" aria-live="polite">
+        <div className="text-gray-500 text-lg animate-pulse">Loading PDI Reports...</div>
       </div>
     );
   }
@@ -535,15 +535,11 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   if (error && !pdiReports.length) return <ConnectionError onRetry={fetchFirstPage} />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-8">
-      <div className="max-w-7xl mx-auto mb-8">
-        <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-2xl shadow-sm px-6 py-8 text-center">
-          <div className="inline-flex items-center justify-center rounded-2xl bg-gray-800 text-white mb-3 shadow-lg" style={{ width: 52, height: 52 }}>
-            <ClipboardList size={24} />
-          </div>
-          <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">{title}</h1>
-          <p className="text-gray-500 text-sm mt-1.5">Pre-dispatch inspection records across all customers and templates</p>
-        </div>
+    <div>
+      <div className="max-w-7xl mx-auto mb-4 flex items-center gap-2 text-gray-500 text-sm">
+        <ClipboardList size={16} className="text-gold-500 shrink-0" aria-hidden="true" />
+        <span className="sr-only">{title}</span>
+        <p>Pre-dispatch inspection records across all customers and templates</p>
       </div>
       <div className="max-w-7xl mx-auto">
         <div className="flex gap-3 mb-4">
@@ -557,13 +553,13 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
               value={searchInput}
               onChange={handleSearchChange}
               onKeyDown={handleKeyDown}
-              className="w-full p-4 pl-12 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-300 text-lg bg-white shadow-md transition-all duration-300"
+              className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
             />
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <Search size={17} className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
           <button
             onClick={handleRefresh}
-            className="p-4 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all duration-300 shadow-md text-lg"
+            className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors disabled:opacity-50"
             disabled={isLoading}
             aria-label="Refresh PDI reports"
           >
@@ -580,40 +576,42 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
               onClick={() => setStatusFilter(value)}
               aria-pressed={statusFilter === value}
               disabled={isLoading}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors focus:outline-none focus:ring-2 focus:ring-amber-300 ${
+              className={`px-3.5 py-2 sm:py-1.5 rounded-full text-xs font-semibold border transition-colors focus:outline-none focus:ring-2 focus:ring-gold-400 ${
                 statusFilter === value
-                  ? 'bg-gray-800 text-white border-gray-800'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                  ? 'bg-navy-800 text-white border-navy-800'
+                  : 'bg-white text-gray-600 border-navy-100 hover:border-gold-400'
               }`}
             >
               {label}
             </button>
           ))}
-          <div className="w-px h-5 bg-gray-200 mx-1" aria-hidden="true" />
+          <div className="flex items-center gap-2">
+          <div className="w-px h-5 bg-gray-200 mx-1 hidden sm:block" aria-hidden="true" />
           <label htmlFor="template-filter-pdi" className="text-xs uppercase font-bold text-gray-400 tracking-wide mr-1">Template</label>
           <select
             id="template-filter-pdi"
             value={templateFilter}
             onChange={handleTemplateFilterChange}
             disabled={isLoading}
-            className="px-3 py-1.5 rounded-full text-xs font-semibold border border-gray-200 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
+            className="px-3 py-2 sm:py-1.5 rounded-full text-xs font-semibold border border-navy-100 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-400"
           >
             <option value="">All templates</option>
             {templateOptions.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
+          </div>
         </div>
 
         {isLoading && pdiReports.length > 0 && (
           <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">Refreshing data...</div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          <div className="hidden md:block overflow-x-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-navy-100 overflow-hidden">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left border-collapse" role="grid" aria-label="PDI Reports table" ref={tableRef} tabIndex={0}>
               <thead>
-                <tr className="bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50" role="row">
+                <tr className="bg-navy-50" role="row">
                   {[
                     { key: 'sr_no', label: 'Sr. No.' },
                     { key: 'pdi_no', label: 'PDI No.' },
@@ -626,7 +624,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                   ].map(({ key, label }) => (
                     <th
                       key={key}
-                      className={`py-5 px-3 text-gray-800 text-base font-semibold ${key !== 'actions' ? 'cursor-pointer hover:bg-amber-300' : ''} transition-all duration-200`}
+                      className={`py-3 px-3 text-navy-800 text-sm font-semibold border-b border-navy-100 whitespace-nowrap ${key !== 'actions' ? 'cursor-pointer hover:bg-navy-100' : ''} transition-colors`}
                       onClick={() => key !== 'actions' && handleSort(key)}
                       aria-sort={sortConfig?.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
                       scope="col"
@@ -634,7 +632,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                       <div className="flex items-center justify-between">
                         <span>{label}</span>
                         {key !== 'actions' && (
-                          <ArrowDownUp size={16} className={`ml-2 text-gray-600 ${sortConfig?.key === key ? 'text-gray-900' : 'opacity-50'}`} aria-hidden="true" />
+                          <ArrowDownUp size={14} className={`ml-2 ${sortConfig?.key === key ? 'text-gold-500' : 'text-navy-400/50'}`} aria-hidden="true" />
                         )}
                       </div>
                     </th>
@@ -642,9 +640,9 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                 </tr>
               </thead>
               <tbody>
-                {/* Field fallbacks ('—'/'N/A') here must match the md:hidden card list below -- kept as two plain JSX blocks per the CSS-only breakpoint-switch design, not a shared render function. */}
+                {/* Field fallbacks ('—'/'N/A') here must match the lg:hidden card list below -- kept as two plain JSX blocks per the CSS-only breakpoint-switch design, not a shared render function. */}
                 {pdiReports.map((report) => (
-                  <tr key={report.report_id} className={`border-t border-l-4 ${getStatusStyle(report.status).border} hover:bg-amber-50 transition-all duration-200`} role="row">
+                  <tr key={report.report_id} className={`border-t border-l-4 ${getStatusStyle(report.status).border} hover:bg-navy-50/60 transition-colors`} role="row">
                     <td className="py-4 px-3 text-gray-600 text-base">{report.sr_no}</td>
                     <td className="py-4 px-3 text-gray-600 text-base">
                       {report.pdi_no || '—'}
@@ -678,7 +676,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
             </table>
           </div>
 
-          <div className="md:hidden divide-y">
+          <div className="lg:hidden divide-y">
             {/* Field fallbacks ('—'/'N/A') here must match the desktop table above. */}
             {/* divide-gray-100 (instead of the plain border-t-gray-100 used here) would set the
                 border-color shorthand on all four sides via a higher-specificity selector, silently
@@ -720,13 +718,13 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
           </div>
 
           {totalItems > 0 && (
-            <div className="flex justify-between items-center p-4 bg-gray-50">
+            <div className="flex flex-wrap justify-between items-center gap-3 p-4 bg-gray-50">
               <div className="text-gray-600">Showing {pdiReports.length} of {totalItems} PDI reports</div>
               <div className="flex space-x-2">
                 <button
                   onClick={handlePrevPage}
                   disabled={sortConfig ? sortOffset === 0 : cursorHistory.length === 0}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors focus:outline-none focus:ring-2 focus:ring-gold-400"
                   aria-label="Previous page"
                 >
                   <ChevronLeft size={20} />
@@ -734,7 +732,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                 <button
                   onClick={handleNextPage}
                   disabled={sortConfig ? nextOffset == null || isLoading : !cursor || isLoading}
-                  className="p-2 bg-white border rounded-lg disabled:opacity-50 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors focus:outline-none focus:ring-2 focus:ring-gold-400"
                   aria-label="Next page"
                 >
                   <ChevronRight size={20} />
