@@ -24,3 +24,70 @@
 .shadow-text {
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
 }
+/* ── Dashboard motion ("lively" preset) ─────────────────────────────────────
+   Entrance: elements rise + scale in one after another (set --i on each element for its slot).
+   Uses fill-mode `backwards`, so once the entrance is done the element goes back to its normal
+   styles and hover effects (lift, shadow) keep working. Everything is off for people who ask
+   their OS for reduced motion. */
+:root {
+  --anim-dur: 1s;
+  --anim-dist: 48px;
+  --anim-stagger: 150ms;
+  --anim-scale: 0.9;
+  --anim-ease: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes anim-rise {
+  from { opacity: 0; transform: translateY(var(--anim-dist)) scale(var(--anim-scale)); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes anim-bar-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes anim-bar-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes anim-drift {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(18px, -14px); }
+}
+@keyframes anim-ring {
+  0%, 100% { transform: rotate(0); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-12deg); }
+  45% { transform: rotate(8deg); }
+  60% { transform: rotate(-6deg); }
+  75% { transform: rotate(0); }
+}
+
+.anim-in {
+  animation: anim-rise var(--anim-dur) var(--anim-ease) backwards;
+  animation-delay: calc(var(--i, 0) * var(--anim-stagger));
+}
+.anim-bar-x {
+  transform-origin: left;
+  animation: anim-bar-x 0.8s ease-out backwards;
+  animation-delay: calc(var(--i, 0) * var(--anim-stagger) + 0.25s);
+}
+.anim-bar-y {
+  transform-origin: top;
+  animation: anim-bar-y 0.8s ease-out backwards;
+  animation-delay: calc(var(--i, 0) * var(--anim-stagger) + 0.25s);
+}
+.anim-drift { animation: anim-drift 9s ease-in-out infinite; }
+.anim-ring { transform-origin: 50% 0; }
+.anim-ring-host:hover .anim-ring { animation: anim-ring 1s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-in, .anim-bar-x, .anim-bar-y, .anim-drift, .anim-ring-host:hover .anim-ring { animation: none; }
+}
+
+/* ── Small screens ───────────────────────────────────────────────────────────
+   Tables that sit in a horizontal scroll container keep a readable minimum width instead of
+   squeezing every column, so on a phone they scroll sideways rather than wrapping each cell. */
+@media (max-width: 767px) {
+  .overflow-x-auto > table { min-width: 640px; }
+}
+
+/* ── Modal overlays ──────────────────────────────────────────────
+   Tailwind's space-y-* / space-x-* add a margin to every sibling after the first,
+   including a `fixed inset-0` modal overlay rendered inside such a wrapper — that left
+   a strip of the page undimmed above the backdrop. Fixed elements take no sibling margin. */
+[class*="space-y-"] > .fixed { margin-top: 0 !important; }
+[class*="space-x-"] > .fixed { margin-left: 0 !important; }

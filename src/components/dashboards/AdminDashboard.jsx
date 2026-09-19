@@ -1,134 +1,144 @@
-import React, { useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import {
-  Package, MessageSquare, Truck, Users, FileText, BarChart,
-  PenTool, DollarSign, CheckSquare, Mail, MapPin, AlertTriangle, Wrench, Boxes, FileEdit
-} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ShoppingCart, MessageSquare, PackageX, Truck } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
+import { useAdminStats } from '../../hooks/useAdminStats';
+import { adminNavSections } from '../../config/adminNav';
+import DashboardGreeting from '../shared/DashboardGreeting';
+import StatCard from './admin/StatCard';
+import ActivityFeed from './admin/ActivityFeed';
+import ActivityRail from './admin/ActivityRail';
+import ModuleShowcase from './admin/ModuleShowcase';
+
+const MAX_ACTIVITY_ITEMS = 15;
 
 function AdminDashboard({ socket }) {
   const { notifyInfo } = useNotify();
+  const { stats, isLoading, error, fetchStats } = useAdminStats();
+  const [activity, setActivity] = useState([]);
+  const [activityOpen, setActivityOpen] = useState(false);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  const pushActivity = (message) => {
+    setActivity((prev) => [
+      { id: `${Date.now()}-${Math.random()}`, message, time: new Date().toLocaleTimeString() },
+      ...prev,
+    ].slice(0, MAX_ACTIVITY_ITEMS));
+  };
+
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('orderUpdate', (updatedOrder) => {
-      notifyInfo(`Order #${updatedOrder.id} updated`, { autoClose: 3000 });
-    });
-    socket.on('newQuery', (query) => {
+    // Note: no "orderUpdate" listener here — the backend never emits it, so it
+    // was dead code in the previous version of this dashboard.
+    const onNewQuery = (query) => {
       notifyInfo(`New query #${query.queryId} received`, { autoClose: 3000 });
-    });
-    socket.on('queryUpdate', (updatedQuery) => {
+      pushActivity(`New query #${query.queryId} received`);
+    };
+    const onQueryUpdate = (updatedQuery) => {
       notifyInfo(`Query #${updatedQuery.queryId} updated`, { autoClose: 3000 });
-    });
-    socket.on('stockUpdate', () => {
+      pushActivity(`Query #${updatedQuery.queryId} updated`);
+    };
+    const onStockUpdate = () => {
       notifyInfo('Inventory stock levels updated', { autoClose: 3000 });
-    });
-    socket.on('customerUpdate', (updatedCustomer) => {
+      pushActivity('Inventory stock levels updated');
+    };
+    const onCustomerUpdate = (updatedCustomer) => {
       notifyInfo(`Customer ${updatedCustomer.name} updated`, { autoClose: 3000 });
-    });
-    socket.on('problem:created', (newProblem) => {
+      pushActivity(`Customer ${updatedCustomer.name} updated`);
+    };
+    const onProblemCreated = (newProblem) => {
       notifyInfo(`New problem #${newProblem.id} reported`, { autoClose: 3000 });
-    });
-    socket.on('solution:created', (data) => {
+      pushActivity(`New problem #${newProblem.id} reported`);
+    };
+    const onSolutionCreated = (data) => {
       notifyInfo(`Solution added to problem #${data.problem_id}`, { autoClose: 3000 });
-    });
-    socket.on('processUpdate', () => {
+      pushActivity(`Solution added to problem #${data.problem_id}`);
+    };
+    const onProcessUpdate = () => {
       notifyInfo('Work orders updated', { autoClose: 3000 });
-    });
+      pushActivity('Work orders updated');
+    };
+
+    socket.on('newQuery', onNewQuery);
+    socket.on('queryUpdate', onQueryUpdate);
+    socket.on('stockUpdate', onStockUpdate);
+    socket.on('customerUpdate', onCustomerUpdate);
+    socket.on('problem:created', onProblemCreated);
+    socket.on('solution:created', onSolutionCreated);
+    socket.on('processUpdate', onProcessUpdate);
 
     return () => {
-      socket.off('orderUpdate');
-      socket.off('newQuery');
-      socket.off('queryUpdate');
-      socket.off('stockUpdate');
-      socket.off('customerUpdate');
-      socket.off('problem:created');
-      socket.off('solution:created');
-      socket.off('processUpdate');
+      socket.off('newQuery', onNewQuery);
+      socket.off('queryUpdate', onQueryUpdate);
+      socket.off('stockUpdate', onStockUpdate);
+      socket.off('customerUpdate', onCustomerUpdate);
+      socket.off('problem:created', onProblemCreated);
+      socket.off('solution:created', onSolutionCreated);
+      socket.off('processUpdate', onProcessUpdate);
     };
-  }, [socket]);
+  }, [socket, notifyInfo]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-gray-100 p-6">
-      <h1 className="text-3xl font-bold text-gray-800 mb-10 text-center tracking-tight">Admin Dashboard</h1>
+    <div className="max-w-7xl mx-auto space-y-6">
+      <DashboardGreeting userRole="admin" className="" />
 
-      <div className="max-w-7xl mx-auto space-y-12">
-        <Section title="Sales & Customer Management">
-          <DashboardCard to="/orders" icon={<Truck />} title="Orders" desc="Track and process orders" />
-          <DashboardCard to="/customer-invoices" icon={<FileText />} title="Customer Invoices" desc="View customer invoices" />
-          <DashboardCard to="/customer-list" icon={<Users />} title="Customers" desc="View customer details" />
-          <DashboardCard to="/enquiries" icon={<Mail />} title="Enquiries" desc="Manage enquiries" />
-          <DashboardCard to="/queries" icon={<MessageSquare />} title="Queries" desc="Manage customer inquiries" />
-          <DashboardCard to="/quotation" icon={<FileText />} title="Quotations" desc="Create and manage quotations" />
-          <DashboardCard to="/proforma" icon={<FileText />} title="Proforma Invoices" desc="Create and manage proforma invoices" />
-          <DashboardCard to="/delivery-challan" icon={<FileText />} title="Delivery Challan" desc="Create and manage delivery challans" />
-        </Section>
-
-        <Section title="Inventory & Materials">
-          <DashboardCard to="/inventory" icon={<Package />} title="Finished Goods" desc="Manage finished goods inventory" />
-          <DashboardCard to="/stock" icon={<Package />} title="Raw Materials" desc="Monitor raw material levels" />
-          <DashboardCard to="/price-list" icon={<DollarSign />} title="Price List" desc="View pricing details" />
-          <DashboardCard to="/bom" icon={<BarChart />} title="Bill of Materials" desc="Bill of materials" />
-          <DashboardCard to="/part-drawings" icon={<PenTool />} title="Part Drawings" desc="Access part drawings" />
-          <DashboardCard to="/part-creation" icon={<PenTool />} title="Part Creation" desc="Create and manage part creation" />
-        </Section>
-
-        {/* Production Management */}
-        <Section title="Production Management">
-          <DashboardCard to="/work-orders" icon={<Wrench />} title="Work Orders" desc="Manage work orders for production" />
-          <DashboardCard to="/motor-recipes" icon={<Wrench />} title="Motor Recipes" desc="Winding specs per customer motor" />
-          <DashboardCard to="/ipt-kits" icon={<Boxes />} title="IPT Kit Assembly" desc="Record component serials for each IPT Kit" />
-        </Section>
-
-        {/* Quality & Logistics */}
-        <Section title="Quality & Logistics">
-          <DashboardCard to="/pdi" icon={<CheckSquare />} title="PDI Records" desc="View pre-dispatch inspection records" />
-          <DashboardCard to="/pdi-generator" icon={<CheckSquare />} title="PDI Generator" desc="Generate PDI inspection report PDFs" />
-          <DashboardCard to="/pdi-templates" icon={<FileEdit />} title="PDI Templates" desc="Author new PDI report formats" />
-          <DashboardCard to="/dispatch-tracking" icon={<MapPin />} title="Dispatch Tracking" desc="Track dispatch status" />
-          <DashboardCard to="/problems" icon={<AlertTriangle />} title="Problems" desc="Manage reported problems" />
-        </Section>
-
-        {/* Procurement */}
-        <Section title="Procurement">
-          <DashboardCard to="/purchase-order"   icon={<FileText />} title="Purchase Orders"   desc="Create and manage purchase orders" />
-          <DashboardCard to="/purchase-invoices" icon={<FileText />} title="Purchase Invoices" desc="View supplier invoices" />
-        </Section>
-
-        {/* Service & Repair */}
-        <Section title="Service &amp; Repair">
-          <DashboardCard to="/service-repair" icon={<Wrench />} title="Repair Records" desc="Log and manage service & repair jobs" />
-        </Section>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          to="/orders"
+          index={0}
+          icon={ShoppingCart}
+          label="Open Orders"
+          value={stats?.openOrders}
+          accent="navy"
+          isLoading={isLoading}
+          hasError={!!error}
+        />
+        <StatCard
+          to="/queries"
+          index={1}
+          icon={MessageSquare}
+          label="Pending Queries"
+          value={stats?.pendingQueries}
+          accent="gold"
+          isLoading={isLoading}
+          hasError={!!error}
+        />
+        <StatCard
+          to="/inventory"
+          index={2}
+          icon={PackageX}
+          label="Low Stock Items"
+          value={stats?.lowStockItems}
+          accent="red"
+          isLoading={isLoading}
+          hasError={!!error}
+        />
+        <StatCard
+          to="/dispatch-tracking"
+          index={3}
+          icon={Truck}
+          label="Dispatches Today"
+          value={stats?.dispatchesToday}
+          accent="green"
+          isLoading={isLoading}
+          hasError={!!error}
+        />
       </div>
 
-</div>
-  );
-}
-
-// Card Component
-function DashboardCard({ to, icon, title, desc }) {
-  return (
-    <Link
-      to={to}
-      className="bg-white p-5 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 bg-gradient-to-br from-amber-100 to-amber-50 border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-300"
-      aria-label={`Navigate to ${title}`}
-    >
-      <div className="flex items-center justify-center mb-3">
-        {React.cloneElement(icon, { className: 'w-9 h-9 text-gray-700' })}
-      </div>
-      <h2 className="text-xl font-semibold text-gray-800 text-center">{title}</h2>
-      <p className="text-gray-600 text-center mt-1 text-base">{desc}</p>
-    </Link>
-  );
-}
-
-// Grid Section Wrapper
-function Section({ title, children }) {
-  return (
-    <div>
-      <h3 className="text-xl font-bold text-gray-700 mb-4">{title}</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {children}
+      <div className="flex flex-col lg:flex-row gap-6 items-stretch lg:items-start">
+        <div className="anim-in flex-1 min-w-0" style={{ '--i': 5 }}>
+          <ModuleShowcase sections={adminNavSections} />
+        </div>
+        {activityOpen ? (
+          <div className="w-full lg:w-80 shrink-0">
+            <ActivityFeed items={activity} onCollapse={() => setActivityOpen(false)} />
+          </div>
+        ) : (
+          <ActivityRail count={activity.length} onExpand={() => setActivityOpen(true)} />
+        )}
       </div>
     </div>
   );

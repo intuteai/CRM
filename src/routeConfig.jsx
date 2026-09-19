@@ -3,24 +3,10 @@ import ErrorBoundary from "./components/ErrorBoundary";
 
 // Dashboards
 import AdminDashboard from "./components/dashboards/AdminDashboard";
-import SalesDashboard from "./components/dashboards/SalesDashboard";
-import ProductionDashboard from "./components/dashboards/ProductionDashboard";
-import DesignDashboard from "./components/dashboards/DesignDashboard";
-import StoreDashboard from "./components/dashboards/StoreDashboard";
-import AccountsDashboard from "./components/dashboards/AccountsDashboard";
-import CustomerDashboard from "./components/dashboards/CustomerDashboard";
-import DispatchDashboard from "./components/dashboards/DispatchDashboard";
-
-// Compage
-import EmployeeDashboard from "./components/dashboards/EmployeeDashboard";
-import HRDashboard from "./components/dashboards/HRDashboard";
-
-// Intute
-import IAEmployeeDashboard from "./components/dashboards/Iaemployeedashboard";
-import IAHRDashboard from "./components/dashboards/Iahrdashboard";
+import RoleDashboard from "./components/dashboards/RoleDashboard";
+import PeopleDashboard from "./components/dashboards/PeopleDashboard";
 
 // Service & Repair
-import ServiceRepairDashboard from "./components/dashboards/ServiceRepairDashboard";
 import ServiceRepairPage from "./components/service/ServiceRepairPage";
 import IAOrdersPage from "./components/IA/IAOrdersPage";
 
@@ -130,7 +116,7 @@ export const routeConfig = [
   {
     path: "/hr-dashboard",
     allowedRoles: ["hr"],
-    component: HRDashboard,
+    component: PeopleDashboard,
   },
   {
     path: "/attendance-summary",
@@ -152,7 +138,7 @@ export const routeConfig = [
   {
     path: "/employee-dashboard",
     allowedRoles: ["employee"],
-    component: EmployeeDashboard,
+    component: PeopleDashboard,
   },
   {
     path: "/attendance-history",
@@ -169,7 +155,7 @@ export const routeConfig = [
   {
     path: "/ia-hr-dashboard",
     allowedRoles: ["ia_hr"],
-    component: IAHRDashboard,
+    component: PeopleDashboard,
   },
   {
     path: "/ia-attendance-summary",
@@ -186,7 +172,7 @@ export const routeConfig = [
   {
     path: "/ia-employee-dashboard",
     allowedRoles: ["ia_employee"],
-    component: IAEmployeeDashboard,
+    component: PeopleDashboard,
   },
   {
     path: "/ia-attendance-history",
@@ -292,7 +278,7 @@ export const routeConfig = [
   {
     path: "/sales-dashboard",
     allowedRoles: ["sales"],
-    component: SalesDashboard,
+    component: RoleDashboard,
   },
   {
     path: "/sales/quotations",
@@ -319,7 +305,7 @@ export const routeConfig = [
   {
     path: "/design-dashboard",
     allowedRoles: ["design"],
-    component: DesignDashboard,
+    component: RoleDashboard,
   },
   {
     path: "/design/enquiries",
@@ -336,7 +322,7 @@ export const routeConfig = [
   {
     path: "/production-dashboard",
     allowedRoles: ["production"],
-    component: ProductionDashboard,
+    component: RoleDashboard,
   },
   {
     path: "/production-queries",
@@ -388,28 +374,28 @@ export const routeConfig = [
   {
     path: "/store-dashboard",
     allowedRoles: ["store"],
-    component: StoreDashboard,
+    component: RoleDashboard,
   },
 
   // ── Dispatch Routes ───────────────────────────────────────────
   {
     path: "/dispatch-dashboard",
     allowedRoles: ["dispatch"],
-    component: DispatchDashboard,
+    component: RoleDashboard,
   },
 
   // ── Accounts Routes ───────────────────────────────────────────
   {
     path: "/accounts-dashboard",
     allowedRoles: ["accounts"],
-    component: AccountsDashboard,
+    component: RoleDashboard,
   },
 
   // ── Customer Routes ───────────────────────────────────────────
   {
     path: "/customer-dashboard",
     allowedRoles: ["customer"],
-    component: CustomerDashboard,
+    component: RoleDashboard,
   },
   {
     path: "/customer-orders",
@@ -426,7 +412,7 @@ export const routeConfig = [
   {
     path: "/service-repair-dashboard",
     allowedRoles: ["service_repair"],
-    component: ServiceRepairDashboard,
+    component: RoleDashboard,
   },
   {
     path: "/service-repair",

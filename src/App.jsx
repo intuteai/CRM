@@ -12,9 +12,12 @@ import { setAuth, logout, toggleLogin, setSocketStatus } from "./features/auth/a
 import { connectSocket, disconnectSocket, getSocket } from "./services/socket.js";
 import { ROLES, DASHBOARD_ROUTES, allowedPathsByRole } from "./constants.js";
 import { routeConfig, renderRoute } from "./routeConfig.jsx";
+import { useNotify } from "./hooks/useNotify.js";
 
 import LoginModal from "./components/pages/LoginModal.jsx";
 import Navbar from "./components/pages/Navbar.jsx";
+import AppShell from "./components/layout/AppShell.jsx";
+import { getRoleNav } from "./config/roleNav";
 import NotificationCenter from "./components/pages/NotificationCenter.jsx";
 import ConnectionBanner from "./components/pages/ConnectionBanner.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
@@ -28,6 +31,7 @@ function App() {
   );
   const location = useLocation();
   const navigate = useNavigate();
+  const { notifySuccess, notifyError } = useNotify();
 
   // Socket connection management
   useEffect(() => {
@@ -128,12 +132,73 @@ function App() {
     dispatch(toggleLogin(true));
   };
 
+  // Mirrors Navbar's own logout flow (backend invalidation + toast) so the
+  // AppShell header behaves the same way as the classic Navbar's logout button.
+  const handleAppShellLogout = () => {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+    fetch(`${backendUrl}/api/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    })
+      .then(() => {
+        handleLogout();
+        navigate("/");
+        notifySuccess("Logged out successfully", { autoClose: 3000 });
+      })
+      .catch((err) => {
+        console.error("Logout error:", err);
+        notifyError("Failed to logout. Please try again.", { autoClose: 3000 });
+      });
+  };
+
   const showNavbar = userRole && location.pathname !== "/";
+  const roleNav = getRoleNav(userRole);
+  const useAppShell = showNavbar && !!roleNav;
   const socket = getSocket();
+
+  const mainRoutes = (
+    <Routes>
+      {/* Generate routes from config */}
+      {routeConfig.map((route) => (
+        <Route
+          key={route.path}
+          path={route.path}
+          element={renderRoute(route, userRole, socket)}
+        />
+      ))}
+
+      {/* Root path: empty while unauthenticated (LoginModal overlays), or invalid-role message */}
+      <Route
+        path="/"
+        element={
+          userRole ? (
+            <div className="min-h-screen flex items-center justify-center bg-navy-50 p-4">
+              <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-navy-100 p-6 sm:p-8 text-center">
+                <h1 className="font-display text-xl font-bold text-navy-800 mb-2">
+                  Invalid Role
+                </h1>
+                <p className="text-sm text-gray-500 mb-6">
+                  Your user role ({userRole}) is not recognized. Please log
+                  out and try again.
+                </p>
+                <button
+                  onClick={handleLogout}
+                  className="bg-navy-800 text-white font-medium px-5 py-2.5 rounded-lg hover:bg-navy-700 focus:outline-none focus:ring-2 focus:ring-gold-400 transition-colors"
+                >
+                  Log Out
+                </button>
+              </div>
+            </div>
+          ) : null
+        }
+      />
+    </Routes>
+  );
 
   return (
     <>
-      {showNavbar && (
+      {showNavbar && !useAppShell && (
         <Navbar
           userRole={userRole}
           userName={userName}
@@ -151,42 +216,13 @@ function App() {
       )}
       {userRole === ROLES.ADMIN && <ChatbotWidget />}
 
-      <Routes>
-        {/* Generate routes from config */}
-        {routeConfig.map((route) => (
-          <Route
-            key={route.path}
-            path={route.path}
-            element={renderRoute(route, userRole, socket)}
-          />
-        ))}
-
-        {/* Root path: empty while unauthenticated (LoginModal overlays), or invalid-role message */}
-        <Route
-          path="/"
-          element={
-            userRole ? (
-              <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-gray-100 to-amber-100">
-                <div className="text-center">
-                  <h1 className="text-3xl font-bold text-gray-800 mb-4">
-                    Invalid Role
-                  </h1>
-                  <p className="text-gray-600 mb-6">
-                    Your user role ({userRole}) is not recognized. Please log
-                    out and try again.
-                  </p>
-                  <button
-                    onClick={handleLogout}
-                    className="bg-amber-400 text-gray-900 font-medium px-6 py-3 rounded-xl hover:bg-amber-500 transition-all"
-                  >
-                    Log Out
-                  </button>
-                </div>
-              </div>
-            ) : null
-          }
-        />
-      </Routes>
+      {useAppShell ? (
+        <AppShell nav={roleNav} userName={userName} onLogout={handleAppShellLogout}>
+          {mainRoutes}
+        </AppShell>
+      ) : (
+        mainRoutes
+      )}
 
       {/* LoginModal now owns the landing page + login form */}
       {showLogin && (
