@@ -158,7 +158,7 @@ function LoginModal({ onClose, onSubmit }) {
       const data = await res.json();
       if (res.ok) {
         localStorage.setItem("token", data.token);
-        onSubmit(data.role, data.name || email.split("@")[0], data.token);
+        onSubmit(data.role, data.name || email.split("@")[0], data.token, data.user_id);
         onClose();
       } else {
         setError(res.status === 429 ? "Too many login attempts. Please wait and try again." : data.error || "Login failed");

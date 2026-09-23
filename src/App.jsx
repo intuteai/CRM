@@ -109,7 +109,7 @@ function App() {
     }
   }, [dispatch]);
 
-  const handleLoginSubmit = (role, name, submittedToken) => {
+  const handleLoginSubmit = (role, name, submittedToken, userId) => {
     dispatch(
       setAuth({
         userRole: role,
@@ -121,6 +121,15 @@ function App() {
     localStorage.setItem("role", role);
     localStorage.setItem("name", name);
     localStorage.setItem("token", submittedToken);
+    // Design/Representative pages read this to know "is this enquiry assigned
+    // to me" (e.g. the Mark Done button) — role/name/token alone don't carry
+    // the user's own id.
+    if (userId != null) {
+      localStorage.setItem(
+        "user",
+        JSON.stringify({ user_id: userId, role_name: role, name })
+      );
+    }
 
     dispatch(toggleLogin(false));
   };
