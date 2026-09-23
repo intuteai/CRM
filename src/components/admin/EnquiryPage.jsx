@@ -110,6 +110,7 @@ function EnquiryPage({ socket: providedSocket }) {
     tagsInput: "",
     due_date: "",
     application: "", // <-- NEW field
+    city: "",
   });
 
   const [errors, setErrors] = useState({});
@@ -525,6 +526,7 @@ useEffect(() => {
       tagsInput: "",
       due_date: "",
       application: "",
+      city: "",
     });
     setErrors({});
   };
@@ -561,6 +563,7 @@ useEffect(() => {
         ? new Date(enquiry.due_date).toISOString().split("T")[0]
         : "",
       application: enquiry.application || "",
+      city: enquiry.city || "",
     });
     setErrors({});
     setIsModalOpen(true);
@@ -646,6 +649,7 @@ useEffect(() => {
         tags: tagsArray,
         due_date: newEnquiry.due_date || null,
         application: newEnquiry.application || null, // <-- include application
+        city: newEnquiry.city || null,
       };
       if (newEnquiry.enquiry_id) body.enquiry_id = newEnquiry.enquiry_id;
 
@@ -744,6 +748,58 @@ useEffect(() => {
     } catch (err) {
       console.error("Follow toggle error:", err);
       notifyError(err.message || "Failed to update follow state");
+    }
+  };
+
+  const handleUploadPhoto = async (file) => {
+    try {
+      const token = localStorage.getItem("token");
+      const formData = new FormData();
+      formData.append("photo", file);
+      const res = await fetch(`${API_URL}/${detailEnquiry.enquiry_id}/photo`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => ({}));
+        throw new Error(errorBody.error || "Failed to upload photo");
+      }
+      const { record } = await res.json();
+      setDetailEnquiry((prev) =>
+        prev ? { ...prev, photos: record.photos } : prev,
+      );
+      notifySuccess("Photo added");
+    } catch (err) {
+      console.error("Upload photo error:", err);
+      notifyError(err.message || "Failed to upload photo");
+    }
+  };
+
+  const handleDeletePhoto = async (url) => {
+    if (!window.confirm("Remove this photo?")) return;
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/${detailEnquiry.enquiry_id}/photo`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => ({}));
+        throw new Error(errorBody.error || "Failed to remove photo");
+      }
+      const record = await res.json();
+      setDetailEnquiry((prev) =>
+        prev ? { ...prev, photos: record.photos } : prev,
+      );
+      notifySuccess("Photo removed");
+    } catch (err) {
+      console.error("Delete photo error:", err);
+      notifyError(err.message || "Failed to remove photo");
     }
   };
 
@@ -1352,6 +1408,11 @@ useEffect(() => {
                     icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
                   },
                   {
+                    label: "City",
+                    key: "city",
+                    icon: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z",
+                  },
+                  {
                     label: "Email",
                     key: "mail_id",
                     type: "email",
@@ -1772,6 +1833,59 @@ useEffect(() => {
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">
                       {detailEnquiry.items_required || "No items specified."}
                     </p>
+                  </div>
+
+                  <div className="mb-4 rounded-lg border border-navy-100 bg-white px-3 py-3">
+                    <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                      City
+                    </h3>
+                    <p className="text-sm text-gray-700">
+                      {detailEnquiry.city || "N/A"}
+                    </p>
+                  </div>
+
+                  <div className="mb-4 rounded-lg border border-navy-100 bg-white px-3 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                        Photos
+                      </h3>
+                      <label className="text-[11px] font-semibold text-gold-600 cursor-pointer hover:text-gold-700">
+                        + Add photo
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleUploadPhoto(file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                    </div>
+                    {Array.isArray(detailEnquiry.photos) &&
+                    detailEnquiry.photos.length > 0 ? (
+                      <div className="grid grid-cols-3 gap-2">
+                        {detailEnquiry.photos.map((url) => (
+                          <div key={url} className="relative group">
+                            <img
+                              src={url}
+                              alt="Enquiry"
+                              className="w-full h-20 object-cover rounded-lg border border-navy-100"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePhoto(url)}
+                              className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-navy-900/70 text-white text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400">No photos yet.</p>
+                    )}
                   </div>
 
                   {/* Tags */}
