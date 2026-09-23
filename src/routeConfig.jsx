@@ -52,6 +52,7 @@ import SalesInventoryPage from "./components/sales/SalesInventoryPage";
 // Design
 import DesignEnquiryPage from "./components/design/DesignEnquiryPage";
 import DesignPartCreation from "./components/design/DesignPartCreation";
+import RepresentativeEnquiryPage from "./components/representative/RepresentativeEnquiryPage";
 
 // Production
 import ProductionQueriesPage from "./components/production/ProductionQueriesPage";
@@ -316,6 +317,18 @@ export const routeConfig = [
     path: "/design/part-creation",
     allowedRoles: ["design"],
     component: DesignPartCreation,
+  },
+
+  // ── Representative Routes ────────────────────────────────────
+  {
+    path: "/representative-dashboard",
+    allowedRoles: ["representative"],
+    component: RoleDashboard,
+  },
+  {
+    path: "/representative/enquiries",
+    allowedRoles: ["representative"],
+    component: RepresentativeEnquiryPage,
   },
 
   // ── Production Routes ─────────────────────────────────────────
