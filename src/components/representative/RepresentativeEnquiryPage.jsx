@@ -494,7 +494,12 @@ function RepresentativeEnquiryPage({ socket: providedSocket }) {
   }, []);
 
   const handleEdit = useCallback((enquiry) => {
-    const effectiveLead = enquiry.lead || enquiry.priority || "hotlead";
+    const rawLead = enquiry.lead || enquiry.priority || "hotlead";
+    const effectiveLead = ["hotlead", "followup", "not_interested"].includes(
+      rawLead,
+    )
+      ? rawLead
+      : "hotlead";
     setIsEditing(true);
     setSelectedEnquiry(enquiry);
     setNewEnquiry({
@@ -522,44 +527,6 @@ function RepresentativeEnquiryPage({ socket: providedSocket }) {
     setErrors({});
     setIsModalOpen(true);
   }, []);
-
-  const handleDelete = useCallback(
-    async (enquiryId) => {
-      if (
-        !window.confirm(
-          `Are you sure you want to delete enquiry #${enquiryId}?`,
-        )
-      )
-        return;
-
-      try {
-        const token = localStorage.getItem("token");
-        const url = `${API_URL}/${enquiryId}`;
-
-        const response = await fetch(url, {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          const errorBody = await response.json().catch(() => ({}));
-          throw new Error(
-            errorBody.error || `Delete failed with status: ${response.status}`,
-          );
-        }
-
-        notifySuccess(`Enquiry #${enquiryId} deleted successfully!`);
-        fetchEnquiries(true);
-      } catch (err) {
-        console.error("Delete error:", err);
-        notifyError(err.message || "Failed to delete enquiry");
-      }
-    },
-    [fetchEnquiries],
-  );
 
   const handleSubmit = async (e) => {
     e.preventDefault();
