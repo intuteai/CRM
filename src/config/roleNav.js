@@ -189,6 +189,17 @@ const serviceRepairNavSections = [
   },
 ];
 
+const representativeNavSections = [
+  {
+    title: 'Leads',
+    shortLabel: 'Leads',
+    accent: { bg: 'bg-gold-50', text: 'text-gold-600' },
+    items: [
+      { to: '/representative/enquiries', icon: Mail, label: 'Enquiries', desc: 'Capture and follow up on leads' },
+    ],
+  },
+];
+
 const roleNav = {
   admin: { dashboardPath: '/admin-dashboard', sections: adminNavSections },
   sales: { dashboardPath: '/sales-dashboard', sections: salesNavSections },
@@ -198,6 +209,7 @@ const roleNav = {
   service_repair: { dashboardPath: '/service-repair-dashboard', sections: serviceRepairNavSections },
   store: { dashboardPath: '/store-dashboard', sections: storeNavSections },
   dispatch: { dashboardPath: '/dispatch-dashboard', sections: dispatchNavSections },
+  representative: { dashboardPath: '/representative-dashboard', sections: representativeNavSections },
   customer: {
     dashboardPath: '/customer-dashboard',
     sections: customerNavSections,
