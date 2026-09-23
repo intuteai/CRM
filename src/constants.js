@@ -15,6 +15,8 @@ export const ROLES = {
   IA_HR: "ia_hr",
   // Service & Repair
   SERVICE_REPAIR: "service_repair",
+  // Field sales
+  REPRESENTATIVE: "representative",
 };
 
 export const DASHBOARD_ROUTES = {
@@ -34,6 +36,8 @@ export const DASHBOARD_ROUTES = {
   [ROLES.IA_HR]: "/ia-hr-dashboard",
   // Service & Repair
   [ROLES.SERVICE_REPAIR]: "/service-repair-dashboard",
+  // Field sales
+  [ROLES.REPRESENTATIVE]: "/representative-dashboard",
 };
 
 export const allowedPathsByRole = {
@@ -202,6 +206,13 @@ export const allowedPathsByRole = {
   [ROLES.SERVICE_REPAIR]: [
     "/service-repair-dashboard",
     "/service-repair",
+    "/edit-profile",
+  ],
+
+  // ── Field sales ────────────────────────────────────────
+  [ROLES.REPRESENTATIVE]: [
+    "/representative-dashboard",
+    "/representative/enquiries",
     "/edit-profile",
   ],
 };
