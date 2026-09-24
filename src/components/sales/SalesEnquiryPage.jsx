@@ -124,6 +124,7 @@ function SalesEnquiryPage({ socket: providedSocket }) {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [assignTargetEnquiry, setAssignTargetEnquiry] = useState(null);
   const [assignUserId, setAssignUserId] = useState("");
+  const [representatives, setRepresentatives] = useState([]);
   const [assignDueDate, setAssignDueDate] = useState("");
   const [assignMessage, setAssignMessage] = useState("");
   const { notifySuccess, notifyError, notifyInfo } = useNotify();
@@ -800,6 +801,13 @@ useEffect(() => {
     );
     setAssignMessage("");
     setIsAssignModalOpen(true);
+
+    fetch(`${API_URL}/representatives`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows) => setRepresentatives(Array.isArray(rows) ? rows : []))
+      .catch(() => setRepresentatives([]));
   };
 
   // SUBMIT ASSIGN
@@ -1645,6 +1653,11 @@ useEffect(() => {
                     <option value="1">1: Admin</option>
                     <option value="7">7: Sales</option>
                     <option value="8">8: Design</option>
+                    {representatives.map((rep) => (
+                      <option key={rep.user_id} value={rep.user_id}>
+                        {rep.user_id}: {rep.name} (Representative)
+                      </option>
+                    ))}
                   </select>
                   <p className="text-[11px] text-gray-400 mt-1">
                     Later this can be replaced with a dynamic users dropdown.
