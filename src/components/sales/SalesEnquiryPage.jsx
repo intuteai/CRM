@@ -9,6 +9,7 @@ import { ArrowDownUp, X, MoreVertical } from "lucide-react";
 import io from "socket.io-client";
 import { useNotify } from '../../hooks/useNotify';
 import ConnectionError from '../pages/ConnectionError.jsx';
+import AssigneePicker from '../shared/AssigneePicker.jsx';
 
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
@@ -1643,25 +1644,11 @@ useEffect(() => {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">
                     Assignee
                   </label>
-                  <select
+                  <AssigneePicker
                     value={assignUserId}
-                    onChange={(e) => setAssignUserId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-                    required
-                  >
-                    <option value="">Select user...</option>
-                    <option value="1">1: Admin</option>
-                    <option value="7">7: Sales</option>
-                    <option value="8">8: Design</option>
-                    {representatives.map((rep) => (
-                      <option key={rep.user_id} value={rep.user_id}>
-                        {rep.user_id}: {rep.name} (Representative)
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Later this can be replaced with a dynamic users dropdown.
-                  </p>
+                    onChange={setAssignUserId}
+                    representatives={representatives}
+                  />
                 </div>
 
                 <div>
