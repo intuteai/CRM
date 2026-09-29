@@ -879,6 +879,11 @@ export default function AutoNXTGeneratorForm() {
               <div className="space-y-5">
                 <div>
                   <h3 className="text-sm font-semibold text-navy-800 mb-2">C. Physical Parameters</h3>
+                  {/* Shared by every Measurement cell below (this table only) -- GO/NG/NA
+                      stay one-click options, but the input itself accepts any typed value. */}
+                  <datalist id="physical-param-measured-options">
+                    {MEASURED_OPTIONS.map((o) => <option key={o} value={o} />)}
+                  </datalist>
                   <div className="overflow-x-auto rounded-lg border border-navy-100">
                     <table className="w-full">
                       <thead>
@@ -890,22 +895,30 @@ export default function AutoNXTGeneratorForm() {
                         </tr>
                       </thead>
                       <tbody>
-                        {PHYSICAL_PARAM_ROWS.map((row) => (
-                          <tr key={row.key} className="border-t border-navy-100 hover:bg-navy-50/60 transition-colors">
-                            <td className="py-2 px-3 text-sm text-gray-700">{row.label}</td>
-                            <td className={TD_CLS}>{row.spec}</td>
-                            <td className={TD_CLS}>{row.method}</td>
-                            <td className="py-1 px-2 border border-navy-100 text-center">
-                              <select
-                                className={SELECT_CLS}
-                                value={form.physical_parameters[row.key].measured}
-                                onChange={(e) => setChecklistField('physical_parameters', row.key, 'measured', e.target.value)}
-                              >
-                                {MEASURED_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-                              </select>
-                            </td>
-                          </tr>
-                        ))}
+                        {PHYSICAL_PARAM_ROWS.map((row) => {
+                          const isToleranceRow = !!SPEC_DEFAULTS[row.key];
+                          const measured = form.physical_parameters[row.key].measured;
+                          const flagged = isToleranceRow && isFieldOutOfTolerance(form, row.key, measured);
+                          return (
+                            <tr key={row.key} className="border-t border-navy-100 hover:bg-navy-50/60 transition-colors">
+                              <td className="py-2 px-3 text-sm text-gray-700">{row.label}</td>
+                              <td className="py-1 px-1 border border-navy-100">
+                                {isToleranceRow
+                                  ? <AutoNxtSpecCell form={form} setField={setField} id={row.key} />
+                                  : <div className={TD_CLS}>{row.spec}</div>}
+                              </td>
+                              <td className={TD_CLS}>{row.method}</td>
+                              <td className="py-1 px-2 border border-navy-100 text-center">
+                                <input
+                                  list="physical-param-measured-options"
+                                  className={`${INPUT_CLS} ${flagged ? 'border-red-500 bg-red-50' : ''}`}
+                                  value={measured}
+                                  onChange={(e) => setChecklistField('physical_parameters', row.key, 'measured', e.target.value)}
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
