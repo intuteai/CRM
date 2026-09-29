@@ -231,7 +231,7 @@ const defaultForm = () => ({
   page1_remarks: 'ALL OK, PASSED.',
   page2_remarks: 'ALL OK, PASSED.',
   prepared_by_electrical: '', prepared_by_mechanical: '', approved_by: '',
-  photos: Object.fromEntries(PHOTO_SLOTS.map((s) => [s.key, null])),
+  photos: Object.fromEntries(PHOTO_SLOTS.map((s) => [s.key, []])),
 });
 
 const INPUT_CLS =
@@ -241,45 +241,84 @@ const SELECT_CLS =
 const TH_CLS = 'py-2 px-2 text-xs font-semibold text-navy-800 bg-navy-50 border border-navy-100 whitespace-nowrap';
 const TD_CLS = 'py-1 px-1 border border-navy-100 text-sm text-gray-500 text-center';
 
-function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h-32' }) {
+// Multi-image version, ported from General's own local copy in
+// PDIGeneratorForm.jsx (same "duplicated rather than shared" convention).
+// `images` is an array of data-URI strings; `onFilesSelected` receives the
+// selected files (already clamped to however many slots remain);
+// `onRemove(index)` removes one image.
+function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, heightCls = 'h-32', maxImages = 10 }) {
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const [dragActive, setDragActive] = useState(false);
+  const atLimit = images.length >= maxImages;
+
+  const handleDragOver = (e) => { e.preventDefault(); if (!atLimit) setDragActive(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); setDragActive(false); };
+  const selectFiles = (fileList) => {
+    if (!fileList?.length) return;
+    const remaining = maxImages - images.length;
+    if (remaining <= 0) return;
+    onFilesSelected(Array.from(fileList).slice(0, remaining));
+  };
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (atLimit) return;
+    selectFiles(e.dataTransfer.files);
+  };
+
   return (
     <div>
       {label && <label className="block text-sm font-medium text-navy-800 mb-1">{label}</label>}
       {hint && <p className="text-xs text-gray-400 mb-1.5">{hint}</p>}
-      <div className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} flex items-center justify-center overflow-hidden ${value ? 'border-gray-200' : 'border-gray-300'}`}>
-        {value ? (
-          <>
-            <img src={value} alt={label || 'Uploaded'} className="max-h-full max-w-full object-contain" />
-            <button
-              type="button"
-              onClick={onClear}
-              className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow hover:bg-white text-gray-600 hover:text-red-500 transition-colors"
-              title="Remove image"
-            >
-              <X size={14} />
-            </button>
-          </>
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`relative rounded-lg border-2 border-dashed bg-gray-50 ${heightCls} overflow-hidden ${dragActive ? 'border-gold-400 bg-gold-400/10' : 'border-gray-300'}`}
+      >
+        {images.length > 0 ? (
+          <div className="h-full w-full overflow-y-auto p-1.5 grid grid-cols-3 gap-1.5">
+            {images.map((src, i) => (
+              <div key={i} className="relative aspect-square bg-white rounded overflow-hidden border border-gray-200">
+                <img src={src} alt={`${label || 'Photo'} ${i + 1}`} className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => onRemove(i)}
+                  className="absolute top-0.5 right-0.5 p-0.5 bg-white/90 rounded-full shadow hover:bg-white text-gray-600 hover:text-red-500"
+                  title="Remove image"
+                  aria-label={`Remove ${label || 'photo'} ${i + 1}`}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+            {!atLimit && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="aspect-square rounded border-2 border-dashed border-navy-100 flex items-center justify-center text-gray-400 hover:text-gold-600 hover:border-gold-400"
+                title="Add more photos"
+                aria-label="Add more photos"
+              >
+                <ImageIcon size={20} />
+              </button>
+            )}
+          </div>
         ) : (
-          <div className="flex items-center gap-5 text-gray-400">
-            <button
-              type="button"
-              onClick={() => cameraInputRef.current?.click()}
-              className="flex flex-col items-center gap-1.5 hover:text-gold-600 transition-colors"
-            >
-              <Camera size={22} />
-              <span className="text-xs font-medium">Take Photo</span>
-            </button>
-            <div className="w-px h-9 bg-gray-200" />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex flex-col items-center gap-1.5 hover:text-gold-600 transition-colors"
-            >
-              <ImageIcon size={22} />
-              <span className="text-xs font-medium">Choose File</span>
-            </button>
+          <div className="h-full flex flex-col items-center justify-center gap-2 text-gray-400">
+            <div className="flex items-center gap-5">
+              <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex flex-col items-center gap-1.5 hover:text-gold-600 transition-colors">
+                <Camera size={22} />
+                <span className="text-xs font-medium">Take Photo</span>
+              </button>
+              <div className="w-px h-9 bg-gray-200" />
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-1.5 hover:text-gold-600 transition-colors">
+                <ImageIcon size={22} />
+                <span className="text-xs font-medium">Choose Files</span>
+              </button>
+            </div>
+            <span className="text-[11px] text-gray-300">or drag photos here — pick several at once</span>
           </div>
         )}
       </div>
@@ -288,15 +327,17 @@ function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h
         type="file"
         accept="image/*"
         capture="environment"
+        multiple
         className="hidden"
-        onChange={(e) => onSelect(e.target.files?.[0], e.target)}
+        onChange={(e) => { selectFiles(e.target.files); e.target.value = ''; }}
       />
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
-        onChange={(e) => onSelect(e.target.files?.[0], e.target)}
+        onChange={(e) => { selectFiles(e.target.files); e.target.value = ''; }}
       />
     </div>
   );
@@ -464,12 +505,18 @@ export default function AutoNXTGeneratorForm() {
         });
         const report = response.data;
         const base = defaultForm();
+        const loadedPhotos = report.photos && typeof report.photos === 'object' && !Array.isArray(report.photos)
+          ? report.photos
+          : {};
         setForm({
           ...base,
           ...(report.data || {}),
-          photos: report.photos && typeof report.photos === 'object' && !Array.isArray(report.photos)
-            ? { ...base.photos, ...report.photos }
-            : base.photos,
+          photos: Object.fromEntries(
+            PHOTO_SLOTS.map((s) => {
+              const raw = loadedPhotos[s.key];
+              return [s.key, Array.isArray(raw) ? raw : (raw ? [raw] : [])];
+            })
+          ),
         });
         setReportId(report.report_id);
         setHasSaved(true);
@@ -497,6 +544,22 @@ export default function AutoNXTGeneratorForm() {
 
   const [cropTarget, setCropTarget] = useState(null); // { slotKey, imageSrc }
 
+  const MAX_IMAGES_PER_SLOT = 10;
+
+  const addSlotImage = useCallback((slotKey, dataUri) => {
+    setForm((prev) => ({
+      ...prev,
+      photos: { ...prev.photos, [slotKey]: [...(prev.photos[slotKey] || []), dataUri].slice(0, MAX_IMAGES_PER_SLOT) },
+    }));
+  }, []);
+
+  const removeSlotImage = useCallback((slotKey, imgIdx) => {
+    setForm((prev) => ({
+      ...prev,
+      photos: { ...prev.photos, [slotKey]: (prev.photos[slotKey] || []).filter((_, i) => i !== imgIdx) },
+    }));
+  }, []);
+
   const handleFileChosen = useCallback(async (slotKey, file, inputEl) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -519,18 +582,52 @@ export default function AutoNXTGeneratorForm() {
     }
   }, [notifyError]);
 
+  // Queued files from a multi-file selection still waiting to be cropped, plus
+  // the slot they belong to -- refs, not useState, for the same re-entrancy
+  // reason General's own copy of this uses refs (see PDIGeneratorForm.jsx):
+  // a ref write is synchronous, so there's no window between the last queued
+  // file's dequeue and the async FileReader resolving where a concurrent
+  // selection could slip through.
+  const cropQueueFilesRef = useRef([]);
+  const cropQueueSlotRef = useRef(null);
+
+  const handleFilesChosen = useCallback((slotKey, fileList) => {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
+    if (cropQueueFilesRef.current.length > 0 || cropQueueSlotRef.current) {
+      notifyError('Finish cropping the current batch of photos before adding more.');
+      return;
+    }
+    const [first, ...rest] = files;
+    cropQueueFilesRef.current = rest;
+    cropQueueSlotRef.current = slotKey;
+    handleFileChosen(slotKey, first);
+  }, [handleFileChosen, notifyError]);
+
   const applyCroppedImage = useCallback((dataUri) => {
     setCropTarget((current) => {
       if (!current) return current;
-      setForm((prev) => ({ ...prev, photos: { ...prev.photos, [current.slotKey]: dataUri } }));
+      addSlotImage(current.slotKey, dataUri);
       return null;
     });
-  }, []);
+    if (cropQueueFilesRef.current.length > 0) {
+      const [next, ...rest] = cropQueueFilesRef.current;
+      cropQueueFilesRef.current = rest;
+      handleFileChosen(cropQueueSlotRef.current, next);
+    } else {
+      cropQueueSlotRef.current = null;
+    }
+  }, [addSlotImage, handleFileChosen]);
 
-  const cancelCrop = useCallback(() => setCropTarget(null), []);
-  const clearPhotoImage = useCallback((slotKey) => {
-    setForm((prev) => ({ ...prev, photos: { ...prev.photos, [slotKey]: null } }));
-  }, []);
+  const cancelCrop = useCallback(() => {
+    const remaining = cropQueueFilesRef.current.length;
+    cropQueueFilesRef.current = [];
+    cropQueueSlotRef.current = null;
+    setCropTarget(null);
+    if (remaining > 0) {
+      notifyError(`Cancelled — ${remaining} more photo${remaining === 1 ? '' : 's'} in this batch were not added.`);
+    }
+  }, [notifyError]);
 
   const handleOpen = async () => {
     if (opening) return;
@@ -939,15 +1036,15 @@ export default function AutoNXTGeneratorForm() {
             {/* ── Photos Tab ── */}
             {activeTab === 'photos' && (
               <div className="space-y-5">
-                <p className="text-xs text-gray-400">Tap a slot to take a photo or choose one — you&rsquo;ll crop it next.</p>
+                <p className="text-xs text-gray-400">Take or choose several photos per slot — you&rsquo;ll crop each one before it&rsquo;s added.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {PHOTO_SLOTS.map((slot) => (
                     <ImageUploadCard
                       key={slot.key}
                       label={slot.label}
-                      value={form.photos[slot.key]}
-                      onSelect={(file, el) => handleFileChosen(slot.key, file, el)}
-                      onClear={() => clearPhotoImage(slot.key)}
+                      images={form.photos[slot.key] || []}
+                      onFilesSelected={(fileList) => handleFilesChosen(slot.key, fileList)}
+                      onRemove={(idx) => removeSlotImage(slot.key, idx)}
                     />
                   ))}
                 </div>
