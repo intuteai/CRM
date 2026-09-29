@@ -302,6 +302,61 @@ function ImageUploadCard({ label, hint, value, onSelect, onClear, heightCls = 'h
   );
 }
 
+// One reusable cell for every tolerance-eligible field: a freely-typed
+// Specification text input (spec_<id>_display -- what prints in the PDF,
+// independent of the tolerance check below) plus a compact nominal +
+// tolerance-mode + tolerance-amount group (spec_<id>/_tol_mode/_tol/
+// _tol_minus, used only to flag the Measured cell). Mirrors General's own
+// ToleranceSpecInput (CRM/src/components/admin/PDIGeneratorForm.jsx) with
+// one addition -- the Specification text input -- since AutoNXT's rows have
+// no separate "spec row above many measured rows" the way General's do,
+// this print text has to live somewhere per-row.
+function AutoNxtSpecCell({ form, setField, id }) {
+  const mode = form[`spec_${id}_tol_mode`];
+  return (
+    <div className="space-y-1 min-w-[150px]">
+      <input
+        className={INPUT_CLS}
+        value={form[`spec_${id}_display`]}
+        onChange={(e) => setField(`spec_${id}_display`, e.target.value)}
+        placeholder="Specification"
+      />
+      <div className="flex gap-1 flex-wrap">
+        <input
+          className={INPUT_CLS}
+          value={form[`spec_${id}`]}
+          onChange={(e) => setField(`spec_${id}`, e.target.value)}
+          placeholder="nominal"
+          style={{ maxWidth: 64 }}
+        />
+        <select className={SELECT_CLS} value={mode} onChange={(e) => setField(`spec_${id}_tol_mode`, e.target.value)}>
+          <option value="±">±</option>
+          <option value="%">±%</option>
+          <option value="bilateral">Bilateral</option>
+        </select>
+        <input
+          className={INPUT_CLS}
+          value={form[`spec_${id}_tol`]}
+          onChange={(e) => setField(`spec_${id}_tol`, e.target.value)}
+          placeholder={mode === 'bilateral' ? '+' : 'tol.'}
+          aria-label={mode === 'bilateral' ? 'Plus tolerance' : 'Tolerance amount'}
+          style={{ maxWidth: mode === 'bilateral' ? 50 : 60 }}
+        />
+        {mode === 'bilateral' && (
+          <input
+            className={INPUT_CLS}
+            value={form[`spec_${id}_tol_minus`]}
+            onChange={(e) => setField(`spec_${id}_tol_minus`, e.target.value)}
+            placeholder="-"
+            aria-label="Minus tolerance"
+            style={{ maxWidth: 50 }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CropModal({ imageSrc, onCancel, onApply }) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -731,35 +786,43 @@ export default function AutoNXTGeneratorForm() {
                         <tr>
                           <th className={TH_CLS}>RPM</th>
                           <th className={TH_CLS}>Source V (DC)</th>
-                          <th className={TH_CLS}>BEMF Spec</th>
+                          <th className={TH_CLS}>BEMF Specification</th>
                           <th className={TH_CLS}>BEMF Measured</th>
-                          <th className={TH_CLS}>Current Spec</th>
+                          <th className={TH_CLS}>Current Specification</th>
                           <th className={TH_CLS}>Current Measured</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {PERFORMANCE_ROWS.map((row, idx) => (
-                          <tr key={row.key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className={TD_CLS}>{row.rpm}</td>
-                            <td className={TD_CLS}>{row.sourceVoltage}</td>
-                            <td className={TD_CLS}>{row.bemfSpec}</td>
-                            <td className="py-1 px-1 border border-navy-100">
-                              <input
-                                className={INPUT_CLS}
-                                value={form.performance_test[row.key].bemf_measured}
-                                onChange={(e) => setChecklistField('performance_test', row.key, 'bemf_measured', e.target.value)}
-                              />
-                            </td>
-                            <td className={TD_CLS}>{row.currentSpec}</td>
-                            <td className="py-1 px-1 border border-navy-100">
-                              <input
-                                className={INPUT_CLS}
-                                value={form.performance_test[row.key].current_measured}
-                                onChange={(e) => setChecklistField('performance_test', row.key, 'current_measured', e.target.value)}
-                              />
-                            </td>
-                          </tr>
-                        ))}
+                        {PERFORMANCE_ROWS.map((row, idx) => {
+                          const bemfFlag = isFieldOutOfTolerance(form, `${row.key}_bemf`, form.performance_test[row.key].bemf_measured);
+                          const currentFlag = isFieldOutOfTolerance(form, `${row.key}_current`, form.performance_test[row.key].current_measured);
+                          return (
+                            <tr key={row.key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                              <td className={TD_CLS}>{row.rpm}</td>
+                              <td className={TD_CLS}>{row.sourceVoltage}</td>
+                              <td className="py-1 px-1 border border-navy-100">
+                                <AutoNxtSpecCell form={form} setField={setField} id={`${row.key}_bemf`} />
+                              </td>
+                              <td className="py-1 px-1 border border-navy-100">
+                                <input
+                                  className={`${INPUT_CLS} ${bemfFlag ? 'border-red-500 bg-red-50' : ''}`}
+                                  value={form.performance_test[row.key].bemf_measured}
+                                  onChange={(e) => setChecklistField('performance_test', row.key, 'bemf_measured', e.target.value)}
+                                />
+                              </td>
+                              <td className="py-1 px-1 border border-navy-100">
+                                <AutoNxtSpecCell form={form} setField={setField} id={`${row.key}_current`} />
+                              </td>
+                              <td className="py-1 px-1 border border-navy-100">
+                                <input
+                                  className={`${INPUT_CLS} ${currentFlag ? 'border-red-500 bg-red-50' : ''}`}
+                                  value={form.performance_test[row.key].current_measured}
+                                  onChange={(e) => setChecklistField('performance_test', row.key, 'current_measured', e.target.value)}
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
