@@ -902,10 +902,10 @@ export default function AutoNXTGeneratorForm() {
                           return (
                             <tr key={row.key} className="border-t border-navy-100 hover:bg-navy-50/60 transition-colors">
                               <td className="py-2 px-3 text-sm text-gray-700">{row.label}</td>
-                              <td className="py-1 px-1 border border-navy-100">
+                              <td className={isToleranceRow ? 'py-1 px-1 border border-navy-100' : TD_CLS}>
                                 {isToleranceRow
                                   ? <AutoNxtSpecCell form={form} setField={setField} id={row.key} />
-                                  : <div className={TD_CLS}>{row.spec}</div>}
+                                  : row.spec}
                               </td>
                               <td className={TD_CLS}>{row.method}</td>
                               <td className="py-1 px-2 border border-navy-100 text-center">
