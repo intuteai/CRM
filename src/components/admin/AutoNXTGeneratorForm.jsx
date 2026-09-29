@@ -118,6 +118,97 @@ const PHOTO_SLOTS = [
   { key: 'front_rear_view', label: 'Motor Front view/ Rear View' },
 ];
 
+// Mirrors CRM_BACKEND/models/operations/pdi/templates/autonxt.js's
+// SPEC_DEFAULTS exactly (same duplicated-rather-than-shared convention this
+// file already documents at its top for the row/column definitions above --
+// no shared build pipeline between frontend and backend). Any change here
+// must be mirrored there, and vice versa.
+const SPEC_DEFAULTS = {
+  rpm_500_bemf:       { display: '79.0±3%',  nominal: '79.0',  tolMode: '%', tol: '3' },
+  rpm_500_current:    { display: '6.0±2.0A', nominal: '6.0',   tolMode: '±', tol: '2.0' },
+  rpm_1000_bemf:      { display: '155.0±3%', nominal: '155.0', tolMode: '%', tol: '3' },
+  rpm_1000_current:   { display: '6.0±2.0A', nominal: '6.0',   tolMode: '±', tol: '2.0' },
+  rpm_1500_bemf:      { display: '227.0±3%', nominal: '227.0', tolMode: '%', tol: '3' },
+  rpm_1500_current:   { display: '3.0±1.0A', nominal: '3.0',   tolMode: '±', tol: '1.0' },
+  rpm_1800_bemf:      { display: '270.0±3%', nominal: '270.0', tolMode: '%', tol: '3' },
+  rpm_1800_current:   { display: '3.0±1.0A', nominal: '3.0',   tolMode: '±', tol: '1.0' },
+  rpm_2000_bemf:      { display: '-', nominal: '', tolMode: '±', tol: '' },
+  rpm_2000_current:   { display: '-', nominal: '', tolMode: '±', tol: '' },
+  rpm_2200_bemf:      { display: '-', nominal: '', tolMode: '±', tol: '' },
+  rpm_2200_current:   { display: '-', nominal: '', tolMode: '±', tol: '' },
+  rpm_2500_bemf:      { display: '-', nominal: '', tolMode: '±', tol: '' },
+  rpm_2500_current:   { display: '-', nominal: '', tolMode: '±', tol: '' },
+  rpm_3000_bemf:      { display: '-', nominal: '', tolMode: '±', tol: '' },
+  rpm_3000_current:   { display: '-', nominal: '', tolMode: '±', tol: '' },
+  motor_total_length: { display: '467.5±1.0', nominal: '467.5', tolMode: '±', tol: '1.0' },
+  shaft_op_length:    { display: '10.0±0.5',  nominal: '10.0',  tolMode: '±', tol: '0.5' },
+  locating_dia:       { display: 'Ø180.0 (-0.01 TO -0.05)', nominal: '180.0', tolMode: 'bilateral', tol: '-0.01', tolMinus: '-0.05' },
+};
+
+const SPEC_FIELD_IDS = Object.keys(SPEC_DEFAULTS);
+
+// Builds the 5 flat form fields (spec_<id>_display, spec_<id>,
+// spec_<id>_tol_mode, spec_<id>_tol, spec_<id>_tol_minus) for every
+// tolerance-eligible field, defaulted from SPEC_DEFAULTS -- spread into
+// defaultForm() below.
+function defaultSpecFields() {
+  const out = {};
+  SPEC_FIELD_IDS.forEach((id) => {
+    const def = SPEC_DEFAULTS[id];
+    out[`spec_${id}_display`] = def.display;
+    out[`spec_${id}`] = def.nominal;
+    out[`spec_${id}_tol_mode`] = def.tolMode;
+    out[`spec_${id}_tol`] = def.tol;
+    out[`spec_${id}_tol_minus`] = def.tolMinus ?? '';
+  });
+  return out;
+}
+
+// Fourth copy of this exact formula in the codebase (CRM_BACKEND/models/
+// operations/pdi/tolerance.js, CRM/src/components/admin/PDIGeneratorForm.jsx,
+// pdi-erp-app/src/services/tolerance.ts, and now here) — kept as a
+// duplicate rather than shared for the same reason as SPEC_DEFAULTS above.
+// The FORMULA must stay identical across all of them.
+function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountStr, toleranceAmount2Str) {
+  const measured = parseFloat(measuredStr);
+  const nominal = parseFloat(nominalStr);
+  if (!Number.isFinite(measured) || !Number.isFinite(nominal)) {
+    return { outOfRange: false };
+  }
+  if (toleranceMode === 'bilateral') {
+    const plus = parseFloat(toleranceAmountStr);
+    const minus = parseFloat(toleranceAmount2Str);
+    if (!Number.isFinite(plus) || !Number.isFinite(minus)) {
+      return { outOfRange: false };
+    }
+    const low = nominal + Math.min(plus, minus);
+    const high = nominal + Math.max(plus, minus);
+    return { outOfRange: measured < low || measured > high };
+  }
+  const toleranceAmount = parseFloat(toleranceAmountStr);
+  if (!Number.isFinite(toleranceAmount)) {
+    return { outOfRange: false };
+  }
+  const amount = Math.abs(toleranceAmount);
+  const delta = toleranceMode === '%' ? Math.abs(nominal) * (amount / 100) : amount;
+  const outOfRange = measured < nominal - delta || measured > nominal + delta;
+  return { outOfRange };
+}
+
+// True when the given field id's current Measured value is outside its
+// current nominal ± tolerance. `measured` is read by the caller (it lives in
+// form.performance_test[row.key] or form.physical_parameters[row.key], two
+// different shapes) and passed in rather than looked up here.
+function isFieldOutOfTolerance(form, id, measured) {
+  return checkTolerance(
+    measured,
+    form[`spec_${id}`],
+    form[`spec_${id}_tol_mode`],
+    form[`spec_${id}_tol`],
+    form[`spec_${id}_tol_minus`],
+  ).outOfRange;
+}
+
 const MEASURED_OPTIONS = ['GO', 'NG', 'NA'];
 
 const todayIST = () =>
@@ -131,6 +222,7 @@ const initChecklist = (rows) => Object.fromEntries(rows.map((r) => [r.key, { mea
 const defaultForm = () => ({
   customer_name: '', date: todayIST(), product_id: '', drawing_no: '',
   product_specifications: '', pdi_no: '', motor_sr_no: '', controller_type: '',
+  ...defaultSpecFields(),
   performance_test: Object.fromEntries(
     PERFORMANCE_ROWS.map((r) => [r.key, { bemf_measured: '', current_measured: '' }])
   ),
