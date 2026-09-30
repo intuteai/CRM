@@ -401,7 +401,6 @@ function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, 
   );
 }
 
-// One reusable cell for every tolerance-eligible field: a freely-typed
 // One reusable cell for every tolerance-eligible field: a read-only,
 // computed Specification preview (spec_<id>_display -- what prints in the
 // PDF, now always derived from the nominal/tolerance group below rather
