@@ -185,6 +185,26 @@ function formatAutoNxtSpecDisplay(nominal, tolMode, tol, tolMinus, { unit = '', 
   return `${prefix}${nominalStr}±${tolStr}${tolMode === '%' ? '%' : ''}${unit}`;
 }
 
+// Recomputes every spec_<id>_display field from that field's own current
+// nominal/tolerance-mode/tolerance-amount right before sending -- this is
+// the actual save-time source of truth. AutoNxtSpecCell's on-screen preview
+// (below) calls the same formatAutoNxtSpecDisplay, so what's shown and what
+// gets sent are always identical; nothing needs to be kept in sync via
+// effects or per-keystroke handlers.
+function withComputedSpecDisplays(data) {
+  const out = { ...data };
+  SPEC_FIELD_IDS.forEach((id) => {
+    out[`spec_${id}_display`] = formatAutoNxtSpecDisplay(
+      data[`spec_${id}`],
+      data[`spec_${id}_tol_mode`],
+      data[`spec_${id}_tol`],
+      data[`spec_${id}_tol_minus`],
+      SPEC_UNIT_PREFIX[id],
+    );
+  });
+  return out;
+}
+
 // Builds the 5 flat form fields (spec_<id>_display, spec_<id>,
 // spec_<id>_tol_mode, spec_<id>_tol, spec_<id>_tol_minus) for every
 // tolerance-eligible field, defaulted from SPEC_DEFAULTS -- spread into
@@ -382,23 +402,36 @@ function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, 
 }
 
 // One reusable cell for every tolerance-eligible field: a freely-typed
-// Specification text input (spec_<id>_display -- what prints in the PDF,
-// independent of the tolerance check below) plus a compact nominal +
-// tolerance-mode + tolerance-amount group (spec_<id>/_tol_mode/_tol/
-// _tol_minus, used only to flag the Measured cell). Mirrors General's own
-// ToleranceSpecInput (CRM/src/components/admin/PDIGeneratorForm.jsx) with
-// one addition -- the Specification text input -- since AutoNXT's rows have
-// no separate "spec row above many measured rows" the way General's do,
-// this print text has to live somewhere per-row.
+// One reusable cell for every tolerance-eligible field: a read-only,
+// computed Specification preview (spec_<id>_display -- what prints in the
+// PDF, now always derived from the nominal/tolerance group below rather
+// than independently typed) plus a compact nominal + tolerance-mode +
+// tolerance-amount group (spec_<id>/_tol_mode/_tol/_tol_minus, used both to
+// flag the Measured cell and to compute the Specification preview).
+// Mirrors General's own ToleranceSpecInput (CRM/src/components/admin/
+// PDIGeneratorForm.jsx) with one addition -- the Specification preview --
+// since AutoNXT's rows have no separate "spec row above many measured rows"
+// the way General's do, this print text has to live somewhere per-row. See
+// docs/superpowers/specs/2026-09-30-autonxt-spec-display-lock-design.md
+// (CRM_BACKEND repo) for why this field is no longer independently typed.
 function AutoNxtSpecCell({ form, setField, id }) {
   const mode = form[`spec_${id}_tol_mode`];
+  const computedDisplay = formatAutoNxtSpecDisplay(
+    form[`spec_${id}`],
+    mode,
+    form[`spec_${id}_tol`],
+    form[`spec_${id}_tol_minus`],
+    SPEC_UNIT_PREFIX[id],
+  );
   return (
     <div className="space-y-1 min-w-[150px]">
       <input
         className={INPUT_CLS}
-        value={form[`spec_${id}_display`]}
-        onChange={(e) => setField(`spec_${id}_display`, e.target.value)}
-        placeholder="Specification"
+        value={computedDisplay}
+        disabled
+        readOnly
+        title="Computed automatically from Nominal, Tolerance mode and Tolerance amount below -- not editable."
+        aria-label="Specification (computed automatically)"
       />
       <div className="flex gap-1 flex-wrap">
         <input
@@ -709,7 +742,7 @@ export default function AutoNXTGeneratorForm() {
     try {
       const { photos, ...data } = form;
       await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
-        data, photos, status: 'In Progress', inspected_by: inspectedByValue(),
+        data: withComputedSpecDisplays(data), photos, status: 'In Progress', inspected_by: inspectedByValue(),
         inspection_date: form.date || undefined,
       }, {
         headers: { Authorization: `Bearer ${token}` },
@@ -740,7 +773,7 @@ export default function AutoNXTGeneratorForm() {
     try {
       const { photos, ...data } = form;
       await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
-        data, photos, inspected_by: inspectedByValue(),
+        data: withComputedSpecDisplays(data), photos, inspected_by: inspectedByValue(),
         inspection_date: form.date || undefined,
       }, {
         headers: { Authorization: `Bearer ${token}` },
