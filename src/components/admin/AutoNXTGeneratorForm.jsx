@@ -177,10 +177,12 @@ const SPEC_UNIT_PREFIX = {
 function formatAutoNxtSpecDisplay(nominal, tolMode, tol, tolMinus, { unit = '', prefix = '' } = {}) {
   const nominalStr = String(nominal ?? '').trim();
   if (!nominalStr) return '-';
+  const tolStr = String(tol ?? '').trim();
+  const tolMinusStr = String(tolMinus ?? '').trim();
   if (tolMode === 'bilateral') {
-    return `${prefix}${nominalStr} (${tol} TO ${tolMinus})`;
+    return `${prefix}${nominalStr} (${tolStr} TO ${tolMinusStr})`;
   }
-  return `${prefix}${nominalStr}±${tol}${tolMode === '%' ? '%' : ''}${unit}`;
+  return `${prefix}${nominalStr}±${tolStr}${tolMode === '%' ? '%' : ''}${unit}`;
 }
 
 // Builds the 5 flat form fields (spec_<id>_display, spec_<id>,
