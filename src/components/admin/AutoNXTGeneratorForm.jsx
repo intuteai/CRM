@@ -147,6 +147,42 @@ const SPEC_DEFAULTS = {
 
 const SPEC_FIELD_IDS = Object.keys(SPEC_DEFAULTS);
 
+// Per-field printed-unit metadata for formatAutoNxtSpecDisplay below --
+// mirrors today's hardcoded SPEC_DEFAULTS[*].display strings exactly (an
+// "A" suffix on every *_current field, a "Ø" prefix on locating_dia's
+// bilateral diameter spec, nothing on everything else). See
+// docs/superpowers/specs/2026-09-30-autonxt-spec-display-lock-design.md
+// (CRM_BACKEND repo) for why this exists. Same duplicated-rather-than-shared
+// convention as SPEC_DEFAULTS above -- also mirrored in CRM_BACKEND's
+// one-off fix script and in the pdi-erp-app mobile handoff.
+const SPEC_UNIT_PREFIX = {
+  rpm_500_current:  { unit: 'A' },
+  rpm_1000_current: { unit: 'A' },
+  rpm_1500_current: { unit: 'A' },
+  rpm_1800_current: { unit: 'A' },
+  rpm_2000_current: { unit: 'A' },
+  rpm_2200_current: { unit: 'A' },
+  rpm_2500_current: { unit: 'A' },
+  rpm_3000_current: { unit: 'A' },
+  locating_dia:     { prefix: 'Ø' },
+};
+
+// Computes the printed Specification text from nominal/tolerance instead of
+// letting it be typed independently of them -- see the design spec above
+// for why (a technician could previously change Nominal/Tolerance without
+// updating this text, so the PDF printed a specification that no longer
+// matched what Measured was actually checked against). Must reproduce every
+// one of SPEC_DEFAULTS' current hardcoded `display` strings exactly for
+// that field's own (nominal, tolMode, tol, tolMinus) -- verified in Step 2.
+function formatAutoNxtSpecDisplay(nominal, tolMode, tol, tolMinus, { unit = '', prefix = '' } = {}) {
+  const nominalStr = String(nominal ?? '').trim();
+  if (!nominalStr) return '-';
+  if (tolMode === 'bilateral') {
+    return `${prefix}${nominalStr} (${tol} TO ${tolMinus})`;
+  }
+  return `${prefix}${nominalStr}±${tol}${tolMode === '%' ? '%' : ''}${unit}`;
+}
+
 // Builds the 5 flat form fields (spec_<id>_display, spec_<id>,
 // spec_<id>_tol_mode, spec_<id>_tol, spec_<id>_tol_minus) for every
 // tolerance-eligible field, defaulted from SPEC_DEFAULTS -- spread into
