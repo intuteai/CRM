@@ -595,6 +595,7 @@ export default function AutoNXTGeneratorForm() {
         setRevisionNo(report.revision_no ?? null);
         setReportStatus(report.status ?? null);
         setHasSaved(true);
+        setHasConflict(false);
         setActiveTab('performance');
         setIsOpen(true);
       } catch (err) {
@@ -717,6 +718,7 @@ export default function AutoNXTGeneratorForm() {
       setRevisionNo(response.data.revision_no ?? null);
       setReportStatus(response.data.status ?? null);
       setHasSaved(false);
+      setHasConflict(false);
       setForm(defaultForm());
       setActiveTab('performance');
       setIsOpen(true);
