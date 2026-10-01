@@ -557,6 +557,7 @@ export default function AutoNXTGeneratorForm() {
   const [hasSaved, setHasSaved] = useState(false);
   const [revisionNo, setRevisionNo] = useState(null);
   const [reportStatus, setReportStatus] = useState(null);
+  const [hasConflict, setHasConflict] = useState(false);
   const { notifySuccess, notifyError } = useNotify();
   const abortRef = useRef(null);
 
@@ -758,7 +759,8 @@ export default function AutoNXTGeneratorForm() {
       return;
     }
     if (code === 'REPORT_VERSION_CONFLICT') {
-      notifyError('This report changed since you loaded it. Reloading...');
+      notifyError('This report changed since you loaded it. Close and reopen it to see the latest version before saving again.');
+      setHasConflict(true);
       if (!reportId) return;
       try {
         const token = localStorage.getItem('token');
@@ -848,6 +850,11 @@ export default function AutoNXTGeneratorForm() {
       setHasSaved(false);
     } catch (err) {
       if (err.name === 'CanceledError' || err.name === 'AbortError') return;
+      const code = err.response?.data?.code;
+      if (code === 'FINALIZED_REPORT_FORBIDDEN' || code === 'REPORT_VERSION_CONFLICT') {
+        await handleSaveError(err);
+        return;
+      }
       if (err.response?.data instanceof Blob) {
         try {
           const text = await err.response.data.text();
@@ -1189,7 +1196,7 @@ export default function AutoNXTGeneratorForm() {
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || loading}
+              disabled={saving || loading || hasConflict}
               className="px-5 py-2.5 bg-navy-800 text-white rounded-lg hover:bg-navy-700 transition-colors disabled:opacity-50 text-sm font-semibold"
             >
               {saving ? 'Saving...' : 'Save'}
@@ -1200,7 +1207,7 @@ export default function AutoNXTGeneratorForm() {
               </button>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || hasConflict}
                 className="col-span-2 sm:col-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-50 text-sm font-semibold"
               >
                 <Download size={16} />
