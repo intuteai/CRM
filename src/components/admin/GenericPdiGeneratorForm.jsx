@@ -209,6 +209,12 @@ export default function GenericPdiGeneratorForm() {
   // reason documented at reportIdRef's own declaration.
   const [revisionNo, setRevisionNo] = useState(null);
   const [reportStatus, setReportStatus] = useState(null);
+  // True once a save has hit REPORT_VERSION_CONFLICT -- blocks further saves
+  // (both the Save/Finalize buttons and the debounced autosave attempts)
+  // until the report is closed and reopened, since silently retrying with
+  // stale on-screen data would just overwrite whatever the other editor just
+  // saved (see handleFinalizedEditError below).
+  const [hasConflict, setHasConflict] = useState(false);
 
   // Whether the current draft has ever been successfully saved — used only
   // by handleClose to decide whether to delete an abandoned draft. This is a
@@ -267,6 +273,10 @@ export default function GenericPdiGeneratorForm() {
   useEffect(() => { revisionNoRef.current = revisionNo; }, [revisionNo]);
   const reportStatusRef = useRef(reportStatus);
   useEffect(() => { reportStatusRef.current = reportStatus; }, [reportStatus]);
+  // Mirrored the same way -- runDataSave/runPhotosSave (below) need to check
+  // this synchronously, same reasoning as every other ref on this list.
+  const hasConflictRef = useRef(hasConflict);
+  useEffect(() => { hasConflictRef.current = hasConflict; }, [hasConflict]);
   const inspectedByRef = useRef(() => undefined);
   const inspectionDateRef = useRef(() => undefined);
 
@@ -298,6 +308,20 @@ export default function GenericPdiGeneratorForm() {
   const photosSavedSignatureRef = useRef(null);
   const dataSavedSignatureRef = useRef(null);
 
+  // KNOWN LIMITATION: runDataSave and runPhotosSave are independently
+  // debounced (separate timers, separate signatures). If both have dirty
+  // content and fire close together while editing an already-Completed
+  // report, both carry the same expected_revision -- the backend's shared
+  // revision counter can only accept one, so the loser gets a legitimate-
+  // edit-but-spurious REPORT_VERSION_CONFLICT with no automatic retry
+  // (it waits for that channel's own content to change again, or for
+  // handleSave/doFinalize to resend it). Rare in practice (requires editing
+  // both a data field and a photo within the same ~1.5s debounce window on
+  // a Completed report) and not data-corrupting (the losing edit just sits
+  // unsaved with saveStatus 'error' until retried), but a real gap -- fully
+  // closing it would mean unifying these two channels into one, out of
+  // scope for this fix.
+
   // Each channel's saves are chained onto a single promise rather than
   // guarded by an in-flight/pending boolean pair. A caller (a debounce
   // timer, handleClose, the unmount flush, doFinalize) always gets back a
@@ -314,6 +338,7 @@ export default function GenericPdiGeneratorForm() {
 
   const runDataSave = useCallback(() => {
     const attempt = async () => {
+      if (hasConflictRef.current) return;
       if (!reportIdRef.current || !formRef.current) return;
       // photos is intentionally excluded from the data-channel payload —
       // it has its own channel/column, saved by runPhotosSave below (see
@@ -332,7 +357,9 @@ export default function GenericPdiGeneratorForm() {
         }, { headers: { Authorization: `Bearer ${token}` } });
         hasSavedRef.current = true;
         dataSavedSignatureRef.current = sentSignature;
-        setRevisionNo(response.data.revision_no ?? revisionNoRef.current);
+        const nextRevisionNo = response.data.revision_no ?? revisionNoRef.current;
+        revisionNoRef.current = nextRevisionNo;
+        setRevisionNo(nextRevisionNo);
         // Compares against a FRESH read of formRef.current, not the
         // sentSignature we just confirmed — if something changed again
         // while this request was in flight, the live signature has already
@@ -363,6 +390,7 @@ export default function GenericPdiGeneratorForm() {
 
   const runPhotosSave = useCallback(() => {
     const attempt = async () => {
+      if (hasConflictRef.current) return;
       if (!reportIdRef.current || !formRef.current) return;
       const photos = formRef.current.photos;
       const sentSignature = JSON.stringify(photos);
@@ -381,7 +409,9 @@ export default function GenericPdiGeneratorForm() {
         });
         hasSavedRef.current = true;
         photosSavedSignatureRef.current = sentSignature;
-        setRevisionNo(response.data.revision_no ?? revisionNoRef.current);
+        const nextRevisionNo = response.data.revision_no ?? revisionNoRef.current;
+        revisionNoRef.current = nextRevisionNo;
+        setRevisionNo(nextRevisionNo);
         setSaveStatus(sentSignature === JSON.stringify(formRef.current.photos) ? 'saved' : 'unsaved');
       } catch (err) {
         await handleFinalizedEditError(err);
@@ -413,15 +443,25 @@ export default function GenericPdiGeneratorForm() {
       return true;
     }
     if (code === 'REPORT_VERSION_CONFLICT') {
-      notifyError('This report changed since you loaded it. Reloading...');
+      notifyError('This report changed since you loaded it. Close and reopen it to see the latest version before saving again.');
+      // Synchronous ref write (not just the passive mirroring useEffect) --
+      // runDataSave/runPhotosSave's own attempt() bodies read this ref
+      // directly and need to see the block take effect immediately, same
+      // reasoning as every other ref on this file's "latest ref" list.
+      hasConflictRef.current = true;
+      setHasConflict(true);
       if (!reportIdRef.current) return true;
       try {
         const token = localStorage.getItem('token');
         const response = await axios.get(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setRevisionNo(response.data.revision_no ?? null);
-        setReportStatus(response.data.status ?? null);
+        const nextRevisionNo = response.data.revision_no ?? null;
+        revisionNoRef.current = nextRevisionNo;
+        setRevisionNo(nextRevisionNo);
+        const nextReportStatus = response.data.status ?? null;
+        reportStatusRef.current = nextReportStatus;
+        setReportStatus(nextReportStatus);
       } catch {
         // next save attempt re-hits the same 409 and re-triggers this
       }
@@ -903,7 +943,9 @@ export default function GenericPdiGeneratorForm() {
       hasSavedRef.current = true;
       dataSavedSignatureRef.current = sentDataSignature;
       photosSavedSignatureRef.current = sentPhotosSignature;
-      setRevisionNo(response.data.revision_no ?? revisionNo);
+      const nextRevisionNo = response.data.revision_no ?? revisionNo;
+      revisionNoRef.current = nextRevisionNo;
+      setRevisionNo(nextRevisionNo);
       setSaveStatus('saved');
       notifySuccess('Progress saved.');
     } catch (err) {
@@ -917,6 +959,14 @@ export default function GenericPdiGeneratorForm() {
   };
 
   const doFinalize = async (force) => {
+    // doFinalize has two entry points (the footer's Finalize button and the
+    // Review panel's "Finalize Anyway" link) -- only the footer button's own
+    // `disabled` prop sees hasConflict, so this guard is what actually
+    // closes Gap 2 for the second entry point too.
+    if (hasConflictRef.current) {
+      notifyError('This report changed since you loaded it. Close and reopen it to see the latest version before saving again.');
+      return;
+    }
     if (!form.pdi_no.trim()) { notifyError('PDI No. is required.'); return; }
     if (!reportId) { notifyError('Report not initialized yet — please close and reopen the form.'); return; }
     if (!force && sidebarItems.some((i) => !i.filled)) {
@@ -971,7 +1021,9 @@ export default function GenericPdiGeneratorForm() {
       hasSavedRef.current = true;
       dataSavedSignatureRef.current = sentDataSignature;
       photosSavedSignatureRef.current = sentPhotosSignature;
-      setRevisionNo(preFinalizeResponse.data.revision_no ?? revisionNoRef.current);
+      const nextRevisionNo = preFinalizeResponse.data.revision_no ?? revisionNoRef.current;
+      revisionNoRef.current = nextRevisionNo;
+      setRevisionNo(nextRevisionNo);
 
       const response = await axios.post(`${API_URL}/api/pdi/reports/${reportId}/finalize`, {}, {
         headers: { Authorization: `Bearer ${token}` },
@@ -994,6 +1046,11 @@ export default function GenericPdiGeneratorForm() {
       hasSavedRef.current = false;
     } catch (err) {
       if (err.name === 'CanceledError' || err.name === 'AbortError') return;
+      const code = err.response?.data?.code;
+      if (code === 'FINALIZED_REPORT_FORBIDDEN' || code === 'REPORT_VERSION_CONFLICT') {
+        await handleFinalizedEditError(err);
+        return;
+      }
       if (err.response?.data instanceof Blob) {
         try {
           const text = await err.response.data.text();
@@ -1125,7 +1182,7 @@ export default function GenericPdiGeneratorForm() {
         </div>
 
         <div className="grid grid-cols-2 lg:flex lg:justify-between gap-3 px-4 sm:px-8 py-4 border-t border-navy-100 bg-white shrink-0">
-          <button type="button" onClick={handleSave} disabled={saving} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm font-semibold">
+          <button type="button" onClick={handleSave} disabled={saving || hasConflict} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm font-semibold">
             {saving ? 'Saving...' : 'Save Progress'}
           </button>
           <div className="contents lg:flex lg:items-center lg:gap-3">
@@ -1141,7 +1198,7 @@ export default function GenericPdiGeneratorForm() {
             <button
               type="button"
               onClick={() => doFinalize(false)}
-              disabled={loading}
+              disabled={loading || hasConflict}
               className="col-span-2 lg:col-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-50 text-sm font-semibold"
             >
               <Download size={16} />
