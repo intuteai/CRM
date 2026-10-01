@@ -534,6 +534,7 @@ export default function PDIGeneratorForm() {
   const [reportId, setReportId] = useState(null);
   const [revisionNo, setRevisionNo] = useState(null);
   const [reportStatus, setReportStatus] = useState(null);
+  const [hasConflict, setHasConflict] = useState(false);
   // Tracks whether Save has fired at least once on the current draft — a
   // never-saved draft gets deleted on Cancel so opening the form by mistake
   // doesn't leave an empty row behind; once saved, Cancel just closes.
@@ -787,7 +788,8 @@ export default function PDIGeneratorForm() {
       return;
     }
     if (code === 'REPORT_VERSION_CONFLICT') {
-      notifyError('This report changed since you loaded it. Reloading...');
+      notifyError('This report changed since you loaded it. Close and reopen it to see the latest version before saving again.');
+      setHasConflict(true);
       if (!reportId) return;
       try {
         const token = localStorage.getItem('token');
@@ -881,6 +883,11 @@ export default function PDIGeneratorForm() {
       setHasSaved(false);
     } catch (err) {
       if (err.name === 'CanceledError' || err.name === 'AbortError') return;
+      const code = err.response?.data?.code;
+      if (code === 'FINALIZED_REPORT_FORBIDDEN' || code === 'REPORT_VERSION_CONFLICT') {
+        await handleSaveError(err);
+        return;
+      }
       if (err.response?.data instanceof Blob) {
         try {
           const text = await err.response.data.text();
@@ -1481,7 +1488,7 @@ export default function PDIGeneratorForm() {
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || loading}
+              disabled={saving || loading || hasConflict}
               className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm font-semibold"
             >
               {saving ? 'Saving...' : 'Save'}
@@ -1492,7 +1499,7 @@ export default function PDIGeneratorForm() {
               </button>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || hasConflict}
                 className="col-span-2 sm:col-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-50 text-sm font-semibold"
               >
                 <Download size={16} />
