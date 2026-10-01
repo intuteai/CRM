@@ -203,6 +203,12 @@ export default function GenericPdiGeneratorForm() {
   const [reportId, setReportId] = useState(null);
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
   const [closing, setClosing] = useState(false);
+  // Tracks optimistic-concurrency state for PATCHing an already-Completed
+  // report (see finalizedEditExtrasRef/handleFinalizedEditError below) —
+  // mirrored into refs the same way reportId is, for the same stale-closure
+  // reason documented at reportIdRef's own declaration.
+  const [revisionNo, setRevisionNo] = useState(null);
+  const [reportStatus, setReportStatus] = useState(null);
 
   // Whether the current draft has ever been successfully saved — used only
   // by handleClose to decide whether to delete an abandoned draft. This is a
@@ -257,6 +263,10 @@ export default function GenericPdiGeneratorForm() {
   useLayoutEffect(() => { formRef.current = form; }, [form]);
   const reportIdRef = useRef(reportId);
   useEffect(() => { reportIdRef.current = reportId; }, [reportId]);
+  const revisionNoRef = useRef(revisionNo);
+  useEffect(() => { revisionNoRef.current = revisionNo; }, [revisionNo]);
+  const reportStatusRef = useRef(reportStatus);
+  useEffect(() => { reportStatusRef.current = reportStatus; }, [reportStatus]);
   const inspectedByRef = useRef(() => undefined);
   const inspectionDateRef = useRef(() => undefined);
 
@@ -316,18 +326,20 @@ export default function GenericPdiGeneratorForm() {
       setSaveStatus('saving');
       try {
         const token = localStorage.getItem('token');
-        await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
-          data, status: 'In Progress',
+        const response = await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
+          data, ...finalizedEditExtrasRef(),
           inspected_by: inspectedByRef.current(), inspection_date: inspectionDateRef.current(formRef.current),
         }, { headers: { Authorization: `Bearer ${token}` } });
         hasSavedRef.current = true;
         dataSavedSignatureRef.current = sentSignature;
+        setRevisionNo(response.data.revision_no ?? revisionNoRef.current);
         // Compares against a FRESH read of formRef.current, not the
         // sentSignature we just confirmed — if something changed again
         // while this request was in flight, the live signature has already
         // moved past what was just saved, and the status should say so.
         setSaveStatus(sentSignature === dataOnlySignature(formRef.current) ? 'saved' : 'unsaved');
-      } catch {
+      } catch (err) {
+        await handleFinalizedEditError(err);
         setSaveStatus('error');
       }
     };
@@ -341,6 +353,12 @@ export default function GenericPdiGeneratorForm() {
     const next = dataSaveChainRef.current.then(attempt, attempt);
     dataSaveChainRef.current = next;
     return next;
+    // finalizedEditExtrasRef/handleFinalizedEditError are intentionally
+    // omitted: both are stable across renders (empty-deps / dispatch-only
+    // deps respectively), so this closure never goes stale by closing over
+    // them directly, the same reasoning already applied to this callback's
+    // empty deps array for its other refs above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const runPhotosSave = useCallback(() => {
@@ -352,20 +370,65 @@ export default function GenericPdiGeneratorForm() {
       setSaveStatus('saving');
       try {
         const token = localStorage.getItem('token');
-        await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, { photos }, {
+        // Photos saves can land on an already-Completed report just as
+        // easily as data saves (the user can be viewing/editing a resumed
+        // Completed report), so this channel needs the same
+        // expected_revision/status treatment, not just runDataSave's.
+        const response = await axios.patch(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
+          photos, ...finalizedEditExtrasRef(),
+        }, {
           headers: { Authorization: `Bearer ${token}` },
         });
         hasSavedRef.current = true;
         photosSavedSignatureRef.current = sentSignature;
+        setRevisionNo(response.data.revision_no ?? revisionNoRef.current);
         setSaveStatus(sentSignature === JSON.stringify(formRef.current.photos) ? 'saved' : 'unsaved');
-      } catch {
+      } catch (err) {
+        await handleFinalizedEditError(err);
         setSaveStatus('error');
       }
     };
     const next = photosSaveChainRef.current.then(attempt, attempt);
     photosSaveChainRef.current = next;
     return next;
+    // Same reasoning as runDataSave's own disable comment above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Ref-based (not plain state) because runDataSave/runPhotosSave below
+  // read every other piece of save-time state via refs too, for the same
+  // stale-closure reason this file's own existing chain-ref comments
+  // document.
+  const finalizedEditExtrasRef = useCallback(
+    () => (reportStatusRef.current === 'Completed'
+      ? { expected_revision: revisionNoRef.current }
+      : { status: 'In Progress' }),
+    [],
+  );
+
+  const handleFinalizedEditError = useCallback(async (err) => {
+    const code = err.response?.data?.code;
+    if (code === 'FINALIZED_REPORT_FORBIDDEN') {
+      notifyError('You don’t have permission to edit a finalized report.');
+      return true;
+    }
+    if (code === 'REPORT_VERSION_CONFLICT') {
+      notifyError('This report changed since you loaded it. Reloading...');
+      if (!reportIdRef.current) return true;
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get(`${API_URL}/api/pdi/reports/${reportIdRef.current}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setRevisionNo(response.data.revision_no ?? null);
+        setReportStatus(response.data.status ?? null);
+      } catch {
+        // next save attempt re-hits the same 409 and re-triggers this
+      }
+      return true;
+    }
+    return false; // not a finalized-edit-specific error -- caller handles it as before
+  }, [notifyError]);
 
   const abortRef = useRef(null);
 
@@ -443,6 +506,8 @@ export default function GenericPdiGeneratorForm() {
         setForm(resumedForm);
         setActiveKey(flattenSections(definition)[0]?.key ?? 'review');
         setReportId(report.report_id);
+        setRevisionNo(report.revision_no ?? null);
+        setReportStatus(report.status ?? null);
         hasSavedRef.current = true;
         setIsOpen(true);
       } catch (err) {
@@ -692,6 +757,8 @@ export default function GenericPdiGeneratorForm() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setReportId(response.data.report_id);
+      setRevisionNo(response.data.revision_no ?? null);
+      setReportStatus(response.data.status ?? null);
       hasSavedRef.current = false;
       setSaveStatus('idle'); // a previous session's "All changes saved" shouldn't carry into this new one
       // The freshly-built baseline IS what's "saved" (the server just created
@@ -827,8 +894,8 @@ export default function GenericPdiGeneratorForm() {
       const { photos, ...data } = form;
       const sentDataSignature = JSON.stringify(data);
       const sentPhotosSignature = JSON.stringify(photos);
-      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
-        data, photos, status: 'In Progress', inspected_by: inspectedByValue(),
+      const response = await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
+        data, photos, ...finalizedEditExtrasRef(), inspected_by: inspectedByValue(),
         inspection_date: inspectionDateValue(form),
       }, {
         headers: { Authorization: `Bearer ${token}` },
@@ -836,11 +903,14 @@ export default function GenericPdiGeneratorForm() {
       hasSavedRef.current = true;
       dataSavedSignatureRef.current = sentDataSignature;
       photosSavedSignatureRef.current = sentPhotosSignature;
+      setRevisionNo(response.data.revision_no ?? revisionNo);
       setSaveStatus('saved');
       notifySuccess('Progress saved.');
     } catch (err) {
       setSaveStatus('error');
-      notifyError(err.response?.data?.error || 'Failed to save progress.');
+      if (!(await handleFinalizedEditError(err))) {
+        notifyError(err.response?.data?.error || 'Failed to save progress.');
+      }
     } finally {
       setSaving(false);
     }
@@ -891,8 +961,8 @@ export default function GenericPdiGeneratorForm() {
       const { photos, ...data } = formRef.current;
       const sentDataSignature = JSON.stringify(data);
       const sentPhotosSignature = JSON.stringify(photos);
-      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
-        data, photos, inspected_by: inspectedByRef.current(),
+      const preFinalizeResponse = await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
+        data, photos, ...finalizedEditExtrasRef(), inspected_by: inspectedByRef.current(),
         inspection_date: inspectionDateRef.current(formRef.current),
       }, {
         headers: { Authorization: `Bearer ${token}` },
@@ -901,6 +971,7 @@ export default function GenericPdiGeneratorForm() {
       hasSavedRef.current = true;
       dataSavedSignatureRef.current = sentDataSignature;
       photosSavedSignatureRef.current = sentPhotosSignature;
+      setRevisionNo(preFinalizeResponse.data.revision_no ?? revisionNoRef.current);
 
       const response = await axios.post(`${API_URL}/api/pdi/reports/${reportId}/finalize`, {}, {
         headers: { Authorization: `Bearer ${token}` },
