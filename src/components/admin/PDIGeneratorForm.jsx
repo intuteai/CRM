@@ -565,6 +565,7 @@ export default function PDIGeneratorForm() {
         setReportId(report.report_id);
         setRevisionNo(report.revision_no ?? null);
         setReportStatus(report.status ?? null);
+        setHasConflict(false);
         // It already exists server-side — Cancel should close, never delete it.
         setHasSaved(true);
         setActiveTab('electrical');
@@ -765,6 +766,7 @@ export default function PDIGeneratorForm() {
       setRevisionNo(response.data.revision_no ?? null);
       setReportStatus(response.data.status ?? null);
       setHasSaved(false);
+      setHasConflict(false);
       setForm(defaultForm());
       setActiveTab('electrical');
       setIsOpen(true);
