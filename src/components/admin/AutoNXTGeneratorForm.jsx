@@ -555,6 +555,8 @@ export default function AutoNXTGeneratorForm() {
   const [form, setForm] = useState(defaultForm);
   const [reportId, setReportId] = useState(null);
   const [hasSaved, setHasSaved] = useState(false);
+  const [revisionNo, setRevisionNo] = useState(null);
+  const [reportStatus, setReportStatus] = useState(null);
   const { notifySuccess, notifyError } = useNotify();
   const abortRef = useRef(null);
 
@@ -589,6 +591,8 @@ export default function AutoNXTGeneratorForm() {
           ),
         });
         setReportId(report.report_id);
+        setRevisionNo(report.revision_no ?? null);
+        setReportStatus(report.status ?? null);
         setHasSaved(true);
         setActiveTab('performance');
         setIsOpen(true);
@@ -709,6 +713,8 @@ export default function AutoNXTGeneratorForm() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setReportId(response.data.report_id);
+      setRevisionNo(response.data.revision_no ?? null);
+      setReportStatus(response.data.status ?? null);
       setHasSaved(false);
       setForm(defaultForm());
       setActiveTab('performance');
@@ -733,6 +739,43 @@ export default function AutoNXTGeneratorForm() {
     return names.length ? names.join(' / ') : undefined;
   };
 
+  // Omits `status` and adds `expected_revision` when the loaded report is
+  // already Completed -- `status` is a no-op on that path server-side now,
+  // but there's no reason to send a meaningless value; `expected_revision`
+  // is required for the edit to succeed at all once Completed.
+  const finalizedEditExtras = () =>
+    reportStatus === 'Completed' ? { expected_revision: revisionNo } : { status: 'In Progress' };
+
+  // 403/409 get specific messages distinct from the generic save-failure
+  // toast -- a finalized-report edit rejected for permission reasons
+  // should never look like "try again", and a stale revision should
+  // explicitly prompt a reload rather than inviting a retry that will
+  // fail identically.
+  const handleSaveError = async (err) => {
+    const code = err.response?.data?.code;
+    if (code === 'FINALIZED_REPORT_FORBIDDEN') {
+      notifyError('You don’t have permission to edit a finalized report.');
+      return;
+    }
+    if (code === 'REPORT_VERSION_CONFLICT') {
+      notifyError('This report changed since you loaded it. Reloading...');
+      if (!reportId) return;
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get(`${API_URL}/api/pdi/reports/${reportId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setRevisionNo(response.data.revision_no ?? null);
+        setReportStatus(response.data.status ?? null);
+      } catch {
+        // If the reload itself fails, the next save attempt will just hit
+        // the same 409 again and re-trigger this same path.
+      }
+      return;
+    }
+    notifyError(err.response?.data?.error || 'Failed to save progress.');
+  };
+
   const handleSave = async () => {
     if (!reportId) return;
     const token = localStorage.getItem('token');
@@ -740,16 +783,18 @@ export default function AutoNXTGeneratorForm() {
     setSaving(true);
     try {
       const { photos, ...data } = form;
-      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
-        data: withComputedSpecDisplays(data), photos, status: 'In Progress', inspected_by: inspectedByValue(),
+      const response = await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
+        data: withComputedSpecDisplays(data), photos, inspected_by: inspectedByValue(),
         inspection_date: form.date || undefined,
+        ...finalizedEditExtras(),
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      setRevisionNo(response.data.revision_no ?? revisionNo);
       setHasSaved(true);
       notifySuccess('Progress saved.');
     } catch (err) {
-      notifyError(err.response?.data?.error || 'Failed to save progress.');
+      await handleSaveError(err);
     } finally {
       setSaving(false);
     }
@@ -771,13 +816,15 @@ export default function AutoNXTGeneratorForm() {
 
     try {
       const { photos, ...data } = form;
-      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
+      const saveResponse = await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
         data: withComputedSpecDisplays(data), photos, inspected_by: inspectedByValue(),
         inspection_date: form.date || undefined,
+        ...finalizedEditExtras(),
       }, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
+      setRevisionNo(saveResponse.data.revision_no ?? revisionNo);
       setHasSaved(true);
 
       const response = await axios.post(`${API_URL}/api/pdi/reports/${reportId}/finalize`, {}, {
