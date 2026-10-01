@@ -549,6 +549,8 @@ export default function GenericPdiGeneratorForm() {
         setRevisionNo(report.revision_no ?? null);
         setReportStatus(report.status ?? null);
         hasSavedRef.current = true;
+        hasConflictRef.current = false;
+        setHasConflict(false);
         setIsOpen(true);
       } catch (err) {
         notifyError(err.response?.data?.error || 'Could not load that PDI report.');
@@ -800,6 +802,8 @@ export default function GenericPdiGeneratorForm() {
       setRevisionNo(response.data.revision_no ?? null);
       setReportStatus(response.data.status ?? null);
       hasSavedRef.current = false;
+      hasConflictRef.current = false;
+      setHasConflict(false);
       setSaveStatus('idle'); // a previous session's "All changes saved" shouldn't carry into this new one
       // The freshly-built baseline IS what's "saved" (the server just created
       // exactly this row) — recording its own signature here, rather than
