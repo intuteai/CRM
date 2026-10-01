@@ -532,6 +532,8 @@ export default function PDIGeneratorForm() {
   const [activeTab, setActiveTab] = useState('electrical');
   const [form, setForm] = useState(defaultForm);
   const [reportId, setReportId] = useState(null);
+  const [revisionNo, setRevisionNo] = useState(null);
+  const [reportStatus, setReportStatus] = useState(null);
   // Tracks whether Save has fired at least once on the current draft — a
   // never-saved draft gets deleted on Cancel so opening the form by mistake
   // doesn't leave an empty row behind; once saved, Cancel just closes.
@@ -560,6 +562,8 @@ export default function PDIGeneratorForm() {
         const report = response.data;
         setForm({ ...defaultForm(), ...(report.data || {}), photos: report.photos?.length ? report.photos : defaultForm().photos });
         setReportId(report.report_id);
+        setRevisionNo(report.revision_no ?? null);
+        setReportStatus(report.status ?? null);
         // It already exists server-side — Cancel should close, never delete it.
         setHasSaved(true);
         setActiveTab('electrical');
@@ -757,6 +761,8 @@ export default function PDIGeneratorForm() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setReportId(response.data.report_id);
+      setRevisionNo(response.data.revision_no ?? null);
+      setReportStatus(response.data.status ?? null);
       setHasSaved(false);
       setForm(defaultForm());
       setActiveTab('electrical');
@@ -766,6 +772,36 @@ export default function PDIGeneratorForm() {
     } finally {
       setOpening(false);
     }
+  };
+
+  // A Completed report must send expected_revision (optimistic concurrency)
+  // instead of forcing status back to 'In Progress'; any other status is
+  // unaffected and keeps behaving exactly as before.
+  const finalizedEditExtras = () =>
+    reportStatus === 'Completed' ? { expected_revision: revisionNo } : { status: 'In Progress' };
+
+  const handleSaveError = async (err) => {
+    const code = err.response?.data?.code;
+    if (code === 'FINALIZED_REPORT_FORBIDDEN') {
+      notifyError('You don’t have permission to edit a finalized report.');
+      return;
+    }
+    if (code === 'REPORT_VERSION_CONFLICT') {
+      notifyError('This report changed since you loaded it. Reloading...');
+      if (!reportId) return;
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get(`${API_URL}/api/pdi/reports/${reportId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setRevisionNo(response.data.revision_no ?? null);
+        setReportStatus(response.data.status ?? null);
+      } catch {
+        // next save attempt will re-hit the same 409 and re-trigger this
+      }
+      return;
+    }
+    notifyError(err.response?.data?.error || 'Failed to save progress.');
   };
 
   const handleSave = async () => {
@@ -779,16 +815,17 @@ export default function PDIGeneratorForm() {
       // the inspection (the Prepared By field), not just whoever's logged-in
       // account happened to create the draft — only send it once it's typed,
       // so an empty field doesn't blank out a name already saved.
-      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
-        data, photos, status: 'In Progress', inspected_by: form.prepared_by?.trim() || undefined,
+      const response = await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
+        data, photos, ...finalizedEditExtras(), inspected_by: form.prepared_by?.trim() || undefined,
         inspection_date: form.date || undefined,
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      setRevisionNo(response.data.revision_no ?? revisionNo);
       setHasSaved(true);
       notifySuccess('Progress saved.');
     } catch (err) {
-      notifyError(err.response?.data?.error || 'Failed to save progress.');
+      await handleSaveError(err);
     } finally {
       setSaving(false);
     }
@@ -813,13 +850,14 @@ export default function PDIGeneratorForm() {
       // form state — save first so the PDF reflects exactly what's on screen,
       // even if the user never clicked Save themselves.
       const { photos, ...data } = form;
-      await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
-        data, photos, inspected_by: form.prepared_by?.trim() || undefined,
+      const saveResponse = await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
+        data, photos, ...finalizedEditExtras(), inspected_by: form.prepared_by?.trim() || undefined,
         inspection_date: form.date || undefined,
       }, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
+      setRevisionNo(saveResponse.data.revision_no ?? revisionNo);
       setHasSaved(true);
 
       const response = await axios.post(`${API_URL}/api/pdi/reports/${reportId}/finalize`, {}, {
