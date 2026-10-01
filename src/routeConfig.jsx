@@ -35,6 +35,7 @@ import PartCreation from "./components/admin/PartCreation";
 import DeliveryChallanForm from "./components/admin/DeliveryChallanForm";
 import PDIGeneratorForm from "./components/admin/PDIGeneratorForm";
 import AutoNXTGeneratorForm from "./components/admin/AutoNXTGeneratorForm";
+import AutoNXTBatchForm from "./components/admin/AutoNXTBatchForm";
 import GenericPdiGeneratorForm from "./components/admin/GenericPdiGeneratorForm";
 import MotorRecipesPage from "./components/admin/MotorRecipesPage";
 import DocumentsHub from "./components/admin/DocumentsHub";
@@ -238,6 +239,11 @@ export const routeConfig = [
     path: "/pdi-generator/autonxt",
     allowedRoles: ["admin", "production"],
     component: AutoNXTGeneratorForm,
+  },
+  {
+    path: "/pdi-generator/autonxt-batch",
+    allowedRoles: ["admin", "production"],
+    component: AutoNXTBatchForm,
   },
   {
     path: "/pdi-generator/:templateId",

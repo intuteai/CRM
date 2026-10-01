@@ -915,6 +915,11 @@ export default function AutoNXTGeneratorForm() {
         <p className="text-center text-gray-400 text-sm mt-6">
           Click the card above to open the PDI form and generate the PDF
         </p>
+        <p className="text-center text-sm mt-2">
+          <a href="/pdi-generator/autonxt-batch" className="text-gold-600 hover:underline font-medium">
+            Creating several motors in one lot? Use batch creation instead →
+          </a>
+        </p>
       </div>
 
       <Modal
