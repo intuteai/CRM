@@ -8,18 +8,28 @@ const API_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 const INPUT_CLS =
   'w-full border border-navy-100 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400';
+const SELECT_CLS =
+  'border border-navy-100 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400';
 
 const SHARED_FIELDS = [
   { key: 'customer_name', label: 'Customer name', placeholder: 'e.g. Autonxt' },
   { key: 'product_id', label: 'Product ID', placeholder: 'e.g. CASHV-38140' },
   { key: 'product_specifications', label: 'Product specifications', placeholder: 'e.g. 384V 140A CONTROLLER' },
   { key: 'drawing_no', label: 'Drawing number', placeholder: 'e.g. CASPL-XXXX' },
-  { key: 'controller_type', label: 'Controller type', placeholder: 'e.g. CASHV38140' },
 ];
+
+// Keys MUST match CRM_BACKEND/models/operations/pdi/templates/autonxt_controller.js's
+// CONTROLLER_TYPE_PRESETS keys (and AutoNXTControllerGeneratorForm.jsx's own copy) —
+// same duplicated-not-shared convention as every other PDI template constant in this
+// codebase. Only the key names are needed here (not the full 35-row preset data),
+// since this form just offers the choice; the single-report form does the actual
+// per-row seeding once a report is opened.
+const CONTROLLER_TYPES = ['CASHV38140'];
 
 const emptyForm = () => ({
   pdi_no: '', quantity: '',
-  customer_name: '', product_id: '', product_specifications: '', drawing_no: '', controller_type: '',
+  customer_name: '', product_id: '', product_specifications: '', drawing_no: '',
+  controller_type: CONTROLLER_TYPES[0],
 });
 
 export default function AutoNXTControllerBatchForm() {
@@ -72,7 +82,8 @@ export default function AutoNXTControllerBatchForm() {
         SHARED_FIELDS.map(({ key }) => [key, form[key].trim()]).filter(([, v]) => Boolean(v))
       );
       const response = await axios.post(`${API_URL}/api/pdi/report-batches`, {
-        template_id: 'autonxt_controller', pdi_no: form.pdi_no.trim(), quantity, ...optional,
+        template_id: 'autonxt_controller', pdi_no: form.pdi_no.trim(), quantity,
+        controller_type: form.controller_type, ...optional,
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -237,6 +248,12 @@ export default function AutoNXTControllerBatchForm() {
               <input className={INPUT_CLS} placeholder={placeholder} value={form[key]} onChange={(e) => setField(key, e.target.value)} />
             </div>
           ))}
+          <div>
+            <label className="block text-sm font-medium text-navy-800 mb-1">Controller type</label>
+            <select className={SELECT_CLS + ' w-full'} value={form.controller_type} onChange={(e) => setField('controller_type', e.target.value)}>
+              {CONTROLLER_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </div>
         </div>
         <button
           type="submit"
