@@ -154,6 +154,52 @@ const todayIST = () =>
 // Bilateral's min/max wrapping is deliberate — same defensive reasoning as
 // the existing Math.abs guard below, so a mistyped sign on either field
 // can't silently invert the range.
+// The mobile app saves a printable spec text per field (spec_X_display, e.g.
+// "250 ±1") and the PDF prints it in place of the bare nominal. This form
+// has no such field, so an edit here used to leave that text stale. Any
+// display key already on the report is rebuilt from the current values, in
+// the app's format (pdi-erp-app/src/services/tolerance.ts,
+// formatToleranceSpecification). Reports that never had one are left alone.
+const SPEC_DISPLAY_FIELDS = [
+  ['spec_current_display', 'spec_current_standard', 'spec_current'],
+  ['spec_rpm_display', 'spec_rpm_specified', 'spec_rpm'],
+  ['spec_motor_length_display', 'spec_motor_length', 'spec_motor_length'],
+  ['spec_shaft_length_display', 'spec_shaft_length', 'spec_shaft_length'],
+  ['spec_shaft_diameter_display', 'spec_shaft_diameter', 'spec_shaft_diameter'],
+  ['spec_mounting_pcd_display', 'spec_mounting_pcd', 'spec_mounting_pcd'],
+  ['spec_locating_dia_display', 'spec_locating_dia', 'spec_locating_dia'],
+];
+
+function formatSpecDisplay(nominal, mode, tol, tolMinus) {
+  const base = String(nominal ?? '').trim();
+  if (!base) return '';
+  const tolStr = String(tol ?? '').trim();
+  const tolMinusStr = String(tolMinus ?? '').trim();
+  const signed = (v) => (/^[+-]/.test(v) ? v : `+${v}`);
+  if (!Number.isFinite(parseFloat(base)) || !Number.isFinite(parseFloat(tolStr))) return base;
+  if (mode === 'bilateral') {
+    if (!Number.isFinite(parseFloat(tolMinusStr))) return base;
+    return `${base} ${signed(tolStr)}/${signed(tolMinusStr)}`;
+  }
+  // The tolerance prints as typed ("0.50" stays "0.50"), minus any sign.
+  return `${base} ±${tolStr.replace(/^[+-]/, '')}${mode === '%' ? '%' : ''}`;
+}
+
+function withFreshSpecDisplays(data) {
+  const out = { ...data };
+  SPEC_DISPLAY_FIELDS.forEach(([displayKey, nominalKey, prefix]) => {
+    if (out[displayKey] === undefined) return;
+    out[displayKey] = formatSpecDisplay(
+      out[nominalKey], out[`${prefix}_tol_mode`], out[`${prefix}_tol`], out[`${prefix}_tol_minus`],
+    );
+  });
+  return out;
+}
+
+// Float slack: 0.7 + 0.1 is 0.7999999999999999, so without it a reading
+// exactly on a limit (0.8) is flagged. Mirrored in the backend and mobile copies.
+const TOLERANCE_EPS = 1e-9;
+
 function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountStr, toleranceAmount2Str) {
   const measured = parseFloat(measuredStr);
   const nominal = parseFloat(nominalStr);
@@ -179,7 +225,7 @@ function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountS
     }
     const low = nominal + Math.min(plus, minus);
     const high = nominal + Math.max(plus, minus);
-    return { outOfRange: measured < low || measured > high };
+    return { outOfRange: measured < low - TOLERANCE_EPS || measured > high + TOLERANCE_EPS };
   }
 
   const toleranceAmount = parseFloat(toleranceAmountStr);
@@ -191,7 +237,7 @@ function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountS
   // delta) and flag nearly every row at once.
   const amount = Math.abs(toleranceAmount);
   const delta = toleranceMode === '%' ? Math.abs(nominal) * (amount / 100) : amount;
-  const outOfRange = measured < nominal - delta || measured > nominal + delta;
+  const outOfRange = measured < nominal - delta - TOLERANCE_EPS || measured > nominal + delta + TOLERANCE_EPS;
   return { outOfRange };
 }
 
@@ -1116,7 +1162,8 @@ export default function PDIGeneratorForm() {
   // Photos are only sent when they changed since the last successful save;
   // the body is stringified once here so its size can be checked up front.
   const buildSaveRequest = () => {
-    const { photos, ...data } = form;
+    const { photos, ...rest } = form;
+    const data = withFreshSpecDisplays(rest);
     const sig = { form: formSig, photos: photoSig };
     const body = {
       data,

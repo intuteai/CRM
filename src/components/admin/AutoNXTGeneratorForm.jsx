@@ -184,9 +184,12 @@ function formatAutoNxtSpecDisplay(nominal, tolMode, tol, tolMinus, { unit = '', 
   if (!nominalStr) return '-';
   const tolStr = String(tol ?? '').trim();
   const tolMinusStr = String(tolMinus ?? '').trim();
+  // No usable tolerance: print the nominal alone, not "79.0±" or "(0.1 TO )".
   if (tolMode === 'bilateral') {
+    if (!tolStr || !tolMinusStr) return `${prefix}${nominalStr}${unit}`;
     return `${prefix}${nominalStr} (${tolStr} TO ${tolMinusStr})`;
   }
+  if (!tolStr) return `${prefix}${nominalStr}${unit}`;
   return `${prefix}${nominalStr}±${tolStr}${tolMode === '%' ? '%' : ''}${unit}`;
 }
 
@@ -232,6 +235,10 @@ function defaultSpecFields() {
 // pdi-erp-app/src/services/tolerance.ts, and now here) — kept as a
 // duplicate rather than shared for the same reason as SPEC_DEFAULTS above.
 // The FORMULA must stay identical across all of them.
+// Float slack: 0.7 + 0.1 is 0.7999999999999999, so without it a reading
+// exactly on a limit (0.8) is flagged.
+const TOLERANCE_EPS = 1e-9;
+
 function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountStr, toleranceAmount2Str) {
   const measured = parseFloat(measuredStr);
   const nominal = parseFloat(nominalStr);
@@ -246,7 +253,7 @@ function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountS
     }
     const low = nominal + Math.min(plus, minus);
     const high = nominal + Math.max(plus, minus);
-    return { outOfRange: measured < low || measured > high };
+    return { outOfRange: measured < low - TOLERANCE_EPS || measured > high + TOLERANCE_EPS };
   }
   const toleranceAmount = parseFloat(toleranceAmountStr);
   if (!Number.isFinite(toleranceAmount)) {
@@ -254,7 +261,7 @@ function checkTolerance(measuredStr, nominalStr, toleranceMode, toleranceAmountS
   }
   const amount = Math.abs(toleranceAmount);
   const delta = toleranceMode === '%' ? Math.abs(nominal) * (amount / 100) : amount;
-  const outOfRange = measured < nominal - delta || measured > nominal + delta;
+  const outOfRange = measured < nominal - delta - TOLERANCE_EPS || measured > nominal + delta + TOLERANCE_EPS;
   return { outOfRange };
 }
 
