@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotify } from '../../hooks/useNotify';
 import ConnectionError from '../pages/ConnectionError.jsx';
+import { pdiFormPath } from '../../utils/pdiRoutes';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
@@ -27,7 +28,7 @@ export default function PdiTemplatePicker() {
         if (cancelled) return;
 
         if (list.length === 1) {
-          navigate(`/pdi-generator/${list[0].id}`, { replace: true });
+          navigate(pdiFormPath(list[0].id), { replace: true });
           return;
         }
         setTemplates(list);
@@ -68,7 +69,7 @@ export default function PdiTemplatePicker() {
         {templates.map((tpl) => (
           <button
             key={tpl.id}
-            onClick={() => navigate(`/pdi-generator/${tpl.id}`)}
+            onClick={() => navigate(pdiFormPath(tpl.id))}
             className="text-left p-4 border rounded-lg hover:bg-navy-50 hover:border-gold-400 transition-colors"
           >
             <div className="font-medium">{tpl.name}</div>

@@ -1,5 +1,6 @@
-import { Navigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useParams } from "react-router-dom";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { pdiFormPath } from "./utils/pdiRoutes";
 
 // Dashboards
 import AdminDashboard from "./components/dashboards/AdminDashboard";
@@ -111,6 +112,15 @@ import IAAttendanceHistory from "./components/IA/IAAttendanceHistory";
 function PdiTemplateFillOutForm(props) {
   const { templateId } = useParams();
   return <GenericPdiGeneratorForm key={templateId} {...props} />;
+}
+
+// Old links built /pdi-generator/<template_id> inline, which for
+// autonxt_controller fell through to the authored-template catch-all and
+// 404'd. Forward them (keeping ?report=) to the real Controller form.
+// eslint-disable-next-line react-refresh/only-export-components
+function AutoNXTControllerLegacyRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`${pdiFormPath("autonxt_controller")}${search}`} replace />;
 }
 
 // Route configuration array
@@ -256,6 +266,11 @@ export const routeConfig = [
     path: "/pdi-generator/autonxt-controller-batch",
     allowedRoles: ["admin", "production"],
     component: AutoNXTControllerBatchForm,
+  },
+  {
+    path: "/pdi-generator/autonxt_controller",
+    allowedRoles: ["admin", "production"],
+    component: AutoNXTControllerLegacyRedirect,
   },
   {
     path: "/pdi-generator/:templateId",

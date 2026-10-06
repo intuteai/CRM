@@ -1,14 +1,52 @@
 // CRM/src/components/shared/PdiReportsTable.jsx
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowDownUp, Search, Eye, Pencil, Trash2, Copy, ClipboardList } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
+import { ArrowDownUp, Search, Eye, Pencil, Trash2, Copy, ClipboardList, Lock } from 'lucide-react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { io } from 'socket.io-client';
 import { useNotify } from '../../hooks/useNotify';
 import { debounce } from 'lodash';
 import ConnectionError from '../pages/ConnectionError.jsx';
+import { getSocket, disconnectSocket } from '../../services/socket.js';
+import { logout, toggleLogin } from '../../features/auth/authSlice.js';
+import { pdiFormPath, pdiBatchPath } from '../../utils/pdiRoutes';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
+// Mirrors services/apiStatus.js's SESSION_CODES.
+const SESSION_CODES = new Set(['AUTH_INVALID_TOKEN', 'AUTH_INVALID_USER', 'AUTH_NO_TOKEN']);
+const SESSION_MESSAGE = 'Your session has expired. Please sign in again.';
+const FORBIDDEN_MESSAGE = "You don't have access to PDI reports.";
+
+class RequestError extends Error {
+  constructor({ kind, message }) {
+    super(message);
+    this.kind = kind;
+  }
+}
+
+// Error bodies are normally { error, code }, but a proxy can answer with HTML
+// or nothing at all, so never assume JSON.
+async function readErrorBody(response) {
+  try {
+    const parsed = JSON.parse(await response.text());
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function toRequestError(response, fallback) {
+  const body = await readErrorBody(response);
+  if (response.status === 401 || SESSION_CODES.has(body.code)) {
+    return new RequestError({ kind: 'session', message: SESSION_MESSAGE });
+  }
+  const text = typeof body.error === 'string' && body.error ? body.error : null;
+  if (response.status === 403) return new RequestError({ kind: 'forbidden', message: text || FORBIDDEN_MESSAGE });
+  return new RequestError({ kind: 'other', message: text || fallback });
+}
+
+const errorMessage = (err, fallback) => (err instanceof RequestError ? err.message : fallback);
 
 // Roles that can open a report back up in the Generator to keep working on it.
 // Everyone else (who can still see this dashboard) gets view/download only —
@@ -51,13 +89,13 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'Failed', label: 'Failed' },
 ];
 
-// Per-row template badge (next to PDI No.) -- General/AutoNXT get fixed
-// colors since they're the two known hardcoded templates; any admin-authored
-// custom template shares one color rather than assigning one per template
-// (an unbounded, admin-created set).
+// Per-row template badge (next to PDI No.) -- the built-in templates get
+// fixed colors; any admin-authored custom template shares one color rather
+// than assigning one per template (an unbounded, admin-created set).
 const TEMPLATE_BADGE_STYLES = {
   general: 'bg-indigo-50 text-indigo-700',
   autonxt: 'bg-pink-50 text-pink-700',
+  autonxt_controller: 'bg-amber-50 text-amber-700',
 };
 const DEFAULT_TEMPLATE_BADGE_STYLE = 'bg-teal-50 text-teal-700';
 
@@ -65,11 +103,57 @@ function getTemplateBadgeStyle(templateId) {
   return TEMPLATE_BADGE_STYLES[templateId] || DEFAULT_TEMPLATE_BADGE_STYLE;
 }
 
+// Always offered in the Template filter, even if GET /api/pdi/templates
+// fails or leaves one out.
+const BUILTIN_TEMPLATE_OPTIONS = [
+  { id: 'general', name: 'General' },
+  { id: 'autonxt', name: 'AutoNXT Motor' },
+  { id: 'autonxt_controller', name: 'AutoNXT Controller' },
+];
+
+const TABLE_COLUMNS = [
+  { key: 'sr_no', label: 'Sr. No.' },
+  { key: 'pdi_no', label: 'PDI No.' },
+  { key: 'customer_name', label: 'Customer' },
+  { key: 'status', label: 'Status' },
+  { key: 'prepared_by', label: 'Prepared By' },
+  { key: 'approved_by', label: 'Approved By' },
+  { key: 'inspection_date', label: 'Inspection Date' },
+  { key: 'actions', label: 'Actions' },
+];
+const SORTABLE_COLUMNS = TABLE_COLUMNS.filter((c) => c.key !== 'actions');
+
+const isLotMember = (report) => report.batch_id != null;
+
+function getSerialNo(report) {
+  if (report.template_id === 'autonxt_controller') return report.controller_sr_no || null;
+  if (report.template_id === 'autonxt') return report.motor_sr_no || null;
+  return null;
+}
+
+const LOT_CHIP_TITLE = 'Part of a lot — manage from the lot page';
+const LOT_CHIP_CLS = 'ml-1.5 inline-block px-2 py-0.5 rounded text-[10px] font-bold align-middle bg-navy-50 text-navy-800 border border-navy-100';
+
+function LotChip({ report }) {
+  if (!isLotMember(report)) return null;
+  const label = report.lot_index != null && report.lot_quantity != null
+    ? `Lot ${report.lot_index}/${report.lot_quantity}`
+    : 'Lot';
+  const href = pdiBatchPath(report.template_id, report.batch_id);
+  if (!href) return <span className={LOT_CHIP_CLS} title={LOT_CHIP_TITLE}>{label}</span>;
+  return (
+    <Link to={href} className={`${LOT_CHIP_CLS} hover:border-gold-400 hover:bg-navy-100 transition-colors`} title={LOT_CHIP_TITLE}>
+      {label}
+    </Link>
+  );
+}
+
 // Shared by both the desktop table's Actions cell and the mobile card's
 // action row (Task 3) -- identical buttons, conditions, and handlers in
 // both places, so this is the one spot that needs editing if that ever
 // changes.
 function ReportActions({ report, canManage, duplicatingIds, onResume, onViewDownload, onDuplicate, onDelete }) {
+  const canView = !!report.pdi_no;
   return (
     <div className="flex items-center gap-1">
       {canManage && (
@@ -77,7 +161,13 @@ function ReportActions({ report, canManage, duplicatingIds, onResume, onViewDown
           <Pencil size={18} />
         </button>
       )}
-      <button onClick={() => onViewDownload(report)} className="p-2 hover:bg-navy-50 rounded-full text-navy-800 transition-colors" title="View / Download PDF" aria-label={`View PDI report ${report.pdi_no || report.report_id}`}>
+      <button
+        onClick={() => onViewDownload(report)}
+        disabled={!canView}
+        className="p-2 hover:bg-navy-50 rounded-full text-navy-800 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+        title={canView ? 'View / Download PDF' : 'Add a PDI No. before viewing'}
+        aria-label={`View PDI report ${report.pdi_no || report.report_id}`}
+      >
         <Eye size={18} />
       </button>
       {canManage && (
@@ -91,7 +181,7 @@ function ReportActions({ report, canManage, duplicatingIds, onResume, onViewDown
           <Copy size={18} />
         </button>
       )}
-      {canManage && (
+      {canManage && !isLotMember(report) && (
         <button onClick={() => onDelete(report)} className="p-2 hover:bg-red-50 rounded-full text-red-500" title="Delete" aria-label={`Delete PDI report ${report.pdi_no || report.report_id}`}>
           <Trash2 size={18} />
         </button>
@@ -143,24 +233,32 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   // here would silently create two duplicate reports server-side, so the
   // button disables itself per-row while its own request is outstanding.
   const [duplicatingIds, setDuplicatingIds] = useState(() => new Set());
+  // Set when a socket event announces a report that isn't on the page shown
+  // (e.g. a new lot's members); offers a Refresh instead of jumping the user
+  // back to page 1 mid-browse.
+  const [hasRemoteChanges, setHasRemoteChanges] = useState(false);
   const tableRef = useRef(null);
   const searchInputRef = useRef(null);
   const hasFetched = useRef(false);
   const isFetching = useRef(false);
+  // Mirrors pdiReports so the socket handler can check what's on the page
+  // without doing its work inside a setState updater.
+  const pdiReportsRef = useRef(pdiReports);
+  // Ids this tab is deleting, so the socket echo of our own delete doesn't
+  // toast or decrement a second time.
+  const locallyDeletedIds = useRef(new Set());
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const { notifySuccess, notifyError, notifyInfo } = useNotify();
 
-  const socket = useMemo(
-    () =>
-      providedSocket ||
-      io(BASE_URL, {
-        withCredentials: true,
-        transports: ['websocket'],
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-      }),
-    [providedSocket]
-  );
+  // App.jsx creates the one authenticated socket after its first render, so
+  // this can be null at first; App re-renders (and passes it down) once it
+  // connects, and this re-subscribes then. Never open a second, unauthenticated io().
+  const socket = providedSocket || getSocket();
+
+  useEffect(() => {
+    pdiReportsRef.current = pdiReports;
+  }, [pdiReports]);
 
   // Returns true on a successful fetch, false on failure — callers that move
   // pagination state (handleNextPage/handlePrevPage) use this to only commit
@@ -206,8 +304,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
         });
 
         if (!response.ok) {
-          const errorBody = await response.json().catch(() => ({}));
-          throw new Error(errorBody.error || `Server responded with status: ${response.status}`);
+          throw await toRequestError(response, `Server responded with status: ${response.status}`);
         }
 
         const responseData = await response.json();
@@ -215,16 +312,19 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
           throw new Error('Invalid data format');
         }
 
+        pdiReportsRef.current = responseData.data;
         setPdiReports(responseData.data);
         setTotalItems(responseData.total || 0);
         setCursor(responseData.cursor || null);
         setNextOffset(responseData.offset ?? null);
+        setHasRemoteChanges(false);
         return true;
       } catch (err) {
         console.error('Error fetching PDI reports:', err);
-        const errorMessage = err.message || 'Network error. Please try again later.';
-        setError(errorMessage);
-        notifyError(errorMessage, { autoClose: 3000 });
+        const kind = err instanceof RequestError ? err.kind : 'other';
+        const message = err.message || 'Network error. Please try again later.';
+        setError({ kind, message });
+        notifyError(message, { autoClose: 3000 });
         return false;
       } finally {
         setIsLoading(false);
@@ -265,33 +365,48 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
       fetchPdiReports({});
       hasFetched.current = true;
     }
+  }, [fetchPdiReports]);
 
-    const handlePdiReportUpdate = ({ report_id, status }) => {
-      setPdiReports((prev) => {
-        if (!Array.isArray(prev)) return prev || [];
+  // Lot create/finalize/delete emits one event per member, so lot members
+  // update silently (no toast per row). Rows on the current page are patched
+  // in place; an unseen Pending report (a new lot's members) only raises the
+  // Refresh hint, since refetching would reset the user's page and sort.
+  useEffect(() => {
+    if (!socket) return undefined;
 
-        if (status === 'Deleted') {
-          notifyInfo(`PDI report #${report_id} deleted`, { autoClose: 2000 });
-          return prev.filter((report) => report.report_id !== report_id);
-        }
+    const handlePdiReportUpdate = ({ report_id, status } = {}) => {
+      const row = pdiReportsRef.current.find((report) => report.report_id === report_id);
 
-        const idx = prev.findIndex((report) => report.report_id === report_id);
-        if (idx === -1 || prev[idx].status === status) return prev;
+      if (status === 'Deleted') {
+        if (locallyDeletedIds.current.delete(report_id)) return;
+        if (!row) return;
+        pdiReportsRef.current = pdiReportsRef.current.filter((report) => report.report_id !== report_id);
+        setPdiReports((prev) => prev.filter((report) => report.report_id !== report_id));
+        setTotalItems((prev) => Math.max(0, prev - 1));
+        if (!isLotMember(row)) notifyInfo(`PDI report #${report_id} deleted`, { autoClose: 2000 });
+        return;
+      }
 
-        const updated = [...prev];
-        updated[idx] = { ...updated[idx], status };
-        notifyInfo(`PDI report #${report_id} updated`, { autoClose: 2000 });
-        return updated;
-      });
+      if (!row) {
+        if (status === 'Pending') setHasRemoteChanges(true);
+        return;
+      }
+      if (row.status === status) return;
+
+      const patch = { status };
+      if (isLotMember(row) && status === 'Completed') patch.batch_status = 'Completed';
+      pdiReportsRef.current = pdiReportsRef.current.map((report) =>
+        report.report_id === report_id ? { ...report, ...patch } : report
+      );
+      setPdiReports((prev) => prev.map((report) => (report.report_id === report_id ? { ...report, ...patch } : report)));
+      if (!isLotMember(row)) notifyInfo(`PDI report #${report_id} updated`, { autoClose: 2000 });
     };
 
     socket.on('pdiReportUpdate', handlePdiReportUpdate);
-
     return () => {
       socket.off('pdiReportUpdate', handlePdiReportUpdate);
-      if (!providedSocket) socket.disconnect();
     };
-  }, [fetchPdiReports, socket, providedSocket, notifyInfo]);
+  }, [socket, notifyInfo]);
 
   // Central "something that changes the RESULT SET changed" handler. Any of
   // these four changing means the current page is stale, so: reset to page
@@ -336,13 +451,18 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
         });
         if (!response.ok || cancelled) return;
         const list = await response.json();
-        if (!cancelled) setTemplateOptions(list);
+        if (!cancelled && Array.isArray(list)) setTemplateOptions(list);
       } catch (err) {
         console.error('Error loading PDI template list:', err);
       }
     })();
     return () => { cancelled = true; };
   }, []);
+
+  const templateFilterOptions = useMemo(() => {
+    const builtinIds = new Set(BUILTIN_TEMPLATE_OPTIONS.map((t) => t.id));
+    return [...BUILTIN_TEMPLATE_OPTIONS, ...templateOptions.filter((t) => t?.id && !builtinIds.has(t.id))];
+  }, [templateOptions]);
 
   // Unchanged from before this task -- the new central useEffect (Step 3) is
   // what now reacts to sortConfig changing and triggers the server refetch;
@@ -368,7 +488,19 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
   // holds a stale closure over the other filters -- the central useEffect
   // above reacts to searchTerm changing with whatever the other filter values
   // currently are.
-  const debouncedSetSearchTerm = useCallback(debounce((value) => setSearchTerm(value), 400), []);
+  const debouncedSetSearchTerm = useMemo(() => debounce((value) => setSearchTerm(value), 400), []);
+
+  useEffect(() => () => debouncedSetSearchTerm.cancel(), [debouncedSetSearchTerm]);
+
+  const handleMobileSortKeyChange = useCallback((e) => {
+    const key = e.target.value;
+    setSortConfig((prev) => (key ? { key, direction: prev?.direction || 'desc' } : null));
+  }, []);
+
+  const handleMobileSortDirChange = useCallback((e) => {
+    const direction = e.target.value;
+    setSortConfig((prev) => (prev ? { ...prev, direction } : prev));
+  }, []);
 
   const handleSearchChange = useCallback(
     (e) => {
@@ -381,34 +513,62 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
+      debouncedSetSearchTerm.cancel();
       setSearchInput('');
       setSearchTerm('');
       searchInputRef.current?.focus();
     }
-  }, []);
+  }, [debouncedSetSearchTerm]);
+
+  // Same sign-out steps as ConnectionError's "Sign Out" and App's logout.
+  const handleSignInAgain = useCallback(() => {
+    localStorage.clear();
+    disconnectSocket();
+    dispatch(logout());
+    dispatch(toggleLogin(true));
+  }, [dispatch]);
 
   const handleResume = useCallback(
     (report) => {
-      navigate(`/pdi-generator/${report.template_id || 'general'}?report=${report.report_id}`);
+      navigate(pdiFormPath(report.template_id, report.report_id));
     },
     [navigate]
   );
 
   const handleViewDownload = useCallback(
     async (report) => {
+      if (!report.pdi_no) return;
+      // Opened synchronously inside the click so popup blockers treat it as
+      // user-initiated; it's pointed at the PDF once the fetch finishes.
+      const win = window.open('', '_blank');
+      if (win) win.opener = null;
       try {
         const token = localStorage.getItem('token');
         const response = await fetch(`${BASE_URL}${report.report_link}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!response.ok) throw new Error('Failed to load PDF');
+        if (!response.ok) throw await toRequestError(response, 'Could not open the PDI PDF.');
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank', 'noopener,noreferrer');
-        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+        if (win && !win.closed) {
+          win.location.href = url;
+          // The tab's PDF viewer re-reads the blob URL for its own Download/
+          // Print, so keep it alive well past the initial load.
+          setTimeout(() => window.URL.revokeObjectURL(url), 10 * 60 * 1000);
+        } else {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `PDI_${String(report.pdi_no).replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          // Revoking straight after click() cancels the download in some browsers.
+          setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+        }
       } catch (err) {
         console.error('View/download error:', err);
-        notifyError('Could not open the PDI PDF.', { autoClose: 3000 });
+        if (win && !win.closed) win.close();
+        notifyError(errorMessage(err, 'Could not open the PDI PDF.'), { autoClose: 3000 });
       }
     },
     [notifyError]
@@ -416,21 +576,28 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
 
   const handleDelete = useCallback(
     async (report) => {
+      if (isLotMember(report)) return;
       const label = report.pdi_no || `#${report.report_id}`;
       if (!window.confirm(`Delete PDI report ${label}? This cannot be undone.`)) return;
+      locallyDeletedIds.current.add(report.report_id);
       try {
         const token = localStorage.getItem('token');
         const response = await fetch(`${BASE_URL}/api/pdi/reports/${report.report_id}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!response.ok) throw new Error('Delete failed');
-        setPdiReports((prev) => prev.filter((r) => r.report_id !== report.report_id));
-        setTotalItems((prev) => Math.max(0, prev - 1));
+        if (!response.ok) throw await toRequestError(response, 'Failed to delete PDI report.');
+        const wasOnPage = pdiReportsRef.current.some((r) => r.report_id === report.report_id);
+        if (wasOnPage) {
+          pdiReportsRef.current = pdiReportsRef.current.filter((r) => r.report_id !== report.report_id);
+          setPdiReports((prev) => prev.filter((r) => r.report_id !== report.report_id));
+          setTotalItems((prev) => Math.max(0, prev - 1));
+        }
         notifySuccess(`PDI report ${label} deleted.`, { autoClose: 2000 });
       } catch (err) {
+        locallyDeletedIds.current.delete(report.report_id);
         console.error('Delete error:', err);
-        notifyError('Failed to delete PDI report.', { autoClose: 3000 });
+        notifyError(errorMessage(err, 'Failed to delete PDI report.'), { autoClose: 3000 });
       }
     },
     [notifySuccess, notifyError]
@@ -447,13 +614,13 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!response.ok) throw new Error('Duplicate failed');
+        if (!response.ok) throw await toRequestError(response, 'Failed to duplicate PDI report.');
         const newReport = await response.json();
         notifySuccess(`Duplicated ${label} — opening the new PDI.`, { autoClose: 2000 });
-        navigate(`/pdi-generator/${newReport.template_id || 'general'}?report=${newReport.report_id}`);
+        navigate(pdiFormPath(newReport.template_id, newReport.report_id));
       } catch (err) {
         console.error('Duplicate error:', err);
-        notifyError('Failed to duplicate PDI report.', { autoClose: 3000 });
+        notifyError(errorMessage(err, 'Failed to duplicate PDI report.'), { autoClose: 3000 });
       } finally {
         setDuplicatingIds((prev) => {
           const next = new Set(prev);
@@ -532,6 +699,34 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
     );
   }
 
+  if (error && !pdiReports.length && (error.kind === 'forbidden' || error.kind === 'session')) {
+    const isSession = error.kind === 'session';
+    return (
+      <div className="max-w-xl mx-auto py-16 px-4 text-center" role="alert">
+        <Lock size={40} className="mx-auto mb-4 text-gold-500" aria-hidden="true" />
+        <h2 className="text-lg font-semibold text-navy-800 mb-2">{isSession ? 'Session expired' : 'Access denied'}</h2>
+        <p className="text-gray-600 mb-6">{error.message}</p>
+        {isSession ? (
+          <button
+            type="button"
+            onClick={handleSignInAgain}
+            className="px-5 py-2.5 rounded-lg font-semibold bg-gold-500 text-navy-900 hover:bg-gold-400 focus:outline-none focus:ring-2 focus:ring-gold-400"
+          >
+            Sign in again
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={fetchFirstPage}
+            className="px-5 py-2.5 rounded-lg font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gold-400"
+          >
+            Try again
+          </button>
+        )}
+      </div>
+    );
+  }
+
   if (error && !pdiReports.length) return <ConnectionError onRetry={fetchFirstPage} />;
 
   return (
@@ -596,12 +791,52 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
             className="px-3 py-2 sm:py-1.5 rounded-full text-xs font-semibold border border-navy-100 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-400"
           >
             <option value="">All templates</option>
-            {templateOptions.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
+            {templateFilterOptions.map((t) => (
+              <option key={t.id} value={t.id}>{t.name || t.id}</option>
             ))}
           </select>
           </div>
         </div>
+
+        <div className="lg:hidden flex flex-wrap items-center gap-2 -mt-4 mb-6">
+          <label htmlFor="sort-pdi-mobile" className="text-xs uppercase font-bold text-gray-400 tracking-wide mr-1">Sort</label>
+          <select
+            id="sort-pdi-mobile"
+            value={sortConfig?.key || ''}
+            onChange={handleMobileSortKeyChange}
+            disabled={isLoading}
+            className="px-3 py-2 rounded-full text-xs font-semibold border border-navy-100 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-400"
+          >
+            <option value="">Newest first</option>
+            {SORTABLE_COLUMNS.map(({ key, label }) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Sort direction"
+            value={sortConfig?.direction || 'desc'}
+            onChange={handleMobileSortDirChange}
+            disabled={isLoading || !sortConfig}
+            className="px-3 py-2 rounded-full text-xs font-semibold border border-navy-100 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-gold-400 disabled:opacity-50"
+          >
+            <option value="desc">Descending</option>
+            <option value="asc">Ascending</option>
+          </select>
+        </div>
+
+        {hasRemoteChanges && (
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4 px-4 py-2.5 rounded-lg border border-gold-400/40 bg-gold-50 text-sm text-navy-800" role="status">
+            <span>New PDI reports have been added since this page loaded.</span>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isLoading}
+              className="font-semibold underline underline-offset-2 hover:text-gold-600 disabled:opacity-50"
+            >
+              Refresh
+            </button>
+          </div>
+        )}
 
         {isLoading && pdiReports.length > 0 && (
           <div className="text-gray-600 text-lg mb-4 text-center" aria-live="polite">Refreshing data...</div>
@@ -612,16 +847,7 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
             <table className="w-full text-left border-collapse" role="grid" aria-label="PDI Reports table" ref={tableRef} tabIndex={0}>
               <thead>
                 <tr className="bg-navy-50" role="row">
-                  {[
-                    { key: 'sr_no', label: 'Sr. No.' },
-                    { key: 'pdi_no', label: 'PDI No.' },
-                    { key: 'customer_name', label: 'Customer' },
-                    { key: 'status', label: 'Status' },
-                    { key: 'prepared_by', label: 'Prepared By' },
-                    { key: 'approved_by', label: 'Approved By' },
-                    { key: 'inspection_date', label: 'Inspection Date' },
-                    { key: 'actions', label: 'Actions' },
-                  ].map(({ key, label }) => (
+                  {TABLE_COLUMNS.map(({ key, label }) => (
                     <th
                       key={key}
                       className={`py-3 px-3 text-navy-800 text-sm font-semibold border-b border-navy-100 whitespace-nowrap ${key !== 'actions' ? 'cursor-pointer hover:bg-navy-100' : ''} transition-colors`}
@@ -649,6 +875,10 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
                       <span className={`ml-2 inline-block px-2 py-0.5 rounded text-[10px] font-bold align-middle ${getTemplateBadgeStyle(report.template_id)}`}>
                         {report.template_name}
                       </span>
+                      <LotChip report={report} />
+                      {getSerialNo(report) && (
+                        <div className="text-xs text-gray-400 mt-0.5">S/N {getSerialNo(report)}</div>
+                      )}
                     </td>
                     <td className="py-4 px-3 text-gray-600 text-base">{report.customer_name || '—'}</td>
                     <td className="py-4 px-3 text-base">
@@ -685,12 +915,19 @@ export default function PdiReportsTable({ socket: providedSocket, userRole: user
             {pdiReports.map((report) => (
               <div key={report.report_id} className={`p-4 border-t-gray-100 border-l-4 ${getStatusStyle(report.status).border}`}>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-bold text-gray-800 text-base">
-                    {report.pdi_no || '—'}
-                    <span className={`ml-2 inline-block px-2 py-0.5 rounded text-[10px] font-bold align-middle ${getTemplateBadgeStyle(report.template_id)}`}>
-                      {report.template_name}
+                  <div className="min-w-0">
+                    <span className="font-bold text-gray-800 text-base">
+                      {report.sr_no != null && <span className="font-normal text-gray-400 text-sm mr-1.5">#{report.sr_no}</span>}
+                      {report.pdi_no || '—'}
+                      <span className={`ml-2 inline-block px-2 py-0.5 rounded text-[10px] font-bold align-middle ${getTemplateBadgeStyle(report.template_id)}`}>
+                        {report.template_name}
+                      </span>
+                      <LotChip report={report} />
                     </span>
-                  </span>
+                    {getSerialNo(report) && (
+                      <div className="text-xs text-gray-400 mt-0.5">S/N {getSerialNo(report)}</div>
+                    )}
+                  </div>
                   <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${getStatusStyle(report.status).pill}`}>
                     {report.status}
                   </span>

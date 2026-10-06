@@ -1,10 +1,11 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import Modal from 'react-modal';
 import Cropper from 'react-easy-crop';
 import axios from 'axios';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Download, FileText, ClipboardCheck, Image as ImageIcon, X, Trash2, Plus, Camera } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
+import { pdiFormPath, pdiBatchPath } from '../../utils/pdiRoutes';
 
 Modal.setAppElement('#root');
 
@@ -29,8 +30,15 @@ const MAX_ROWS = 100;
 const CROP_ASPECT = 4 / 3; // matches the printed photo box shape (see pdi_generator.js drawPhotoCell)
 const COMPRESS_MAX_DIM = 1600;
 const COMPRESS_QUALITY = 0.85;
+const TEMPLATE_ID = 'general';
+// server.js caps JSON bodies at 40 MB; leave headroom for encoding overhead.
+const MAX_SAVE_PAYLOAD_BYTES = 35 * 1024 * 1024;
+const PASSED_REMARK = 'ALL MOTORS OK, PASSED.';
+
+const str = (x) => String(x ?? '');
 
 let photoIdCounter = 0;
+let cropSeq = 0;
 const makePhotoId = () => `photo-${Date.now()}-${photoIdCounter++}`;
 
 const fileToDataUri = (file) =>
@@ -121,6 +129,8 @@ const makeRow = (sno) => ({
   locating_dia_result: '',
   mechanical_remarks: '',
 });
+
+const makeRows = () => Array.from({ length: 20 }, (_, i) => makeRow(i + 1));
 
 const todayIST = () =>
   new Intl.DateTimeFormat('en-CA', {
@@ -262,7 +272,7 @@ const defaultForm = () => ({
     { id: makePhotoId(), label: 'Overall Motor', images: [] },
     { id: makePhotoId(), label: 'Name Plate', images: [] },
   ],
-  rows: Array.from({ length: 20 }, (_, i) => makeRow(i + 1)),
+  rows: makeRows(),
   general_electrical: {
     ...initGeneralChecks(ELECTRICAL_CHECKS),
     hall_sensor: { measured: 'NA', remarks: 'OK' },
@@ -273,6 +283,164 @@ const defaultForm = () => ({
     sensor_cable: { measured: 'NA', remarks: 'OK' },
   },
 });
+
+const isPlainObject = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
+
+// Keeps YYYY-MM-DD, converts DD-MM-YYYY / DD/MM/YYYY, drops anything else.
+function normalizeDate(raw) {
+  const s = str(raw).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+}
+
+function mergeChecks(defaults, saved) {
+  const src = isPlainObject(saved) ? saved : {};
+  const merged = { ...src };
+  for (const [key, def] of Object.entries(defaults)) {
+    const v = isPlainObject(src[key]) ? src[key] : {};
+    merged[key] = { ...v, measured: str(v.measured ?? def.measured), remarks: str(v.remarks ?? def.remarks) };
+  }
+  return merged;
+}
+
+function normalizeRows(rows) {
+  if (!Array.isArray(rows)) return makeRows();
+  return rows.map((r, i) => {
+    const src = isPlainObject(r) ? r : {};
+    const out = { ...src };
+    for (const [key, def] of Object.entries(makeRow(i + 1))) {
+      out[key] = key === 'sno' ? (src.sno ?? def) : str(src[key] ?? def);
+    }
+    return out;
+  });
+}
+
+function normalizePhotos(photos) {
+  const list = Array.isArray(photos) ? photos.filter(isPlainObject) : [];
+  if (!list.length) return defaultForm().photos;
+  return list.map((p) => ({
+    ...p,
+    id: p.id || makePhotoId(),
+    label: str(p.label),
+    images: Array.isArray(p.images) ? p.images : [],
+  }));
+}
+
+function formFromReport(report) {
+  const base = defaultForm();
+  const data = isPlainObject(report?.data) ? report.data : {};
+  const out = { ...base, ...data };
+  for (const [key, def] of Object.entries(base)) {
+    if (typeof def === 'string') out[key] = str(data[key] ?? def);
+  }
+  out.date = data.date == null ? base.date : normalizeDate(data.date);
+  out.drawing_image = typeof data.drawing_image === 'string' && data.drawing_image ? data.drawing_image : null;
+  out.rows = normalizeRows(data.rows);
+  out.general_electrical = mergeChecks(base.general_electrical, data.general_electrical);
+  out.general_mechanical = mergeChecks(base.general_mechanical, data.general_mechanical);
+  out.photos = normalizePhotos(report?.photos);
+  return out;
+}
+
+// Unsaved-change detection. Images are reduced to length + tail so a
+// multi-MB data URI never goes through JSON.stringify on every keystroke.
+const imageSig = (src) => {
+  const s = str(src);
+  return `${s.length}:${s.slice(-24)}`;
+};
+const formSignature = (f) =>
+  JSON.stringify({ ...f, photos: undefined, drawing_image: f.drawing_image ? imageSig(f.drawing_image) : null });
+const photoSignature = (f) =>
+  JSON.stringify((f.photos || []).map((p) => [p.id, p.label, (p.images || []).map(imageSig)]));
+
+const MECHANICAL_TOLERANCE_FIELDS = [
+  ['motor_length', 'spec_motor_length'],
+  ['shaft_length', 'spec_shaft_length'],
+  ['shaft_diameter', 'spec_shaft_diameter'],
+  ['mounting_pcd', 'spec_mounting_pcd'],
+  ['locating_dia_result', 'spec_locating_dia'],
+];
+
+const isNg = (v) => str(v).trim().toUpperCase() === 'NG';
+const isPassedRemark = (v) => str(v).trim().toUpperCase() === PASSED_REMARK;
+
+// Same flags the tables paint red, gathered for the finalize pre-check.
+function finalizeWarnings(form) {
+  const rows = Array.isArray(form.rows) ? form.rows : [];
+  const specOut = (value, spec) =>
+    checkTolerance(value, form[spec], form[`${spec}_tol_mode`], form[`${spec}_tol`], form[`${spec}_tol_minus`]).outOfRange;
+  const currentOut = (raw) => {
+    const { forward, reverse } = parseForwardReverse(str(raw));
+    return [forward, reverse].some((v) =>
+      checkTolerance(v, form.spec_current_standard, form.spec_current_tol_mode, form.spec_current_tol, form.spec_current_tol_minus).outOfRange);
+  };
+  const rpmOut = (raw) => {
+    const { forward, reverse } = parseForwardReverse(str(raw));
+    return [forward, reverse].some((v) =>
+      checkTolerance(v, form.spec_rpm_specified, form.spec_rpm_tol_mode, form.spec_rpm_tol, form.spec_rpm_tol_minus).outOfRange);
+  };
+
+  let elecTol = false, mechTol = false, elecNg = false, mechNg = false;
+  for (const r of rows) {
+    if (currentOut(r.current_measured) || rpmOut(r.rpm_measured)) elecTol = true;
+    if (MECHANICAL_TOLERANCE_FIELDS.some(([field, spec]) => specOut(r[field], spec))) mechTol = true;
+    if (isNg(r.electrical_remarks)) elecNg = true;
+    if (isNg(r.key_dim_result) || isNg(r.mechanical_remarks)) mechNg = true;
+  }
+  const checksNg = (checks) => Object.values(isPlainObject(checks) ? checks : {})
+    .some((c) => isNg(c?.measured) || isNg(c?.remarks));
+  if (checksNg(form.general_electrical)) elecNg = true;
+  if (checksNg(form.general_mechanical)) mechNg = true;
+
+  const warnings = [];
+  if (!rows.some((r) => str(r.motor_sr_no).trim())) warnings.push('No motor row has a Motor Sr. No.');
+  if (elecTol) warnings.push('Electrical readings outside tolerance.');
+  if (mechTol) warnings.push('Mechanical readings outside tolerance.');
+  if (elecNg) warnings.push('NG result in the electrical checks.');
+  if (mechNg) warnings.push('NG result in the mechanical checks.');
+  const photoCount = (form.photos || []).reduce((n, p) => n + (p.images?.length || 0), 0);
+  if (photoCount === 0) warnings.push('No photos attached.');
+  if ((elecTol || elecNg) && isPassedRemark(form.electrical_remarks)) {
+    warnings.push(`Electrical Remarks still say "${PASSED_REMARK}"`);
+  }
+  if ((mechTol || mechNg) && isPassedRemark(form.mechanical_remarks)) {
+    warnings.push(`Mechanical Remarks still say "${PASSED_REMARK}"`);
+  }
+  return warnings;
+}
+
+// Error bodies arrive as a Blob when the request asked for responseType 'blob'.
+async function readErrorPayload(err) {
+  let data = err?.response?.data;
+  if (typeof Blob !== 'undefined' && data instanceof Blob) {
+    try { data = JSON.parse(await data.text()); } catch { data = null; }
+  }
+  if (!isPlainObject(data)) return { error: '', code: '' };
+  return { error: typeof data.error === 'string' ? data.error : '', code: str(data.code) };
+}
+
+function downloadPdf(data, filename) {
+  const blob = new Blob([data], { type: 'application/pdf' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+}
+
+function deleteDraft(id) {
+  const token = localStorage.getItem('token');
+  if (!id || !token) return Promise.resolve();
+  return axios.delete(`${API_URL}/api/pdi/reports/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  }).catch((err) => {
+    console.error('Failed to clean up unsaved PDI draft:', err);
+  });
+}
 
 const INPUT_CLS =
   'w-full border border-navy-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gold-400';
@@ -290,15 +458,17 @@ const TD_CLS = 'py-1 px-1 border border-gray-100 text-sm text-gray-500 text-cent
 // identical reuse of the single existing tolerance field) -- `tolMinus` is
 // the only genuinely new value.
 function ToleranceSpecInput({
+  id, label,
   nominalValue, onNominalChange, nominalPlaceholder,
   mode, onModeChange,
   tol, onTolChange,
   tolMinus, onTolMinusChange,
 }) {
+  const prefix = label ? `${label} ` : '';
   return (
     <div className="flex gap-1 flex-wrap">
-      <input className={INPUT_CLS} value={nominalValue} onChange={(e) => onNominalChange(e.target.value)} placeholder={nominalPlaceholder} />
-      <select className={SELECT_CLS} value={mode} onChange={(e) => onModeChange(e.target.value)}>
+      <input id={id} className={INPUT_CLS} value={nominalValue} onChange={(e) => onNominalChange(e.target.value)} placeholder={nominalPlaceholder} aria-label={`${prefix}specification`} />
+      <select className={SELECT_CLS} value={mode} onChange={(e) => onModeChange(e.target.value)} aria-label={`${prefix}tolerance mode`}>
         <option value="±">±</option>
         <option value="%">±%</option>
         <option value="bilateral">Bilateral</option>
@@ -308,7 +478,7 @@ function ToleranceSpecInput({
         value={tol}
         onChange={(e) => onTolChange(e.target.value)}
         placeholder={mode === 'bilateral' ? '+' : 'tol.'}
-        aria-label={mode === 'bilateral' ? 'Plus tolerance' : 'Tolerance amount'}
+        aria-label={`${prefix}${mode === 'bilateral' ? 'plus tolerance' : 'tolerance amount'}`}
         style={{ maxWidth: mode === 'bilateral' ? 50 : 60 }}
       />
       {mode === 'bilateral' && (
@@ -317,7 +487,7 @@ function ToleranceSpecInput({
           value={tolMinus}
           onChange={(e) => onTolMinusChange(e.target.value)}
           placeholder="-"
-          aria-label="Minus tolerance"
+          aria-label={`${prefix}minus tolerance`}
           style={{ maxWidth: 50 }}
         />
       )}
@@ -325,11 +495,11 @@ function ToleranceSpecInput({
   );
 }
 
-function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, heightCls = 'h-40', maxImages = 10 }) {
+function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, heightCls = 'h-40', maxImages = 10, disabled = false }) {
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const [dragActive, setDragActive] = useState(false);
-  const atLimit = images.length >= maxImages;
+  const atLimit = disabled || images.length >= maxImages;
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -446,12 +616,23 @@ function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, 
 // Drag-to-crop + pinch-zoom overlay shown after a file is picked, before it's
 // attached to the form. Crops to CROP_ASPECT then hands the result to onApply
 // as a compressed JPEG data URI (see cropAndCompress).
-function CropModal({ imageSrc, onCancel, onApply }) {
+function CropModal({ imageSrc, onCancel, onApply, onSkip }) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [decodeFailed, setDecodeFailed] = useState(false);
   const { notifyError } = useNotify();
+
+  // The browser can read some formats (e.g. HEIC) as a file but not decode
+  // them, which would leave Apply disabled forever with no explanation.
+  useEffect(() => {
+    let cancelled = false;
+    loadImage(imageSrc).catch(() => {
+      if (!cancelled) setDecodeFailed(true);
+    });
+    return () => { cancelled = true; };
+  }, [imageSrc]);
 
   const handleCropComplete = useCallback((_area, pixels) => {
     setCroppedAreaPixels(pixels);
@@ -480,40 +661,54 @@ function CropModal({ imageSrc, onCancel, onApply }) {
     >
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
         <h3 className="text-base font-semibold text-gray-800">Adjust photo</h3>
-        <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        <button type="button" onClick={onCancel} aria-label="Close" className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
       </div>
-      <div className="relative bg-gray-900" style={{ height: 320 }}>
-        <Cropper
-          image={imageSrc}
-          crop={crop}
-          zoom={zoom}
-          aspect={CROP_ASPECT}
-          onCropChange={setCrop}
-          onZoomChange={setZoom}
-          onCropComplete={handleCropComplete}
-        />
-      </div>
-      <div className="px-5 py-4 space-y-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Zoom</label>
-          <input
-            type="range"
-            min={1}
-            max={3}
-            step={0.01}
-            value={zoom}
-            onChange={(e) => setZoom(Number(e.target.value))}
-            className="w-full"
+      {decodeFailed ? (
+        <div className="px-5 py-8 text-sm text-red-600 bg-red-50 border-b border-red-100">
+          This photo couldn&rsquo;t be opened. HEIC and some camera formats aren&rsquo;t supported here, so convert it to JPEG or PNG, or skip it.
+        </div>
+      ) : (
+        <div className="relative bg-gray-900" style={{ height: 320 }}>
+          <Cropper
+            image={imageSrc}
+            crop={crop}
+            zoom={zoom}
+            aspect={CROP_ASPECT}
+            onCropChange={setCrop}
+            onZoomChange={setZoom}
+            onCropComplete={handleCropComplete}
           />
         </div>
+      )}
+      <div className="px-5 py-4 space-y-3">
+        {!decodeFailed && (
+          <div>
+            <label htmlFor="pdi-gen-crop-zoom" className="block text-xs font-medium text-gray-500 mb-1">Zoom</label>
+            <input
+              id="pdi-gen-crop-zoom"
+              type="range"
+              min={1}
+              max={3}
+              step={0.01}
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="w-full"
+            />
+          </div>
+        )}
         <div className="flex justify-end gap-3">
           <button type="button" onClick={onCancel} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm">
             Cancel
           </button>
+          {decodeFailed && (
+            <button type="button" onClick={onSkip} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm font-semibold">
+              Skip this photo
+            </button>
+          )}
           <button
             type="button"
             onClick={handleApply}
-            disabled={busy || !croppedAreaPixels}
+            disabled={busy || decodeFailed || !croppedAreaPixels}
             className="px-4 py-2 bg-navy-800 text-white rounded-lg hover:bg-navy-700 transition-colors disabled:opacity-50 text-sm font-semibold"
           >
             {busy ? 'Processing...' : 'Apply'}
@@ -526,24 +721,145 @@ function CropModal({ imageSrc, onCancel, onApply }) {
 
 export default function PDIGeneratorForm() {
   const [isOpen, setIsOpen] = useState(false);
+  // `loading` = finalizing.
   const [loading, setLoading] = useState(false);
   const [opening, setOpening] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [activeTab, setActiveTab] = useState('electrical');
   const [form, setForm] = useState(defaultForm);
   const [reportId, setReportId] = useState(null);
   const [revisionNo, setRevisionNo] = useState(null);
   const [reportStatus, setReportStatus] = useState(null);
   const [hasConflict, setHasConflict] = useState(false);
+  // General reports are never lot members; a non-null batch_id is handled
+  // defensively by showing the form read-only.
+  const [lotInfo, setLotInfo] = useState(null);
+  // Signatures of the last loaded/saved form, split so photos never go
+  // through the per-keystroke stringify.
+  const [savedSig, setSavedSig] = useState({ form: '', photos: '' });
   // Tracks whether Save has fired at least once on the current draft — a
   // never-saved draft gets deleted on Cancel so opening the form by mistake
   // doesn't leave an empty row behind; once saved, Cancel just closes.
   const [hasSaved, setHasSaved] = useState(false);
   const { notifySuccess, notifyError } = useNotify();
+  const navigate = useNavigate();
   const abortRef = useRef(null);
+  const saveAbortRef = useRef(null);
+  const busyRef = useRef(false);
+  // Bumped whenever the open form is replaced or closed, so a response that
+  // lands afterwards can tell it belongs to a session that no longer exists.
+  const sessionRef = useRef(0);
+  const reportIdRef = useRef(null);
+  const hasSavedRef = useRef(false);
 
-  // Cancel any in-flight request if the component unmounts
-  useEffect(() => () => { abortRef.current?.abort(); }, []);
+  // Queued files from a multi-file selection still waiting to be cropped,
+  // plus the target they belong to, so the next queued file (advanced from
+  // applyCroppedImage/cancelCrop) reopens the crop modal against the right
+  // destination. Refs, not useState: the re-entrancy guard in
+  // handleFilesChosen below needs to see the queue update the instant a read
+  // begins, with no async gap — a useState-based queue leaves a window (after
+  // the last file's setCropQueue({files: [], ...}) but before the async
+  // FileReader resolves and sets cropTarget) where a concurrent
+  // handleFilesChosen call would read both conditions as false and slip
+  // through. A ref write is synchronous, so that window doesn't exist.
+  const cropQueueFilesRef = useRef([]);
+  const cropQueueTargetRef = useRef(null);
+  // { target: { type: 'drawing' } | { type: 'photo', id }, imageSrc, seq }
+  // identifying where a crop result should land, plus the source image.
+  const [cropTarget, setCropTarget] = useState(null);
+
+  useEffect(() => {
+    reportIdRef.current = reportId;
+    hasSavedRef.current = hasSaved;
+  }, [reportId, hasSaved]);
+
+  // Unmounting (e.g. navigating to another page) with a never-saved draft
+  // open deletes it, the same as Cancel would.
+  useEffect(() => () => {
+    abortRef.current?.abort();
+    saveAbortRef.current?.abort();
+    if (reportIdRef.current && !hasSavedRef.current) deleteDraft(reportIdRef.current);
+  }, []);
+
+  // Same for a reload or tab close; keepalive lets the request outlive the page.
+  useEffect(() => {
+    const onPageHide = (e) => {
+      // persisted = page kept in the back/forward cache and may be restored.
+      if (e.persisted) return;
+      const id = reportIdRef.current;
+      const token = localStorage.getItem('token');
+      if (!id || hasSavedRef.current || !token) return;
+      try {
+        fetch(`${API_URL}/api/pdi/reports/${id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+          keepalive: true,
+        }).catch(() => {});
+      } catch {
+        // best effort
+      }
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, []);
+
+  const formSig = useMemo(() => formSignature(form), [form]);
+  const photoSig = useMemo(() => photoSignature(form), [form]);
+  const isDirty = isOpen && (formSig !== savedSig.form || photoSig !== savedSig.photos);
+
+  useEffect(() => {
+    if (!isDirty) return undefined;
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
+
+  const readOnly = !!lotInfo;
+  const lotFinalized = !!lotInfo && ['Completed', 'Finalizing'].includes(lotInfo.batch_status);
+  const isCompleted = reportStatus === 'Completed' && !lotInfo;
+  const busy = saving || loading;
+
+  const resetCropQueue = () => {
+    cropQueueFilesRef.current = [];
+    cropQueueTargetRef.current = null;
+    setCropTarget(null);
+  };
+
+  const applyLoadedReport = (report) => {
+    const nextForm = formFromReport(report);
+    sessionRef.current += 1;
+    resetCropQueue();
+    setForm(nextForm);
+    setSavedSig({ form: formSignature(nextForm), photos: photoSignature(nextForm) });
+    setReportId(report.report_id);
+    setRevisionNo(report.revision_no ?? null);
+    setReportStatus(report.status ?? null);
+    setLotInfo(report.batch_id != null ? {
+      batch_id: report.batch_id,
+      lot_index: report.lot_index ?? null,
+      lot_quantity: report.lot_quantity ?? null,
+      batch_status: report.batch_status ?? null,
+      batch_pdi_no: report.batch_pdi_no ?? null,
+    } : null);
+    setHasConflict(false);
+    // It already exists server-side — Cancel should close, never delete it.
+    setHasSaved(true);
+  };
+
+  const closeSession = () => {
+    sessionRef.current += 1;
+    reportIdRef.current = null;
+    resetCropQueue();
+    setIsOpen(false);
+    setReportId(null);
+    setHasSaved(false);
+    setHasConflict(false);
+    setLotInfo(null);
+  };
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -556,24 +872,27 @@ export default function PDIGeneratorForm() {
     (async () => {
       const token = localStorage.getItem('token');
       if (!token) { notifyError('Please log in first.'); setSearchParams({}, { replace: true }); return; }
+      let redirected = false;
       try {
         const response = await axios.get(`${API_URL}/api/pdi/reports/${resumeId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const report = response.data;
-        setForm({ ...defaultForm(), ...(report.data || {}), photos: report.photos?.length ? report.photos : defaultForm().photos });
-        setReportId(report.report_id);
-        setRevisionNo(report.revision_no ?? null);
-        setReportStatus(report.status ?? null);
-        setHasConflict(false);
-        // It already exists server-side — Cancel should close, never delete it.
-        setHasSaved(true);
+        const report = response.data || {};
+        const templateId = report.template_id || TEMPLATE_ID;
+        if (templateId !== TEMPLATE_ID) {
+          notifyError('This report uses a different PDI template. Opening it in the right form.');
+          redirected = true;
+          navigate(pdiFormPath(templateId, report.report_id ?? resumeId), { replace: true });
+          return;
+        }
+        applyLoadedReport(report);
         setActiveTab('electrical');
         setIsOpen(true);
       } catch (err) {
-        notifyError(err.response?.data?.error || 'Could not load that PDI report.');
+        const { error } = await readErrorPayload(err);
+        notifyError(error || 'Could not load that PDI report.');
       } finally {
-        setSearchParams({}, { replace: true });
+        if (!redirected) setSearchParams({}, { replace: true });
       }
     })();
     // Only ever run this for the query param present on initial load.
@@ -607,29 +926,37 @@ export default function PDIGeneratorForm() {
     }));
   }, []);
 
-  // { type: 'drawing' } or { type: 'photo', id } identifying where a crop
-  // result should land, plus the source image being cropped.
-  const [cropTarget, setCropTarget] = useState(null);
-
-  const handleFileChosen = useCallback(async (target, file, inputEl) => {
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      notifyError('Please choose an image file.');
-      if (inputEl) inputEl.value = '';
-      return;
+  // Opens the crop modal for `file`. A file that can't be used (not an image,
+  // too large, unreadable) is reported and the next queued file is tried, so
+  // one bad file can't strand the rest of the batch or leave the queue
+  // looking busy. Bails out if the queue was cancelled or the form closed
+  // while a read was in flight (the target ref no longer matches).
+  const handleFileChosen = useCallback(async (target, file) => {
+    let next = file;
+    while (next) {
+      if (cropQueueTargetRef.current !== target) return;
+      let problem = null;
+      if (!str(next.type).startsWith('image/')) {
+        problem = 'Please choose an image file.';
+      } else if (next.size > MAX_RAW_IMAGE_BYTES) {
+        problem = `Image is too large (max ${(MAX_RAW_IMAGE_BYTES / (1024 * 1024)).toFixed(0)}MB).`;
+      } else {
+        try {
+          const dataUri = await fileToDataUri(next);
+          if (cropQueueTargetRef.current !== target) return;
+          setCropTarget({ target, imageSrc: dataUri, seq: cropSeq++ });
+          return;
+        } catch {
+          problem = 'Failed to read image file.';
+        }
+      }
+      notifyError(problem);
+      next = cropQueueFilesRef.current[0];
+      cropQueueFilesRef.current = cropQueueFilesRef.current.slice(1);
     }
-    if (file.size > MAX_RAW_IMAGE_BYTES) {
-      notifyError(`Image is too large (max ${(MAX_RAW_IMAGE_BYTES / (1024 * 1024)).toFixed(0)}MB).`);
-      if (inputEl) inputEl.value = '';
-      return;
-    }
-    try {
-      const dataUri = await fileToDataUri(file);
-      setCropTarget({ target, imageSrc: dataUri });
-    } catch {
-      notifyError('Failed to read image file.');
-    } finally {
-      if (inputEl) inputEl.value = '';
+    if (cropQueueTargetRef.current === target) {
+      cropQueueFilesRef.current = [];
+      cropQueueTargetRef.current = null;
     }
   }, [notifyError]);
 
@@ -662,22 +989,9 @@ export default function PDIGeneratorForm() {
     }));
   }, []);
 
-  // Queued files from a multi-file selection still waiting to be cropped,
-  // plus the target they belong to, so the next queued file (advanced from
-  // applyCroppedImage/cancelCrop) reopens the crop modal against the right
-  // destination. Refs, not useState: the re-entrancy guard in
-  // handleFilesChosen below needs to see the queue update the instant a read
-  // begins, with no async gap — a useState-based queue leaves a window (after
-  // the last file's setCropQueue({files: [], ...}) but before the async
-  // FileReader resolves and sets cropTarget) where a concurrent
-  // handleFilesChosen call would read both conditions as false and slip
-  // through. A ref write is synchronous, so that window doesn't exist.
-  const cropQueueFilesRef = useRef([]);
-  const cropQueueTargetRef = useRef(null);
-
   // Turns a multi-file selection into a sequence of single-file crop steps —
-  // handleFileChosen (unchanged) opens CropModal for the first file; applying
-  // that crop (applyCroppedImage below) advances to the next queued file.
+  // handleFileChosen opens CropModal for the first file; applying or
+  // skipping that crop advances to the next queued file.
   // Guarded against re-entrancy: if a queue or crop is already in flight, a
   // second file-selection is rejected with a notification rather than
   // silently clobbering the in-flight batch.
@@ -701,21 +1015,10 @@ export default function PDIGeneratorForm() {
     handleFileChosen(target, first);
   }, [handleFileChosen, notifyError]);
 
-  const applyCroppedImage = useCallback((dataUri) => {
-    setCropTarget((current) => {
-      if (!current) return current;
-      const { target } = current;
-      if (target.type === 'drawing') {
-        setField('drawing_image', dataUri);
-      } else {
-        addPhotoImage(target.id, dataUri);
-      }
-      return null;
-    });
-    // Advance the queue synchronously (a ref, not state) — the instant this
-    // line runs, cropQueueFilesRef reflects reality with no async gap a
-    // concurrent handleFilesChosen call could slip through, unlike a
-    // useState-based queue (see the bug this replaced).
+  // Advance the queue synchronously (a ref, not state) — the instant this
+  // runs, cropQueueFilesRef reflects reality with no async gap a concurrent
+  // handleFilesChosen call could slip through.
+  const advanceCropQueue = useCallback(() => {
     if (cropQueueFilesRef.current.length > 0) {
       const [next, ...rest] = cropQueueFilesRef.current;
       cropQueueFilesRef.current = rest;
@@ -723,7 +1026,26 @@ export default function PDIGeneratorForm() {
     } else {
       cropQueueTargetRef.current = null;
     }
-  }, [setField, addPhotoImage, handleFileChosen]);
+  }, [handleFileChosen]);
+
+  // Reads cropTarget directly rather than inside a setCropTarget updater:
+  // updaters may run twice (StrictMode), which would add the image twice.
+  const applyCroppedImage = useCallback((dataUri) => {
+    if (!cropTarget) return;
+    const { target } = cropTarget;
+    if (target.type === 'drawing') {
+      setField('drawing_image', dataUri);
+    } else {
+      addPhotoImage(target.id, dataUri);
+    }
+    setCropTarget(null);
+    advanceCropQueue();
+  }, [cropTarget, setField, addPhotoImage, advanceCropQueue]);
+
+  const skipCrop = useCallback(() => {
+    setCropTarget(null);
+    advanceCropQueue();
+  }, [advanceCropQueue]);
 
   // Fully drains the queue on cancel — otherwise the remaining queued files
   // from this batch would be silently abandoned (never cropped, never added).
@@ -762,167 +1084,229 @@ export default function PDIGeneratorForm() {
       const response = await axios.post(`${API_URL}/api/pdi/reports`, { inspection_date: todayIST() }, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      const fresh = defaultForm();
+      sessionRef.current += 1;
+      resetCropQueue();
       setReportId(response.data.report_id);
       setRevisionNo(response.data.revision_no ?? null);
       setReportStatus(response.data.status ?? null);
       setHasSaved(false);
       setHasConflict(false);
-      setForm(defaultForm());
+      setLotInfo(null);
+      setForm(fresh);
+      setSavedSig({ form: formSignature(fresh), photos: photoSignature(fresh) });
       setActiveTab('electrical');
       setIsOpen(true);
     } catch (err) {
-      notifyError(err.response?.data?.error || 'Could not start a new PDI report.');
+      const { error } = await readErrorPayload(err);
+      notifyError(error || 'Could not start a new PDI report.');
     } finally {
       setOpening(false);
     }
   };
 
-  // A Completed report must send expected_revision (optimistic concurrency)
-  // instead of forcing status back to 'In Progress'; any other status is
-  // unaffected and keeps behaving exactly as before.
-  const finalizedEditExtras = () =>
-    reportStatus === 'Completed' ? { expected_revision: revisionNo } : { status: 'In Progress' };
+  // expected_revision goes out on every save once known, so a concurrent
+  // edit is caught whatever the status. Completed reports keep their status
+  // (only finalize sets it); everything else is marked In Progress.
+  const saveExtras = () => ({
+    ...(revisionNo != null ? { expected_revision: revisionNo } : {}),
+    ...(reportStatus === 'Completed' ? {} : { status: 'In Progress' }),
+  });
 
-  const handleSaveError = async (err) => {
-    const code = err.response?.data?.code;
+  // Photos are only sent when they changed since the last successful save;
+  // the body is stringified once here so its size can be checked up front.
+  const buildSaveRequest = () => {
+    const { photos, ...data } = form;
+    const sig = { form: formSig, photos: photoSig };
+    const body = {
+      data,
+      ...saveExtras(),
+      // "Inspected By" on the dashboard should reflect who's actually doing
+      // the inspection (the Prepared By field), not just whoever's logged-in
+      // account happened to create the draft — only send it once it's typed,
+      // so an empty field doesn't blank out a name already saved.
+      inspected_by: str(form.prepared_by).trim() || undefined,
+      inspection_date: form.date || undefined,
+    };
+    if (photoSig !== savedSig.photos) body.photos = photos;
+    const json = JSON.stringify(body);
+    return { json, sig, bytes: json.length };
+  };
+
+  const payloadTooLarge = (bytes) => {
+    if (bytes <= MAX_SAVE_PAYLOAD_BYTES) return false;
+    notifyError(`This report is too large to save (about ${Math.ceil(bytes / (1024 * 1024))} MB; the limit is ${MAX_SAVE_PAYLOAD_BYTES / (1024 * 1024)} MB). Remove some photos and try again.`);
+    return true;
+  };
+
+  // ?photos=summary keeps the response small; local photos are never
+  // replaced from it.
+  const sendSave = (req, token, signal) =>
+    axios.patch(`${API_URL}/api/pdi/reports/${reportId}?photos=summary`, req.json, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      signal,
+    });
+
+  const applySaveResponse = (response, sig) => {
+    setRevisionNo((prev) => response.data?.revision_no ?? prev);
+    if (response.data?.status) setReportStatus(response.data.status);
+    setSavedSig(sig);
+    setHasSaved(true);
+  };
+
+  const handleSaveError = async (err, fallback = 'Failed to save progress.') => {
+    const { error, code } = await readErrorPayload(err);
     if (code === 'FINALIZED_REPORT_FORBIDDEN') {
       notifyError('You don’t have permission to edit a finalized report.');
       return;
     }
     if (code === 'REPORT_VERSION_CONFLICT') {
-      notifyError('This report changed since you loaded it. Close and reopen it to see the latest version before saving again.');
       setHasConflict(true);
-      if (!reportId) return;
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get(`${API_URL}/api/pdi/reports/${reportId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setRevisionNo(response.data.revision_no ?? null);
-        setReportStatus(response.data.status ?? null);
-      } catch {
-        // next save attempt will re-hit the same 409 and re-trigger this
-      }
+      notifyError('This report changed since you loaded it. Use "Reload latest" to load the newest version before saving again.');
       return;
     }
-    notifyError(err.response?.data?.error || 'Failed to save progress.');
+    if (code === 'BATCH_MEMBER_LOCKED' || code === 'BATCH_MEMBER_USE_LOT') {
+      notifyError(error || 'This report is part of a lot. Open it from the lot page.');
+      return;
+    }
+    notifyError(error || fallback);
   };
 
   const handleSave = async () => {
-    if (!reportId) return;
+    if (!reportId || busyRef.current || readOnly) return;
     const token = localStorage.getItem('token');
     if (!token) { notifyError('Please log in first.'); return; }
+    const req = buildSaveRequest();
+    if (payloadTooLarge(req.bytes)) return;
+    const session = sessionRef.current;
+    const controller = new AbortController();
+    saveAbortRef.current = controller;
+    busyRef.current = true;
     setSaving(true);
     try {
-      const { photos, ...data } = form;
-      // "Inspected By" on the dashboard should reflect who's actually doing
-      // the inspection (the Prepared By field), not just whoever's logged-in
-      // account happened to create the draft — only send it once it's typed,
-      // so an empty field doesn't blank out a name already saved.
-      const response = await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
-        data, photos, ...finalizedEditExtras(), inspected_by: form.prepared_by?.trim() || undefined,
-        inspection_date: form.date || undefined,
-      }, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setRevisionNo(response.data.revision_no ?? revisionNo);
-      setHasSaved(true);
-      notifySuccess('Progress saved.');
+      const response = await sendSave(req, token, controller.signal);
+      if (sessionRef.current !== session) return;
+      applySaveResponse(response, req.sig);
+      notifySuccess(isCompleted ? 'Changes saved.' : 'Progress saved.');
     } catch (err) {
+      if (axios.isCancel(err) || sessionRef.current !== session) return;
       await handleSaveError(err);
     } finally {
+      if (saveAbortRef.current === controller) saveAbortRef.current = null;
+      busyRef.current = false;
       setSaving(false);
     }
   };
 
-  const handleFinalize = async (e) => {
-    e.preventDefault();
-    if (!form.customer_name.trim()) { notifyError('Customer name is required.'); return; }
-    if (!form.pdi_no.trim()) { notifyError('PDI No. is required.'); return; }
+  const pdfFileName = () => {
+    const safe = str(form.pdi_no).trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `PDI_${safe || reportId}.pdf`;
+  };
+
+  // Not tied to a submit event: the modal's <form> never submits, so Enter
+  // in a field can't finalize.
+  const handleFinalize = async () => {
+    if (busyRef.current || readOnly || isCompleted) return;
+    if (!str(form.customer_name).trim()) { notifyError('Customer name is required.'); return; }
+    if (!str(form.pdi_no).trim()) { notifyError('PDI No. is required.'); return; }
     if (!reportId) { notifyError('Report not initialized yet — please close and reopen the form.'); return; }
 
     const token = localStorage.getItem('token');
     if (!token) { notifyError('Please log in first.'); return; }
 
+    const warnings = finalizeWarnings(form);
+    if (warnings.length && !window.confirm(
+      `Before finalizing, please check:\n\n${warnings.map((w) => `• ${w}`).join('\n')}\n\nFinalize anyway?`,
+    )) return;
+
+    const req = buildSaveRequest();
+    if (payloadTooLarge(req.bytes)) return;
+
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const session = sessionRef.current;
+    busyRef.current = true;
     setLoading(true);
 
     try {
       // Finalize renders whatever is currently saved server-side, not the live
       // form state — save first so the PDF reflects exactly what's on screen,
       // even if the user never clicked Save themselves.
-      const { photos, ...data } = form;
-      const saveResponse = await axios.patch(`${API_URL}/api/pdi/reports/${reportId}`, {
-        data, photos, ...finalizedEditExtras(), inspected_by: form.prepared_by?.trim() || undefined,
-        inspection_date: form.date || undefined,
-      }, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: controller.signal,
-      });
-      setRevisionNo(saveResponse.data.revision_no ?? revisionNo);
-      setHasSaved(true);
+      const saveResponse = await sendSave(req, token, controller.signal);
+      if (sessionRef.current !== session) return;
+      applySaveResponse(saveResponse, req.sig);
 
       const response = await axios.post(`${API_URL}/api/pdi/reports/${reportId}/finalize`, {}, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob',
         signal: controller.signal,
       });
+      if (sessionRef.current !== session) return;
 
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `PDI_${form.pdi_no.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
+      downloadPdf(response.data, pdfFileName());
       notifySuccess('PDI finalized and PDF downloaded successfully.');
-      setIsOpen(false);
-      setReportId(null);
-      setHasSaved(false);
+      closeSession();
     } catch (err) {
-      if (err.name === 'CanceledError' || err.name === 'AbortError') return;
-      const code = err.response?.data?.code;
-      if (code === 'FINALIZED_REPORT_FORBIDDEN' || code === 'REPORT_VERSION_CONFLICT') {
-        await handleSaveError(err);
-        return;
-      }
-      if (err.response?.data instanceof Blob) {
-        try {
-          const text = await err.response.data.text();
-          const parsed = JSON.parse(text);
-          notifyError(parsed.error || text || 'Failed to finalize PDI.');
-        } catch {
-          notifyError('Failed to finalize PDI.');
-        }
-      } else {
-        notifyError(err.response?.data?.error || 'Failed to finalize PDI.');
-      }
+      if (axios.isCancel(err) || sessionRef.current !== session) return;
+      await handleSaveError(err, 'Failed to finalize PDI.');
     } finally {
+      busyRef.current = false;
       setLoading(false);
-      abortRef.current = null;
+      if (abortRef.current === controller) abortRef.current = null;
     }
   };
 
-  const handleClose = async () => {
-    if (abortRef.current) abortRef.current.abort();
-    if (reportId && !hasSaved) {
-      try {
-        const token = localStorage.getItem('token');
-        await axios.delete(`${API_URL}/api/pdi/reports/${reportId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch (err) {
-        console.error('Failed to clean up unsaved PDI draft:', err);
-      }
+  const handleDownloadPdf = async () => {
+    if (!reportId || downloading) return;
+    if (isDirty && !window.confirm('You have unsaved changes. The PDF shows the last saved version. Download it anyway?')) return;
+    const token = localStorage.getItem('token');
+    if (!token) { notifyError('Please log in first.'); return; }
+    setDownloading(true);
+    try {
+      const response = await axios.get(`${API_URL}/api/pdi/reports/${reportId}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob',
+      });
+      downloadPdf(response.data, pdfFileName());
+    } catch (err) {
+      const { error } = await readErrorPayload(err);
+      notifyError(error || 'Could not download the PDF.');
+    } finally {
+      setDownloading(false);
     }
-    setIsOpen(false);
-    setReportId(null);
-    setHasSaved(false);
   };
+
+  const handleReloadLatest = async () => {
+    if (!reportId || busyRef.current) return;
+    if (!window.confirm('Load the latest saved version of this report? Your unsaved changes here will be lost.')) return;
+    const token = localStorage.getItem('token');
+    if (!token) { notifyError('Please log in first.'); return; }
+    try {
+      const response = await axios.get(`${API_URL}/api/pdi/reports/${reportId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      applyLoadedReport(response.data || {});
+      notifySuccess('Loaded the latest version.');
+    } catch (err) {
+      const { error } = await readErrorPayload(err);
+      notifyError(error || 'Could not load the latest version.');
+    }
+  };
+
+  // Esc, × and Cancel all come through here. Closing is blocked while
+  // finalizing; unsaved edits need a confirm.
+  const handleClose = async () => {
+    if (loading) return;
+    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
+    abortRef.current?.abort();
+    saveAbortRef.current?.abort();
+    const draftId = reportId && !hasSaved ? reportId : null;
+    closeSession();
+    if (draftId) await deleteDraft(draftId);
+  };
+
+  const lotBackPath = lotInfo ? pdiBatchPath(TEMPLATE_ID, lotInfo.batch_id) : null;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -958,11 +1342,13 @@ export default function PDIGeneratorForm() {
       <Modal
         isOpen={isOpen}
         onRequestClose={handleClose}
+        shouldCloseOnOverlayClick={false}
+        shouldCloseOnEsc={!loading}
         overlayClassName="fixed inset-0 bg-navy-900/50 flex items-start justify-center z-50 overflow-y-auto py-4 sm:py-8"
         className="bg-white rounded-xl shadow-2xl w-full min-w-0 max-w-5xl mx-4 outline-none"
         contentLabel="PDI Generator Form"
       >
-        <form onSubmit={handleFinalize}>
+        <form onSubmit={(e) => e.preventDefault()}>
           {/* Modal header */}
           <div className="flex items-center justify-between gap-3 px-4 sm:px-8 py-4 sm:py-5 border-b border-navy-100">
             <div className="flex items-center gap-3">
@@ -972,38 +1358,73 @@ export default function PDIGeneratorForm() {
                 <p className="text-xs text-gray-400">Format No: CASPL/QA/F/14 · Rev. No:00 · Eff. Dt:01/01/2022</p>
               </div>
             </div>
-            <button type="button" onClick={handleClose} className="shrink-0 px-2 text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={loading}
+              aria-label="Close"
+              className="shrink-0 px-2 text-gray-400 hover:text-gray-600 text-2xl leading-none disabled:opacity-40"
+            >
+              &times;
+            </button>
           </div>
 
           <div className="px-4 sm:px-8 py-5 sm:py-6 space-y-6 max-h-[62vh] sm:max-h-[80vh] overflow-y-auto">
 
+            {lotInfo && (
+              <div className={`rounded-lg border p-3 text-sm ${lotFinalized ? 'border-green-200 bg-green-50 text-green-800' : 'border-gold-400/40 bg-gold-400/15 text-navy-800'}`}>
+                {lotFinalized && <p className="font-semibold">This lot is finalized</p>}
+                <p>
+                  Lot {lotInfo.lot_index ?? '?'} of {lotInfo.lot_quantity ?? '?'}
+                  {lotInfo.batch_pdi_no ? ` · PDI ${lotInfo.batch_pdi_no}` : ''}
+                </p>
+                <p className="text-xs mt-1 opacity-80">This report belongs to a lot, so it&rsquo;s read-only here. Lot details are set on the lot page.</p>
+              </div>
+            )}
+
+            {hasConflict && !lotInfo && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <span>This report was changed elsewhere since you opened it. Reload the latest version before saving again.</span>
+                <button
+                  type="button"
+                  onClick={handleReloadLatest}
+                  disabled={busy}
+                  className="px-3 py-1.5 border border-red-300 rounded-lg bg-white text-red-700 hover:bg-red-100 disabled:opacity-50 text-xs font-semibold"
+                >
+                  Reload latest
+                </button>
+              </div>
+            )}
+
             {/* ── Header fields ── */}
+            <fieldset disabled={readOnly} className="min-w-0">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name <span className="text-red-500">*</span></label>
-                <input className={INPUT_CLS} value={form.customer_name} onChange={(e) => setField('customer_name', e.target.value)} placeholder="e.g. ABC Industries" />
+                <label htmlFor="pdi-gen-customer-name" className="block text-sm font-medium text-gray-700 mb-1">Customer Name <span className="text-red-500">*</span></label>
+                <input id="pdi-gen-customer-name" className={INPUT_CLS} value={form.customer_name} onChange={(e) => setField('customer_name', e.target.value)} placeholder="e.g. ABC Industries" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                <input type="date" className={INPUT_CLS} value={form.date} onChange={(e) => setField('date', e.target.value)} />
+                <label htmlFor="pdi-gen-date" className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input id="pdi-gen-date" type="date" className={INPUT_CLS} value={form.date} onChange={(e) => setField('date', e.target.value)} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Product ID</label>
-                <input className={INPUT_CLS} value={form.product_id} onChange={(e) => setField('product_id', e.target.value)} placeholder="e.g. 125-M" />
+                <label htmlFor="pdi-gen-product-id" className="block text-sm font-medium text-gray-700 mb-1">Product ID</label>
+                <input id="pdi-gen-product-id" className={INPUT_CLS} value={form.product_id} onChange={(e) => setField('product_id', e.target.value)} placeholder="e.g. 125-M" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Drawing No.</label>
-                <input className={INPUT_CLS} value={form.drawing_no} onChange={(e) => setField('drawing_no', e.target.value)} placeholder="e.g. DWG-001" />
+                <label htmlFor="pdi-gen-drawing-no" className="block text-sm font-medium text-gray-700 mb-1">Drawing No.</label>
+                <input id="pdi-gen-drawing-no" className={INPUT_CLS} value={form.drawing_no} onChange={(e) => setField('drawing_no', e.target.value)} placeholder="e.g. DWG-001" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Product Specifications</label>
-                <input className={INPUT_CLS} value={form.product_specifications} onChange={(e) => setField('product_specifications', e.target.value)} placeholder="e.g. 48V BLDC Motor" />
+                <label htmlFor="pdi-gen-product-specs" className="block text-sm font-medium text-gray-700 mb-1">Product Specifications</label>
+                <input id="pdi-gen-product-specs" className={INPUT_CLS} value={form.product_specifications} onChange={(e) => setField('product_specifications', e.target.value)} placeholder="e.g. 48V BLDC Motor" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">PDI No. <span className="text-red-500">*</span></label>
-                <input className={INPUT_CLS} value={form.pdi_no} onChange={(e) => setField('pdi_no', e.target.value)} placeholder="e.g. PDI-2024-001" />
+                <label htmlFor="pdi-gen-pdi-no" className="block text-sm font-medium text-gray-700 mb-1">PDI No. <span className="text-red-500">*</span></label>
+                <input id="pdi-gen-pdi-no" className={INPUT_CLS} value={form.pdi_no} onChange={(e) => setField('pdi_no', e.target.value)} placeholder="e.g. PDI-2024-001" />
               </div>
             </div>
+            </fieldset>
 
             {/* ── Tabs ── */}
             <div className="border-b border-gray-200">
@@ -1029,6 +1450,7 @@ export default function PDIGeneratorForm() {
               </nav>
             </div>
 
+            <fieldset disabled={readOnly} className="min-w-0 space-y-6">
             {/* ── Electrical Tab ── */}
             {activeTab === 'electrical' && (
               <div className="space-y-5">
@@ -1062,6 +1484,7 @@ export default function PDIGeneratorForm() {
                         </td>
                         <td className="py-1 px-1 border border-gray-100">
                           <ToleranceSpecInput
+                            label="Current"
                             nominalValue={form.spec_current_standard} onNominalChange={(v) => setField('spec_current_standard', v)} nominalPlaceholder="e.g. 4"
                             mode={form.spec_current_tol_mode} onModeChange={(v) => setField('spec_current_tol_mode', v)}
                             tol={form.spec_current_tol} onTolChange={(v) => setField('spec_current_tol', v)}
@@ -1070,6 +1493,7 @@ export default function PDIGeneratorForm() {
                         </td>
                         <td className="py-1 px-1 border border-gray-100">
                           <ToleranceSpecInput
+                            label="RPM"
                             nominalValue={form.spec_rpm_specified} onNominalChange={(v) => setField('spec_rpm_specified', v)} nominalPlaceholder="e.g. 3000"
                             mode={form.spec_rpm_tol_mode} onModeChange={(v) => setField('spec_rpm_tol_mode', v)}
                             tol={form.spec_rpm_tol} onTolChange={(v) => setField('spec_rpm_tol', v)}
@@ -1082,10 +1506,10 @@ export default function PDIGeneratorForm() {
                         <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className={TD_CLS}>{row.sno}</td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.motor_sr_no} onChange={(e) => setRowField(idx, 'motor_sr_no', e.target.value)} />
+                            <input className={INPUT_CLS} value={row.motor_sr_no} onChange={(e) => setRowField(idx, 'motor_sr_no', e.target.value)} aria-label={`Motor ${row.sno} Sr. No.`} />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.voltage} onChange={(e) => setRowField(idx, 'voltage', e.target.value)} placeholder="V" />
+                            <input className={INPUT_CLS} value={row.voltage} onChange={(e) => setRowField(idx, 'voltage', e.target.value)} placeholder="V" inputMode="decimal" aria-label={`Motor ${row.sno} voltage`} />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             {(() => {
@@ -1096,6 +1520,7 @@ export default function PDIGeneratorForm() {
                                 <input
                                   className={`${INPUT_CLS} ${(fFlag || rFlag) ? 'border-red-500 bg-red-50' : ''}`}
                                   value={row.current_measured}
+                                  aria-label={`Motor ${row.sno} current measured F/R`}
                                   onChange={(e) => setRowField(idx, 'current_measured', e.target.value)}
                                   placeholder="e.g. 2/4"
                                   title={fFlag && rFlag ? 'Both F/R outside tolerance' : fFlag ? 'Forward (F) outside tolerance' : rFlag ? 'Reverse (R) outside tolerance' : undefined}
@@ -1112,6 +1537,7 @@ export default function PDIGeneratorForm() {
                                 <input
                                   className={`${INPUT_CLS} ${(fFlag || rFlag) ? 'border-red-500 bg-red-50' : ''}`}
                                   value={row.rpm_measured}
+                                  aria-label={`Motor ${row.sno} RPM measured F/R`}
                                   onChange={(e) => setRowField(idx, 'rpm_measured', e.target.value)}
                                   placeholder="e.g. 2950/2960"
                                   title={fFlag && rFlag ? 'Both F/R outside tolerance' : fFlag ? 'Forward (F) outside tolerance' : rFlag ? 'Reverse (R) outside tolerance' : undefined}
@@ -1120,7 +1546,7 @@ export default function PDIGeneratorForm() {
                             })()}
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.electrical_remarks} onChange={(e) => setRowField(idx, 'electrical_remarks', e.target.value)} />
+                            <input className={INPUT_CLS} value={row.electrical_remarks} onChange={(e) => setRowField(idx, 'electrical_remarks', e.target.value)} aria-label={`Motor ${row.sno} electrical remarks`} />
                           </td>
                         </tr>
                       ))}
@@ -1150,6 +1576,7 @@ export default function PDIGeneratorForm() {
                               <select
                                 className={SELECT_CLS}
                                 value={form.general_electrical[c.key].measured}
+                                aria-label={`${c.label} measured`}
                                 onChange={(e) => setCheck('general_electrical', c.key, 'measured', e.target.value)}
                               >
                                 {MEASURED_OPTIONS.map((o) => <option key={o}>{o}</option>)}
@@ -1159,6 +1586,7 @@ export default function PDIGeneratorForm() {
                               <input
                                 className={INPUT_CLS}
                                 value={form.general_electrical[c.key].remarks}
+                                aria-label={`${c.label} remarks`}
                                 onChange={(e) => setCheck('general_electrical', c.key, 'remarks', e.target.value)}
                               />
                             </td>
@@ -1170,8 +1598,9 @@ export default function PDIGeneratorForm() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Electrical Remarks</label>
+                  <label htmlFor="pdi-gen-electrical-remarks" className="block text-sm font-medium text-gray-700 mb-1">Electrical Remarks</label>
                   <textarea
+                    id="pdi-gen-electrical-remarks"
                     rows={2}
                     className={INPUT_CLS}
                     value={form.electrical_remarks}
@@ -1190,8 +1619,9 @@ export default function PDIGeneratorForm() {
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Motor Length</label>
+                      <label htmlFor="pdi-gen-spec-motor-length" className="block text-xs font-medium text-gray-700 mb-1">Motor Length</label>
                       <ToleranceSpecInput
+                        id="pdi-gen-spec-motor-length" label="Motor Length"
                         nominalValue={form.spec_motor_length} onNominalChange={(v) => setField('spec_motor_length', v)} nominalPlaceholder="e.g. 254.4"
                         mode={form.spec_motor_length_tol_mode} onModeChange={(v) => setField('spec_motor_length_tol_mode', v)}
                         tol={form.spec_motor_length_tol} onTolChange={(v) => setField('spec_motor_length_tol', v)}
@@ -1199,8 +1629,9 @@ export default function PDIGeneratorForm() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Shaft Length</label>
+                      <label htmlFor="pdi-gen-spec-shaft-length" className="block text-xs font-medium text-gray-700 mb-1">Shaft Length</label>
                       <ToleranceSpecInput
+                        id="pdi-gen-spec-shaft-length" label="Shaft Length"
                         nominalValue={form.spec_shaft_length} onNominalChange={(v) => setField('spec_shaft_length', v)} nominalPlaceholder="e.g. 24.0"
                         mode={form.spec_shaft_length_tol_mode} onModeChange={(v) => setField('spec_shaft_length_tol_mode', v)}
                         tol={form.spec_shaft_length_tol} onTolChange={(v) => setField('spec_shaft_length_tol', v)}
@@ -1208,8 +1639,9 @@ export default function PDIGeneratorForm() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Shaft Diameter</label>
+                      <label htmlFor="pdi-gen-spec-shaft-diameter" className="block text-xs font-medium text-gray-700 mb-1">Shaft Diameter</label>
                       <ToleranceSpecInput
+                        id="pdi-gen-spec-shaft-diameter" label="Shaft Diameter"
                         nominalValue={form.spec_shaft_diameter} onNominalChange={(v) => setField('spec_shaft_diameter', v)} nominalPlaceholder="e.g. 12.0"
                         mode={form.spec_shaft_diameter_tol_mode} onModeChange={(v) => setField('spec_shaft_diameter_tol_mode', v)}
                         tol={form.spec_shaft_diameter_tol} onTolChange={(v) => setField('spec_shaft_diameter_tol', v)}
@@ -1217,8 +1649,9 @@ export default function PDIGeneratorForm() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">PCD</label>
+                      <label htmlFor="pdi-gen-spec-mounting-pcd" className="block text-xs font-medium text-gray-700 mb-1">PCD</label>
                       <ToleranceSpecInput
+                        id="pdi-gen-spec-mounting-pcd" label="PCD"
                         nominalValue={form.spec_mounting_pcd} onNominalChange={(v) => setField('spec_mounting_pcd', v)} nominalPlaceholder="e.g. 152.74"
                         mode={form.spec_mounting_pcd_tol_mode} onModeChange={(v) => setField('spec_mounting_pcd_tol_mode', v)}
                         tol={form.spec_mounting_pcd_tol} onTolChange={(v) => setField('spec_mounting_pcd_tol', v)}
@@ -1226,16 +1659,17 @@ export default function PDIGeneratorForm() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">MTG</label>
-                      <input className={INPUT_CLS} value={form.spec_mtg} onChange={(e) => setField('spec_mtg', e.target.value)} placeholder="e.g. 4*M8" />
+                      <label htmlFor="pdi-gen-spec-mtg" className="block text-xs font-medium text-gray-700 mb-1">MTG</label>
+                      <input id="pdi-gen-spec-mtg" className={INPUT_CLS} value={form.spec_mtg} onChange={(e) => setField('spec_mtg', e.target.value)} placeholder="e.g. 4*M8" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Key Dim.</label>
-                      <input className={INPUT_CLS} value={form.spec_key_dim} onChange={(e) => setField('spec_key_dim', e.target.value)} placeholder="e.g. Go/NG" />
+                      <label htmlFor="pdi-gen-spec-key-dim" className="block text-xs font-medium text-gray-700 mb-1">Key Dim.</label>
+                      <input id="pdi-gen-spec-key-dim" className={INPUT_CLS} value={form.spec_key_dim} onChange={(e) => setField('spec_key_dim', e.target.value)} placeholder="e.g. Go/NG" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Locating Dia.</label>
+                      <label htmlFor="pdi-gen-spec-locating-dia" className="block text-xs font-medium text-gray-700 mb-1">Locating Dia.</label>
                       <ToleranceSpecInput
+                        id="pdi-gen-spec-locating-dia" label="Locating Dia"
                         nominalValue={form.spec_locating_dia} onNominalChange={(v) => setField('spec_locating_dia', v)} nominalPlaceholder="e.g. 50.0"
                         mode={form.spec_locating_dia_tol_mode} onModeChange={(v) => setField('spec_locating_dia_tol_mode', v)}
                         tol={form.spec_locating_dia_tol} onTolChange={(v) => setField('spec_locating_dia_tol', v)}
@@ -1277,53 +1711,53 @@ export default function PDIGeneratorForm() {
                         <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className={TD_CLS}>{row.sno}</td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.motor_sr_no} onChange={(e) => setRowField(idx, 'motor_sr_no', e.target.value)} />
+                            <input className={INPUT_CLS} value={row.motor_sr_no} onChange={(e) => setRowField(idx, 'motor_sr_no', e.target.value)} aria-label={`Motor ${row.sno} Sr. No.`} />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input
                               className={`${INPUT_CLS} ${checkTolerance(row.motor_length, form.spec_motor_length, form.spec_motor_length_tol_mode, form.spec_motor_length_tol, form.spec_motor_length_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
-                              value={row.motor_length} onChange={(e) => setRowField(idx, 'motor_length', e.target.value)} placeholder="mm"
+                              value={row.motor_length} onChange={(e) => setRowField(idx, 'motor_length', e.target.value)} inputMode="decimal" aria-label={`Motor ${row.sno} motor length`} placeholder="mm"
                               title={checkTolerance(row.motor_length, form.spec_motor_length, form.spec_motor_length_tol_mode, form.spec_motor_length_tol, form.spec_motor_length_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
                             />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input
                               className={`${INPUT_CLS} ${checkTolerance(row.shaft_length, form.spec_shaft_length, form.spec_shaft_length_tol_mode, form.spec_shaft_length_tol, form.spec_shaft_length_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
-                              value={row.shaft_length} onChange={(e) => setRowField(idx, 'shaft_length', e.target.value)} placeholder="mm"
+                              value={row.shaft_length} onChange={(e) => setRowField(idx, 'shaft_length', e.target.value)} inputMode="decimal" aria-label={`Motor ${row.sno} shaft length`} placeholder="mm"
                               title={checkTolerance(row.shaft_length, form.spec_shaft_length, form.spec_shaft_length_tol_mode, form.spec_shaft_length_tol, form.spec_shaft_length_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
                             />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input
                               className={`${INPUT_CLS} ${checkTolerance(row.shaft_diameter, form.spec_shaft_diameter, form.spec_shaft_diameter_tol_mode, form.spec_shaft_diameter_tol, form.spec_shaft_diameter_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
-                              value={row.shaft_diameter} onChange={(e) => setRowField(idx, 'shaft_diameter', e.target.value)} placeholder="mm"
+                              value={row.shaft_diameter} onChange={(e) => setRowField(idx, 'shaft_diameter', e.target.value)} inputMode="decimal" aria-label={`Motor ${row.sno} shaft diameter`} placeholder="mm"
                               title={checkTolerance(row.shaft_diameter, form.spec_shaft_diameter, form.spec_shaft_diameter_tol_mode, form.spec_shaft_diameter_tol, form.spec_shaft_diameter_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
                             />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input
                               className={`${INPUT_CLS} ${checkTolerance(row.mounting_pcd, form.spec_mounting_pcd, form.spec_mounting_pcd_tol_mode, form.spec_mounting_pcd_tol, form.spec_mounting_pcd_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
-                              value={row.mounting_pcd} onChange={(e) => setRowField(idx, 'mounting_pcd', e.target.value)} placeholder="153"
+                              value={row.mounting_pcd} onChange={(e) => setRowField(idx, 'mounting_pcd', e.target.value)} inputMode="decimal" aria-label={`Motor ${row.sno} mounting PCD`} placeholder="153"
                               title={checkTolerance(row.mounting_pcd, form.spec_mounting_pcd, form.spec_mounting_pcd_tol_mode, form.spec_mounting_pcd_tol, form.spec_mounting_pcd_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
                             />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.mtg} onChange={(e) => setRowField(idx, 'mtg', e.target.value)} placeholder="4*M8" />
+                            <input className={INPUT_CLS} value={row.mtg} onChange={(e) => setRowField(idx, 'mtg', e.target.value)} placeholder="4*M8" aria-label={`Motor ${row.sno} MTG`} />
                           </td>
                           <td className="py-1 px-2 border border-gray-100 text-center">
-                            <select className={SELECT_CLS} value={row.key_dim_result} onChange={(e) => setRowField(idx, 'key_dim_result', e.target.value)}>
+                            <select className={SELECT_CLS} value={row.key_dim_result} onChange={(e) => setRowField(idx, 'key_dim_result', e.target.value)} aria-label={`Motor ${row.sno} key dim result`}>
                               {['GO', 'NG'].map((o) => <option key={o}>{o}</option>)}
                             </select>
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input
                               className={`${INPUT_CLS} ${checkTolerance(row.locating_dia_result, form.spec_locating_dia, form.spec_locating_dia_tol_mode, form.spec_locating_dia_tol, form.spec_locating_dia_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
-                              value={row.locating_dia_result} onChange={(e) => setRowField(idx, 'locating_dia_result', e.target.value)} placeholder="mm"
+                              value={row.locating_dia_result} onChange={(e) => setRowField(idx, 'locating_dia_result', e.target.value)} inputMode="decimal" aria-label={`Motor ${row.sno} locating dia`} placeholder="mm"
                               title={checkTolerance(row.locating_dia_result, form.spec_locating_dia, form.spec_locating_dia_tol_mode, form.spec_locating_dia_tol, form.spec_locating_dia_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
                             />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.mechanical_remarks} onChange={(e) => setRowField(idx, 'mechanical_remarks', e.target.value)} />
+                            <input className={INPUT_CLS} value={row.mechanical_remarks} onChange={(e) => setRowField(idx, 'mechanical_remarks', e.target.value)} aria-label={`Motor ${row.sno} mechanical remarks`} />
                           </td>
                         </tr>
                       ))}
@@ -1337,8 +1771,9 @@ export default function PDIGeneratorForm() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Power Cable Length</label>
+                      <label htmlFor="pdi-gen-power-cable" className="block text-sm font-medium text-gray-700 mb-1">Power Cable Length</label>
                       <input
+                        id="pdi-gen-power-cable"
                         className={INPUT_CLS}
                         value={form.power_cable_length}
                         onChange={(e) => setField('power_cable_length', e.target.value)}
@@ -1346,8 +1781,9 @@ export default function PDIGeneratorForm() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Sensor Cable Length</label>
+                      <label htmlFor="pdi-gen-sensor-cable" className="block text-sm font-medium text-gray-700 mb-1">Sensor Cable Length</label>
                       <input
+                        id="pdi-gen-sensor-cable"
                         className={INPUT_CLS}
                         value={form.sensor_cable_length}
                         onChange={(e) => setField('sensor_cable_length', e.target.value)}
@@ -1375,6 +1811,7 @@ export default function PDIGeneratorForm() {
                               <select
                                 className={SELECT_CLS}
                                 value={form.general_mechanical[c.key].measured}
+                                aria-label={`${c.label} measured`}
                                 onChange={(e) => setCheck('general_mechanical', c.key, 'measured', e.target.value)}
                               >
                                 {MEASURED_OPTIONS.map((o) => <option key={o}>{o}</option>)}
@@ -1384,6 +1821,7 @@ export default function PDIGeneratorForm() {
                               <input
                                 className={INPUT_CLS}
                                 value={form.general_mechanical[c.key].remarks}
+                                aria-label={`${c.label} remarks`}
                                 onChange={(e) => setCheck('general_mechanical', c.key, 'remarks', e.target.value)}
                               />
                             </td>
@@ -1395,8 +1833,9 @@ export default function PDIGeneratorForm() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Mechanical Remarks</label>
+                  <label htmlFor="pdi-gen-mechanical-remarks" className="block text-sm font-medium text-gray-700 mb-1">Mechanical Remarks</label>
                   <textarea
+                    id="pdi-gen-mechanical-remarks"
                     rows={2}
                     className={INPUT_CLS}
                     value={form.mechanical_remarks}
@@ -1417,6 +1856,7 @@ export default function PDIGeneratorForm() {
                   onFilesSelected={(fileList) => handleFilesChosen({ type: 'drawing' }, fileList)}
                   onRemove={() => setField('drawing_image', null)}
                   heightCls="h-28"
+                  disabled={readOnly}
                 />
 
                 <div>
@@ -1443,12 +1883,14 @@ export default function PDIGeneratorForm() {
                             value={photo.label}
                             onChange={(e) => setPhotoLabel(photo.id, e.target.value)}
                             placeholder={`Photo ${idx + 1} label`}
+                            aria-label={`Photo ${idx + 1} label`}
                           />
                           <button
                             type="button"
                             onClick={() => removePhoto(photo.id)}
                             className="shrink-0 p-1.5 text-gray-400 hover:text-red-500"
                             title="Remove this photo slot"
+                            aria-label={`Remove photo slot ${idx + 1}`}
                           >
                             <Trash2 size={16} />
                           </button>
@@ -1458,6 +1900,7 @@ export default function PDIGeneratorForm() {
                           onFilesSelected={(fileList) => handleFilesChosen({ type: 'photo', id: photo.id }, fileList)}
                           onRemove={(imgIdx) => removePhotoImage(photo.id, imgIdx)}
                           heightCls="h-32"
+                          disabled={readOnly}
                           maxImages={MAX_IMAGES_PER_SLOT}
                         />
                       </div>
@@ -1475,45 +1918,83 @@ export default function PDIGeneratorForm() {
             {/* ── Signatures ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-100 pt-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Prepared By</label>
-                <input className={INPUT_CLS} value={form.prepared_by} onChange={(e) => setField('prepared_by', e.target.value)} placeholder="Name / Designation" />
+                <label htmlFor="pdi-gen-prepared-by" className="block text-sm font-medium text-gray-700 mb-1">Prepared By</label>
+                <input id="pdi-gen-prepared-by" className={INPUT_CLS} value={form.prepared_by} onChange={(e) => setField('prepared_by', e.target.value)} placeholder="Name / Designation" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Approved By</label>
-                <input className={INPUT_CLS} value={form.approved_by} onChange={(e) => setField('approved_by', e.target.value)} placeholder="Name / Designation" />
+                <label htmlFor="pdi-gen-approved-by" className="block text-sm font-medium text-gray-700 mb-1">Approved By</label>
+                <input id="pdi-gen-approved-by" className={INPUT_CLS} value={form.approved_by} onChange={(e) => setField('approved_by', e.target.value)} placeholder="Name / Designation" />
               </div>
             </div>
+            </fieldset>
           </div>
 
           {/* Modal footer */}
           <div className="grid grid-cols-2 sm:flex sm:justify-between gap-3 px-4 sm:px-8 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || loading || hasConflict}
-              className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm font-semibold"
-            >
-              {saving ? 'Saving...' : 'Save'}
-            </button>
-            <div className="contents sm:flex sm:gap-3">
-              <button type="button" onClick={handleClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm">
-                Cancel
-              </button>
+            {readOnly ? (
+              lotBackPath ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(lotBackPath)}
+                  className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm font-semibold"
+                >
+                  &larr; Back to lot
+                </button>
+              ) : <span />
+            ) : (
               <button
-                type="submit"
-                disabled={loading || hasConflict}
-                className="col-span-2 sm:col-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-50 text-sm font-semibold"
+                type="button"
+                onClick={handleSave}
+                disabled={busy || hasConflict}
+                className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm font-semibold"
               >
-                <Download size={16} />
-                {loading ? 'Finalizing...' : 'Finalize & Generate PDF'}
+                {saving ? 'Saving...' : isCompleted ? 'Save changes' : 'Save'}
               </button>
+            )}
+            <div className="contents sm:flex sm:gap-3">
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={loading}
+                className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50 text-sm"
+              >
+                {readOnly ? 'Close' : 'Cancel'}
+              </button>
+              {(isCompleted || lotFinalized) && (
+                <button
+                  type="button"
+                  onClick={handleDownloadPdf}
+                  disabled={downloading || busy}
+                  className="col-span-2 sm:col-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-50 text-sm font-semibold"
+                >
+                  <Download size={16} />
+                  {downloading ? 'Downloading...' : 'Download PDF'}
+                </button>
+              )}
+              {!readOnly && !isCompleted && (
+                <button
+                  type="button"
+                  onClick={handleFinalize}
+                  disabled={busy || hasConflict}
+                  className="col-span-2 sm:col-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-50 text-sm font-semibold"
+                >
+                  <Download size={16} />
+                  {loading ? 'Finalizing...' : 'Finalize & Generate PDF'}
+                </button>
+              )}
             </div>
           </div>
         </form>
       </Modal>
 
       {cropTarget && (
-        <CropModal imageSrc={cropTarget.imageSrc} onCancel={cancelCrop} onApply={applyCroppedImage} />
+        <CropModal
+          key={cropTarget.seq}
+          imageSrc={cropTarget.imageSrc}
+          onCancel={cancelCrop}
+          onApply={applyCroppedImage}
+          onSkip={skipCrop}
+        />
       )}
     </div>
   );
