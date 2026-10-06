@@ -123,7 +123,9 @@ const makeRow = (sno) => ({
   motor_length: '',
   shaft_length: '',
   shaft_diameter: '',
-  mounting_pcd: '',
+  // GO/NG, like Key Dim. and like the mobile app (since app 1.0.8). A report
+  // saved before that can still hold a measured number here.
+  mounting_pcd: 'GO',
   mtg: '',
   key_dim_result: 'GO',
   locating_dia_result: '',
@@ -432,7 +434,7 @@ function finalizeWarnings(form) {
     if (currentOut(r.current_measured) || rpmOut(r.rpm_measured)) elecTol = true;
     if (MECHANICAL_TOLERANCE_FIELDS.some(([field, spec]) => specOut(r[field], spec))) mechTol = true;
     if (isNg(r.electrical_remarks)) elecNg = true;
-    if (isNg(r.key_dim_result) || isNg(r.mechanical_remarks)) mechNg = true;
+    if (isNg(r.mounting_pcd) || isNg(r.key_dim_result) || isNg(r.mechanical_remarks)) mechNg = true;
   }
   const checksNg = (checks) => Object.values(isPlainObject(checks) ? checks : {})
     .some((c) => isNg(c?.measured) || isNg(c?.remarks));
@@ -1781,12 +1783,21 @@ export default function PDIGeneratorForm() {
                               title={checkTolerance(row.shaft_diameter, form.spec_shaft_diameter, form.spec_shaft_diameter_tol_mode, form.spec_shaft_diameter_tol, form.spec_shaft_diameter_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
                             />
                           </td>
-                          <td className="py-1 px-1 border border-gray-100">
-                            <input
-                              className={`${INPUT_CLS} ${checkTolerance(row.mounting_pcd, form.spec_mounting_pcd, form.spec_mounting_pcd_tol_mode, form.spec_mounting_pcd_tol, form.spec_mounting_pcd_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
-                              value={row.mounting_pcd} onChange={(e) => setRowField(idx, 'mounting_pcd', e.target.value)} inputMode="decimal" aria-label={`Motor ${row.sno} mounting PCD`} placeholder="153"
+                          <td className="py-1 px-2 border border-gray-100 text-center">
+                            {/* An old measured number (or a blank) stays selected until GO/NG is picked;
+                                a number is still tolerance-checked, as the PDF does. */}
+                            <select
+                              className={`${SELECT_CLS} ${checkTolerance(row.mounting_pcd, form.spec_mounting_pcd, form.spec_mounting_pcd_tol_mode, form.spec_mounting_pcd_tol, form.spec_mounting_pcd_tol_minus).outOfRange ? 'border-red-500 bg-red-50' : ''}`}
+                              value={str(row.mounting_pcd)} onChange={(e) => setRowField(idx, 'mounting_pcd', e.target.value)} aria-label={`Motor ${row.sno} mounting PCD`}
                               title={checkTolerance(row.mounting_pcd, form.spec_mounting_pcd, form.spec_mounting_pcd_tol_mode, form.spec_mounting_pcd_tol, form.spec_mounting_pcd_tol_minus).outOfRange ? 'Outside tolerance' : undefined}
-                            />
+                            >
+                              {!['GO', 'NG'].includes(str(row.mounting_pcd)) && (
+                                <option value={str(row.mounting_pcd)}>
+                                  {str(row.mounting_pcd).trim() ? `Previously measured: ${str(row.mounting_pcd)}` : '—'}
+                                </option>
+                              )}
+                              {['GO', 'NG'].map((o) => <option key={o}>{o}</option>)}
+                            </select>
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input className={INPUT_CLS} value={row.mtg} onChange={(e) => setRowField(idx, 'mtg', e.target.value)} placeholder="4*M8" aria-label={`Motor ${row.sno} MTG`} />
