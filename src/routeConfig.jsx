@@ -527,7 +527,8 @@ export const routeConfig = [
   },
   {
     path: "/pdi",
-    allowedRoles: ["admin", "design", "dispatch"],
+    // PDI is admin + production only (the API enforces the same).
+    allowedRoles: ["admin"],
     component: PdiPage,
   },
   {

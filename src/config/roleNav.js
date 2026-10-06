@@ -107,7 +107,6 @@ const dispatchNavSections = [
     items: [
       { to: '/queries', icon: MessageSquare, label: 'Queries', desc: 'Manage customer queries' },
       { to: '/stock', icon: Package, label: 'Stock', desc: 'Monitor stock availability' },
-      { to: '/pdi', icon: FileText, label: 'PDI Reports', desc: 'View Pre-Dispatch Inspection reports' },
       { to: '/dispatch-tracking', icon: MapPin, label: 'Dispatch Tracking', desc: 'Track dispatch status and logistics' },
     ],
   },
@@ -145,14 +144,6 @@ const designNavSections = [
       { to: '/part-drawings/raw', icon: PenTool, label: 'Raw Part Drawings', desc: 'Access raw material drawings' },
       { to: '/part-drawings/finished', icon: PenTool, label: 'Finished Part Drawings', desc: 'Access finished good drawings' },
       { to: '/bom', icon: BarChart, label: 'Unpriced BOM', desc: 'Bill of Materials (view only)' },
-    ],
-  },
-  {
-    title: 'Quality',
-    shortLabel: 'Quality',
-    accent: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
-    items: [
-      { to: '/pdi', icon: CheckSquare, label: 'PDI Reports', desc: 'Pre-dispatch inspection details' },
     ],
   },
 ];
