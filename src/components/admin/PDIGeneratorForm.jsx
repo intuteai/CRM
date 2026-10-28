@@ -6,6 +6,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Download, FileText, ClipboardCheck, Image as ImageIcon, X, Trash2, Plus, Camera } from 'lucide-react';
 import { useNotify } from '../../hooks/useNotify';
 import { pdiFormPath, pdiBatchPath } from '../../utils/pdiRoutes';
+import { findDuplicateSerialIndexes, generateSerialBatch, isBlankMotorRow, listDuplicateSerials } from '../../utils/motorSerials';
 
 Modal.setAppElement('#root');
 
@@ -443,6 +444,8 @@ function finalizeWarnings(form) {
 
   const warnings = [];
   if (!rows.some((r) => str(r.motor_sr_no).trim())) warnings.push('No motor row has a Motor Sr. No.');
+  const duplicateSerials = listDuplicateSerials(rows);
+  if (duplicateSerials.length) warnings.push(`Repeated Motor Sr. No.: ${duplicateSerials.join(', ')}.`);
   if (elecTol) warnings.push('Electrical readings outside tolerance.');
   if (mechTol) warnings.push('Mechanical readings outside tolerance.');
   if (elecNg) warnings.push('NG result in the electrical checks.');
@@ -657,6 +660,79 @@ function ImageUploadCard({ label, hint, images = [], onFilesSelected, onRemove, 
         className="hidden"
         onChange={(e) => { selectFiles(e.target.files); e.target.value = ''; }}
       />
+    </div>
+  );
+}
+
+// "Add a batch of motors" — same inputs, wording and serial rules as the
+// mobile app's SerialBatchCard. onGenerate gets the serials and returns true
+// when the rows were added (it reports its own limit/duplicate problems), so
+// the inputs are only cleared once the batch actually went in.
+function SerialBatchCard({ idPrefix, maxQuantity, onGenerate }) {
+  const [firstSerial, setFirstSerial] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [error, setError] = useState('');
+  const canGenerate = !!firstSerial.trim() && !!quantity.trim();
+
+  const generate = () => {
+    if (!canGenerate) return;
+    const result = generateSerialBatch(firstSerial, quantity, maxQuantity);
+    if (result.error !== undefined) {
+      setError(result.error);
+      return;
+    }
+    setError('');
+    if (onGenerate(result.serials)) {
+      setFirstSerial('');
+      setQuantity('');
+    }
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); generate(); }
+  };
+
+  return (
+    <div className="rounded-lg border border-navy-100 bg-navy-50 p-3">
+      <h4 className="text-sm font-semibold text-gray-700">Add a batch of motors</h4>
+      <p className="text-xs text-gray-500 mt-0.5">
+        Enter the first serial number and how many motors are in the lot. Rows are created with consecutive serial numbers.
+      </p>
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <div className="flex-1 min-w-[10rem]">
+          <label htmlFor={`${idPrefix}-first-serial`} className="block text-xs font-medium text-gray-700 mb-1">First serial number</label>
+          <input
+            id={`${idPrefix}-first-serial`}
+            className={`${INPUT_CLS} bg-white`}
+            value={firstSerial}
+            onChange={(e) => { setFirstSerial(e.target.value); setError(''); }}
+            onKeyDown={onKeyDown}
+            placeholder="e.g. 31615"
+            autoCapitalize="characters"
+          />
+        </div>
+        <div className="w-32">
+          <label htmlFor={`${idPrefix}-quantity`} className="block text-xs font-medium text-gray-700 mb-1">Number of motors</label>
+          <input
+            id={`${idPrefix}-quantity`}
+            className={`${INPUT_CLS} bg-white`}
+            value={quantity}
+            onChange={(e) => { setQuantity(e.target.value); setError(''); }}
+            onKeyDown={onKeyDown}
+            placeholder="e.g. 10"
+            inputMode="numeric"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={generate}
+          disabled={!canGenerate}
+          className="px-3 py-2 sm:py-1.5 bg-gold-500 text-navy-900 rounded-lg hover:bg-gold-400 transition-colors disabled:opacity-40 disabled:hover:bg-gold-500 text-xs font-semibold whitespace-nowrap"
+        >
+          Generate motor rows
+        </button>
+      </div>
+      {error && <p className="mt-1.5 text-xs text-red-600" role="alert">{error}</p>}
     </div>
   );
 }
@@ -966,6 +1042,37 @@ export default function PDIGeneratorForm() {
         : { ...prev, rows: [...prev.rows, makeRow(prev.rows.length + 1)] }
     ));
   }, []);
+
+  // Same as the app's addMotorBatch: rows with anything typed in are kept,
+  // untouched blank rows are replaced, the batch is appended and every row is
+  // renumbered. Refused (nothing changes) if it would pass MAX_ROWS or repeat
+  // a serial already in the report. Returns true when the rows were added.
+  const addRowBatch = (serials) => {
+    const keptRows = form.rows.filter((row) => !isBlankMotorRow(row));
+    const total = keptRows.length + serials.length;
+    if (total > MAX_ROWS) {
+      notifyError(
+        `This would exceed the ${MAX_ROWS}-motor report limit (${keptRows.length} filled row${keptRows.length === 1 ? '' : 's'} + ${serials.length} new = ${total}).`,
+      );
+      return false;
+    }
+    const combinedRows = [
+      ...keptRows,
+      ...serials.map((motor_sr_no) => ({ ...makeRow(0), motor_sr_no })),
+    ].map((row, index) => ({ ...row, sno: index + 1 }));
+    const duplicates = listDuplicateSerials(combinedRows);
+    if (duplicates.length) {
+      notifyError(`These serial numbers already exist in this report: ${duplicates.join(', ')}.`);
+      return false;
+    }
+    setForm((prev) => ({ ...prev, rows: combinedRows }));
+    notifySuccess(serials.length === 1
+      ? `Added 1 motor row: ${serials[0]}.`
+      : `Added ${serials.length} motor rows: ${serials[0]} to ${serials[serials.length - 1]}.`);
+    return true;
+  };
+
+  const duplicateSerialIndexes = useMemo(() => findDuplicateSerialIndexes(form.rows), [form.rows]);
 
   const setCheck = useCallback((type, key, subfield, value) => {
     setForm((prev) => ({
@@ -1514,6 +1621,7 @@ export default function PDIGeneratorForm() {
                     <Plus size={14} /> Add Row
                   </button>
                 </div>
+                {!readOnly && <SerialBatchCard idPrefix="pdi-gen-elec-batch" maxQuantity={MAX_ROWS} onGenerate={addRowBatch} />}
                 <div className="overflow-x-auto rounded-lg border border-gray-200">
                   <table className="w-full text-left">
                     <thead>
@@ -1555,7 +1663,12 @@ export default function PDIGeneratorForm() {
                         <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className={TD_CLS}>{row.sno}</td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.motor_sr_no} onChange={(e) => setRowField(idx, 'motor_sr_no', e.target.value)} aria-label={`Motor ${row.sno} Sr. No.`} />
+                            <input
+                              className={`${INPUT_CLS} ${duplicateSerialIndexes.has(idx) ? 'border-red-500 bg-red-50' : ''}`}
+                              value={row.motor_sr_no} onChange={(e) => setRowField(idx, 'motor_sr_no', e.target.value)} aria-label={`Motor ${row.sno} Sr. No.`}
+                              title={duplicateSerialIndexes.has(idx) ? 'This serial number is already used by another motor in this report' : undefined}
+                              aria-invalid={duplicateSerialIndexes.has(idx) || undefined}
+                            />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input className={INPUT_CLS} value={row.voltage} onChange={(e) => setRowField(idx, 'voltage', e.target.value)} placeholder="V" inputMode="decimal" aria-label={`Motor ${row.sno} voltage`} />
@@ -1739,6 +1852,7 @@ export default function PDIGeneratorForm() {
                     <Plus size={14} /> Add Row
                   </button>
                 </div>
+                {!readOnly && <SerialBatchCard idPrefix="pdi-gen-mech-batch" maxQuantity={MAX_ROWS} onGenerate={addRowBatch} />}
                 <div className="overflow-x-auto rounded-lg border border-gray-200">
                   <table className="w-full text-left">
                     <thead>
@@ -1760,7 +1874,12 @@ export default function PDIGeneratorForm() {
                         <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className={TD_CLS}>{row.sno}</td>
                           <td className="py-1 px-1 border border-gray-100">
-                            <input className={INPUT_CLS} value={row.motor_sr_no} onChange={(e) => setRowField(idx, 'motor_sr_no', e.target.value)} aria-label={`Motor ${row.sno} Sr. No.`} />
+                            <input
+                              className={`${INPUT_CLS} ${duplicateSerialIndexes.has(idx) ? 'border-red-500 bg-red-50' : ''}`}
+                              value={row.motor_sr_no} onChange={(e) => setRowField(idx, 'motor_sr_no', e.target.value)} aria-label={`Motor ${row.sno} Sr. No.`}
+                              title={duplicateSerialIndexes.has(idx) ? 'This serial number is already used by another motor in this report' : undefined}
+                              aria-invalid={duplicateSerialIndexes.has(idx) || undefined}
+                            />
                           </td>
                           <td className="py-1 px-1 border border-gray-100">
                             <input
