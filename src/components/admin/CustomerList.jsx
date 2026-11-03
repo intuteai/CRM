@@ -81,6 +81,7 @@ function CustomerList() {
   useEffect(() => {
     fetchCustomers();
     const socket = io(SOCKET_URL, {
+      auth: (cb) => cb({ token: localStorage.getItem('token') }),
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,

@@ -826,6 +826,7 @@ function ProductionStockPage() {
     const backendUrl =
       import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
     const socket = io(backendUrl, {
+      auth: (cb) => cb({ token: localStorage.getItem('token') }),
       withCredentials: true,
       transports: ["websocket"],
     });

@@ -14,7 +14,8 @@ export function connectSocket(token) {
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 2000,
-    auth: { token },
+    // Read on every (re)connect so a refreshed login token is used.
+    auth: (cb) => cb({ token: localStorage.getItem("token") || token }),
   });
 
   socket.on("connect", () => {

@@ -904,7 +904,7 @@ function ProductionInventoryPage() {
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    const socket = io(backendUrl, { withCredentials: true, transports: ['websocket'] });
+    const socket = io(backendUrl, { auth: (cb) => cb({ token: localStorage.getItem('token') }), withCredentials: true, transports: ['websocket'] });
     socket.on('stockUpdate', () => { refetchData(); notifyInfo('Inventory updated in real-time', { autoClose: 1200 }); if (tableRef.current) tableRef.current.focus(); });
     return () => socket.disconnect();
   }, [refetchData]);

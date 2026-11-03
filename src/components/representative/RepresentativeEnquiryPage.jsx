@@ -145,6 +145,7 @@ function RepresentativeEnquiryPage({ socket: providedSocket }) {
     () =>
       providedSocket ||
       io(SOCKET_URL, {
+        auth: (cb) => cb({ token: localStorage.getItem('token') }),
         withCredentials: true,
         transports: ["websocket"],
         reconnectionAttempts: 5,

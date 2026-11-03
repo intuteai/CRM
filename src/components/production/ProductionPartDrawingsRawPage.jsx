@@ -49,6 +49,7 @@ function ProductionPartDrawingsRawPage({ socket: providedSocket, userRole }) {
     () =>
       providedSocket ||
       io(BASE_URL, {
+        auth: (cb) => cb({ token: localStorage.getItem('token') }),
         withCredentials: true,
         transports: ['websocket'],
         reconnectionAttempts: 5,

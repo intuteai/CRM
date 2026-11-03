@@ -25,6 +25,7 @@ function QueriesPage() {
 
   useEffect(() => { 
     const socket = io(BASE_URL, { 
+      auth: (cb) => cb({ token: localStorage.getItem('token') }),
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,

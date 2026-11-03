@@ -26,6 +26,7 @@ function CustomerQueriesPage() {
 
   useEffect(() => {
     const socket = io(BASE_URL, {
+      auth: (cb) => cb({ token: localStorage.getItem('token') }),
       reconnection: true, // Enable reconnection attempts
       reconnectionAttempts: 5, // Number of reconnection attempts
       reconnectionDelay: 1000, // Delay between reconnection attempts (ms)
