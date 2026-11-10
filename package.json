@@ -30,6 +30,7 @@
     "react-redux": "^9.2.0",
     "react-router-dom": "^7.2.0",
     "react-select": "^5.10.2",
+    "recharts": "2.15.4",
     "serve": "^14.2.4",
     "socket.io-client": "^4.8.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz"

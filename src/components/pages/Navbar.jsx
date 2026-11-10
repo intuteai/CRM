@@ -9,7 +9,8 @@ import TopHeader from '../layout/TopHeader';
 // It is the same header the sidebar roles get (title, module search, clock, notifications,
 // profile, logout), with the brand added at the left because there is no sidebar to carry it,
 // in dark navy so it stands out against these pages' warm cream background.
-function Navbar({ userRole, userName, token, handleLogout }) {
+// `extraSections` adds modules granted outside the ERP role (e.g. Motor Testing) to the module search.
+function Navbar({ userRole, userName, token, handleLogout, extraSections }) {
   const navigate = useNavigate();
   const { notifySuccess, notifyError } = useNotify();
 
@@ -19,8 +20,8 @@ function Navbar({ userRole, userName, token, handleLogout }) {
     return [{
       title: 'Modules',
       items: (config?.cards || []).map(({ to, icon, title }) => ({ to, icon, label: title })),
-    }];
-  }, [userRole]);
+    }, ...(extraSections || [])];
+  }, [userRole, extraSections]);
 
   const handleLogoutClick = () => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';

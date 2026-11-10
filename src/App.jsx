@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import {
   BrowserRouter as Router,
   Route,
@@ -22,6 +22,8 @@ import NotificationCenter from "./components/pages/NotificationCenter.jsx";
 import ConnectionBanner from "./components/pages/ConnectionBanner.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import ChatbotWidget from "./chatbot/ChatbotWidget.jsx";
+import { useTestingAccess } from "./components/testing/useTestingAccess";
+import { withTestingNav, testingNavSection, isTestingPath, TESTING_ERP_ROLES } from "./components/testing/testingNav";
 import "./styles.css";
 
 function App() {
@@ -32,6 +34,8 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const { notifySuccess, notifyError } = useNotify();
+  // Motor Testing nav entry: shown to anyone whose GET /api/testing/me lists a testing role.
+  const { roles: testingRoles } = useTestingAccess();
 
   // Socket connection management
   useEffect(() => {
@@ -62,7 +66,9 @@ function App() {
     const targetPath = DASHBOARD_ROUTES[userRole];
     const normalizedPath = location.pathname.replace(/\/+$/, "");
 
-    const isAllowedPath = allowedPaths.some((path) => {
+    // Motor Testing pages are open to every Compage ERP role; the module checks testing roles itself.
+    const isTestingAllowed = TESTING_ERP_ROLES.includes(userRole) && isTestingPath(normalizedPath);
+    const isAllowedPath = isTestingAllowed || allowedPaths.some((path) => {
       if (path.includes(":")) {
         // Match any ":param" segment generically (not just the couple of
         // param names this used to hardcode) so newly added dynamic routes
@@ -162,7 +168,8 @@ function App() {
   };
 
   const showNavbar = userRole && location.pathname !== "/";
-  const roleNav = getRoleNav(userRole);
+  const roleNav = useMemo(() => withTestingNav(getRoleNav(userRole), testingRoles), [userRole, testingRoles]);
+  const testingSection = useMemo(() => testingNavSection(testingRoles), [testingRoles]);
   const useAppShell = showNavbar && !!roleNav;
   const socket = getSocket();
 
@@ -214,6 +221,7 @@ function App() {
           token={token}
           handleLogout={handleLogout}
           socket={socket}
+          extraSections={testingSection ? [testingSection] : undefined}
         />
       )}
       <NotificationCenter />

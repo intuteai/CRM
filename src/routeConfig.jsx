@@ -99,6 +99,10 @@ import IAInvoiceForm from "./components/IA/IAInvoiceForm";
 import IAAttendanceSummary from "./components/IA/IAAttendanceSummary";
 import IAAttendanceHistory from "./components/IA/IAAttendanceHistory";
 
+// ── Motor Testing ────────────────────────────────────────────
+import MotorTestingModule from "./components/testing/MotorTestingModule";
+import { TESTING_BASE, TESTING_ERP_ROLES } from "./components/testing/testingNav";
+
 // GenericPdiGeneratorForm is shared across every admin-authored PDI template,
 // keyed only by the :templateId route param. React Router reuses the same
 // component instance across param-only navigations (e.g. one admin template
@@ -593,6 +597,15 @@ export const routeConfig = [
     allowedRoles: ["admin", "sales"],
     component: (props) =>
       props.userRole === "sales" ? <SalesProformaForm /> : <ProformaForm />,
+  },
+
+  // ── Motor Testing ─────────────────────────────────────────────
+  // Open to Compage ERP roles; the module itself checks the user's testing roles
+  // (GET /api/testing/me) and the API enforces them.
+  {
+    path: `${TESTING_BASE}/*`,
+    allowedRoles: TESTING_ERP_ROLES,
+    component: MotorTestingModule,
   },
 
   // ── Redirect (typo handling) ──────────────────────────────────
