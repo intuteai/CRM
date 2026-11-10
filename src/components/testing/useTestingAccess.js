@@ -40,7 +40,8 @@ export function testingPermissions(roles) {
   const has = (...r) => r.some((x) => roles.includes(x));
   return {
     any: roles.length > 0,
-    readResults: has('viewer', 'testing_head', 'testing_admin'),
+    // Operators read results so they can find a run to correct (server allows it since 2026-11-10).
+    readResults: has('operator', 'viewer', 'testing_head', 'testing_admin'),
     readConfig: roles.length > 0,
     manageConfig: has('testing_head', 'testing_admin'),
     manageOperators: has('testing_head', 'testing_admin'),
