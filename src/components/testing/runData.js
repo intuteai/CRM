@@ -32,7 +32,21 @@ export function prepareSamples(samples) {
   return out;
 }
 
-/** { gaps, missing } — number of sample_seq jumps and of samples missing inside the stored range. */
+/**
+ * { gaps, missing, rpm, current, voltage } — number of sample_seq jumps, of samples missing inside the
+ * stored range, and of stored readings whose rpm / current / voltage is invalid (left out of the graphs).
+ */
 export function gapStats(rows) {
-  return rows.reduce((acc, r) => (r.gap ? { gaps: acc.gaps + 1, missing: acc.missing + r.missing } : acc), { gaps: 0, missing: 0 });
+  const acc = { gaps: 0, missing: 0, rpm: 0, current: 0, voltage: 0 };
+  for (const r of rows) {
+    if (r.gap) {
+      acc.gaps += 1;
+      acc.missing += r.missing;
+      continue;
+    }
+    if (r.rpm == null) acc.rpm += 1;
+    if (r.current == null) acc.current += 1;
+    if (r.voltage == null) acc.voltage += 1;
+  }
+  return acc;
 }

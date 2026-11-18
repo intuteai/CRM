@@ -3,7 +3,7 @@
 // we keep fetching until samples_page.total readings are in.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Download, CheckCircle2, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Download, CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { testingRequest, downloadTestingCsv, errorText } from './testingApi';
 import { testingPaths } from './testingNav';
 import { useNotify } from '../../hooks/useNotify';
@@ -49,10 +49,14 @@ function useRun(testId) {
   return { ...state, reload: () => load() };
 }
 
-function DigestFact({ receipt }) {
+function DigestFact({ receipt, incomplete }) {
   if (!receipt) return <span className="text-gray-400">No receipt</span>;
-  return receipt.run_digest_match ? (
-    <span className="inline-flex items-center gap-1 text-green-700 font-medium"><CheckCircle2 size={15} /> Digest matches</span>
+  if (receipt.run_digest_match) {
+    return <span className="inline-flex items-center gap-1 text-green-700 font-medium"><CheckCircle2 size={15} /> Digest matches</span>;
+  }
+  // An INCOMPLETE run with readings missing is allowed to differ: the tablet's digest covers every reading it declared.
+  return incomplete ? (
+    <span className="inline-flex items-center gap-1 text-amber-700 font-medium"><AlertTriangle size={15} /> Digest differs (readings missing)</span>
   ) : (
     <span className="inline-flex items-center gap-1 text-red-600 font-medium"><XCircle size={15} /> Digest mismatch</span>
   );
@@ -150,7 +154,7 @@ export default function RunDetailPage({ can }) {
 
   const rows = useMemo(() => prepareSamples(samples), [samples]);
   const gaps = useMemo(() => gapStats(rows), [rows]);
-  const variantCode = location.state?.variant_code;
+  const variantCode = location.state?.variant_code || run?.variant_code;
 
   const exportCsv = async () => {
     setExporting(true);
@@ -181,6 +185,10 @@ export default function RunDetailPage({ can }) {
 
   const p = run.profile;
   const stored = run.receipt?.stored_sample_count ?? total;
+  const invalidText = [['rpm', gaps.rpm], ['current', gaps.current], ['voltage', gaps.voltage]]
+    .filter(([, n]) => n > 0)
+    .map(([label, n]) => `${label} ${n.toLocaleString()}`)
+    .join(' · ');
 
   return (
     <div className="space-y-4">
@@ -234,19 +242,24 @@ export default function RunDetailPage({ can }) {
               </span>
             ) : '—'}
           </Fact>
-          <Fact label="Receipt"><DigestFact receipt={run.receipt} /></Fact>
+          <Fact label="Receipt"><DigestFact receipt={run.receipt} incomplete={run.outcome === 'INCOMPLETE' && stored < run.sample_count} /></Fact>
           <Fact label="Receipt id" mono>{run.receipt?.receipt_id}</Fact>
         </dl>
         <OutcomeReasons reasons={run.outcome_reasons} />
       </section>
 
-      {(loading || gaps.gaps > 0 || error) && (
+      {(loading || gaps.gaps > 0 || invalidText || error) && (
         <div className="space-y-2">
           {loading && <Loading label={`Loading readings… ${samples.length.toLocaleString()} / ${total.toLocaleString()}`} />}
           {error && <ErrorNote error={error} onRetry={reload} />}
           {gaps.gaps > 0 && (
             <div className="text-sm rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-4 py-2">
               {gaps.missing} sample{gaps.missing === 1 ? '' : 's'} missing in {gaps.gaps} gap{gaps.gaps === 1 ? '' : 's'}. Gaps are shown as breaks in the lines, not filled in.
+            </div>
+          )}
+          {invalidText && (
+            <div className="text-sm rounded-lg border border-navy-100 bg-navy-50 text-navy-800 px-4 py-2">
+              Readings marked invalid by the VCU: {invalidText}. They are left out of the graphs (shown as breaks); the raw values stay in the CSV export.
             </div>
           )}
         </div>
