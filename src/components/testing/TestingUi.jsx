@@ -1,7 +1,7 @@
 // Small shared pieces for the Motor Testing screens.
 import { useEffect } from 'react';
 import { X, AlertTriangle, Lock, Loader2 } from 'lucide-react';
-import { OUTCOME_STYLES, VERSION_STATUS_STYLES, CORRECTION_STATUS_STYLES, CARD } from './testingFormat';
+import { OUTCOME_STYLES, VERSION_STATUS_STYLES, CORRECTION_STATUS_STYLES, CARD, isNotBench, runKindLabel } from './testingFormat';
 
 export function Pill({ className, children, title }) {
   return (
@@ -13,6 +13,38 @@ export function Pill({ className, children, title }) {
 
 export function OutcomeBadge({ outcome }) {
   return <Pill className={OUTCOME_STYLES[outcome] || 'bg-gray-100 text-gray-600'}>{outcome || '—'}</Pill>;
+}
+
+/** CANCEL before START (started = false): shown instead of the outcome so it never reads as a test result. */
+export function CancelledBadge({ compact = false }) {
+  return (
+    <Pill
+      className="bg-navy-50 text-navy-800 ring-1 ring-inset ring-navy-400"
+      title="Cancelled before start (CONFIG_CANCELLED). Not an executed test: no readings were taken."
+    >
+      {compact ? 'Cancelled' : 'Cancelled before start — not an executed test'}
+    </Pill>
+  );
+}
+
+/** host_simulation / synthetic runs (staging only). Nothing for bench or v0.3 (null) runs. */
+export function RunKindBadge({ run }) {
+  if (!isNotBench(run)) return null;
+  return (
+    <Pill className="bg-purple-100 text-purple-700 ring-1 ring-inset ring-purple-300" title={`run_kind ${run.run_kind}: not a real bench test`}>
+      {runKindLabel(run.run_kind)}
+    </Pill>
+  );
+}
+
+/** Small amber "unverified" chip for v0.4 tablet times; the reasons go in the tooltip. */
+export function UnverifiedChip({ reasons }) {
+  if (!reasons?.length) return null;
+  return (
+    <Pill className="bg-amber-100 text-amber-700" title={`Times unverified: ${reasons.join('; ')}.`}>
+      unverified
+    </Pill>
+  );
 }
 
 export function VersionStatusBadge({ status }) {

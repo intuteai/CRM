@@ -4,17 +4,59 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Eye, ChevronRight } from 'lucide-react';
 import { testingRequest } from './testingApi';
 import { testingPaths } from './testingNav';
-import { OutcomeBadge, Loading, ErrorNote, EmptyState } from './TestingUi';
-import { BTN_PRIMARY, CARD, TH, TD, formatDateTime } from './testingFormat';
+import { OutcomeBadge, Loading, ErrorNote, EmptyState, CancelledBadge, RunKindBadge, UnverifiedChip } from './TestingUi';
+import { BTN_PRIMARY, CARD, TH, TD, formatDateTime, isV04, isCancelled, clockWarnings } from './testingFormat';
 
-function samplesText(run) {
-  const stored = run.stored_sample_count ?? '—';
-  const expected = run.sample_count ?? '—';
-  return `${stored} / ${expected}`;
+const dash = (v) => v ?? '—';
+
+// v0.3: "stored / expected" as before. v0.4: "held / declared held · stored stored", where held_count = readings
+// the VCU kept and sample_count = readings the run declared; a cancel has no readings at all.
+function samplesParts(run) {
+  if (!isV04(run)) return [`${dash(run.stored_sample_count)} / ${dash(run.sample_count)}`];
+  if (isCancelled(run)) return ['No readings', '(cancelled)'];
+  return [`${dash(run.held_count)} / ${dash(run.sample_count)} held`, `${dash(run.stored_sample_count)} stored`];
 }
 
+const samplesText = (run) => samplesParts(run).join(isCancelled(run) ? ' ' : ' · ');
+
+/** v0.4 only: the VCU's own recording_complete = false, shown on its own line under the counts. */
+function VcuIncomplete({ run }) {
+  if (!isV04(run) || run.recording_complete !== false) return null;
+  return <span className="block text-[11px] font-semibold">VCU: recording incomplete</span>;
+}
+
+const SAMPLES_TITLE_V04 = 'held = readings the VCU kept · declared = readings the run declared · stored = readings in the ERP';
+
 function samplesShort(run) {
+  if (isV04(run)) {
+    if (run.recording_complete === false) return true;
+    return run.stored_sample_count != null && run.held_count != null && run.stored_sample_count < run.held_count;
+  }
   return run.stored_sample_count != null && run.sample_count != null && run.stored_sample_count < run.sample_count;
+}
+
+/** Date of a run. v0.4 start times come from the tablet clock: marked approximate, or "received" when unknown. */
+function RunDate({ run }) {
+  const text = formatDateTime(run.started_at || run.received_at);
+  if (!isV04(run)) return text;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      {text}
+      <span className="text-[11px] font-normal text-gray-400" title={run.started_at ? 'Start time from the tablet clock (approximate)' : 'No start time; this is when the ERP received the run'}>
+        {run.started_at ? 'approx.' : 'received'}
+      </span>
+      {run.started_at && <UnverifiedChip reasons={clockWarnings(run)} />}
+    </span>
+  );
+}
+
+function RunBadges({ run, full = false }) {
+  return (
+    <>
+      {isCancelled(run) ? <CancelledBadge compact={!full} /> : <OutcomeBadge outcome={run.outcome} />}
+      <RunKindBadge run={run} />
+    </>
+  );
 }
 
 export default function SerialLookupPage() {
@@ -116,16 +158,25 @@ export default function SerialLookupPage() {
                   <tbody className="divide-y divide-navy-100">
                     {runs.map((run) => (
                       <tr key={run.test_id} onClick={() => openRun(run)} className="hover:bg-navy-50/60 transition-colors cursor-pointer">
-                        <td className={`${TD} text-navy-800 font-medium whitespace-nowrap`}>{formatDateTime(run.started_at || run.received_at)}</td>
+                        <td className={`${TD} text-navy-800 font-medium whitespace-nowrap`}><RunDate run={run} /></td>
                         <td className={`${TD} text-gray-600`}>{run.operator_name || '—'}</td>
                         <td className={`${TD} text-gray-600 font-mono text-xs`}>{run.variant_code || '—'}</td>
                         <td className={`${TD} text-gray-600`}>{run.final_state || '—'}</td>
-                        <td className={TD}><OutcomeBadge outcome={run.outcome} /></td>
+                        <td className={TD}>
+                          <div className="flex flex-wrap items-center gap-1.5"><RunBadges run={run} /></div>
+                          {isCancelled(run) && <div className="text-[11px] font-medium text-navy-800 mt-0.5">Before start — not an executed test</div>}
+                        </td>
                         <td className={`${TD} text-gray-600 whitespace-nowrap`}>
                           v{run.criteria_version ?? '—'}
                           <span className="text-gray-400 text-xs"> · profile v{run.profile_version ?? '—'}</span>
                         </td>
-                        <td className={`${TD} whitespace-nowrap ${samplesShort(run) ? 'text-amber-700 font-semibold' : 'text-gray-600'}`}>{samplesText(run)}</td>
+                        <td
+                          className={`${TD} whitespace-nowrap ${samplesShort(run) ? 'text-amber-700 font-semibold' : 'text-gray-600'}`}
+                          title={isV04(run) ? SAMPLES_TITLE_V04 : undefined}
+                        >
+                          {isV04(run) ? samplesParts(run).map((part) => <span key={part} className="block">{part}</span>) : samplesText(run)}
+                          <VcuIncomplete run={run} />
+                        </td>
                         <td className={TD}>
                           <Link
                             to={testingPaths.run(run.test_id)}
@@ -149,14 +200,17 @@ export default function SerialLookupPage() {
                     <button type="button" onClick={() => openRun(run)} className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-navy-50/60">
                       <div className="flex-1 min-w-0 space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <OutcomeBadge outcome={run.outcome} />
+                          <RunBadges run={run} full />
                           <span className="text-xs text-gray-500">{run.final_state}</span>
                         </div>
-                        <div className="text-sm font-medium text-navy-800">{formatDateTime(run.started_at || run.received_at)}</div>
+                        <div className="text-sm font-medium text-navy-800"><RunDate run={run} /></div>
                         <div className="text-xs text-gray-500 truncate">
                           {run.operator_name || '—'} · {run.variant_code || '—'} · criteria v{run.criteria_version ?? '—'}
                         </div>
-                        <div className={`text-xs ${samplesShort(run) ? 'text-amber-700 font-semibold' : 'text-gray-500'}`}>Samples {samplesText(run)}</div>
+                        <div className={`text-xs ${samplesShort(run) ? 'text-amber-700 font-semibold' : 'text-gray-500'}`}>
+                          {isCancelled(run) ? '' : isV04(run) ? 'Readings ' : 'Samples '}{samplesText(run)}
+                          <VcuIncomplete run={run} />
+                        </div>
                       </div>
                       <ChevronRight size={18} className="text-gray-300 shrink-0" />
                     </button>

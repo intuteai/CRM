@@ -3,12 +3,15 @@
 // we keep fetching until samples_page.total readings are in.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Download, CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Download, CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
 import { testingRequest, downloadTestingCsv, errorText } from './testingApi';
 import { testingPaths } from './testingNav';
 import { useNotify } from '../../hooks/useNotify';
-import { OutcomeBadge, VersionStatusBadge, Loading, ErrorNote, SectionCard, Fact, Pill } from './TestingUi';
-import { BTN_PRIMARY, CARD, TH, TD, formatDateTime, shortSha, display } from './testingFormat';
+import { OutcomeBadge, VersionStatusBadge, Loading, ErrorNote, SectionCard, Fact, Pill, CancelledBadge, RunKindBadge, UnverifiedChip } from './TestingUi';
+import {
+  BTN_PRIMARY, CARD, TH, TD, formatDateTime, shortSha, display,
+  isV04, isCancelled, timeQualifier, clockWarnings,
+} from './testingFormat';
 import { prepareSamples, gapStats } from './runData';
 import RunCharts from './RunCharts';
 import CorrectionsPanel from './CorrectionsPanel';
@@ -61,6 +64,35 @@ function DigestFact({ receipt, incomplete }) {
     <span className="inline-flex items-center gap-1 text-red-600 font-medium"><XCircle size={15} /> Digest mismatch</span>
   );
 }
+
+/** Start / end time. v0.4: tablet clock, so a small source qualifier and an "unverified" chip when it applies. */
+function TimeValue({ run, which, unverified }) {
+  const qualifier = timeQualifier(run, which);
+  const value = run[`${which}_at`];
+  if (!isV04(run)) return formatDateTime(value);
+  return (
+    <span>
+      <span className="inline-flex flex-wrap items-center gap-1.5">
+        {formatDateTime(value)}
+        {value && <UnverifiedChip reasons={unverified} />}
+      </span>
+      {qualifier && <span className="block text-xs text-gray-500">{qualifier}</span>}
+    </span>
+  );
+}
+
+function SignedReceiptFact({ receipt }) {
+  const signed = receipt?.signed_receipt;
+  if (!signed) return <span className="text-gray-500">Receipt not signed</span>;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1 text-xs">
+      <ShieldCheck size={14} className="text-green-700 shrink-0" /> Signed receipt · key <span className="font-mono">{signed.key_id || '—'}</span>
+    </span>
+  );
+}
+
+const NOTE_AMBER = 'text-sm rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-4 py-2';
+const NOTE_NAVY = 'text-sm rounded-lg border border-navy-100 bg-navy-50 text-navy-800 px-4 py-2';
 
 function OutcomeReasons({ reasons }) {
   if (!reasons?.length) return null;
@@ -190,6 +222,15 @@ export default function RunDetailPage({ can }) {
     .map(([label, n]) => `${label} ${n.toLocaleString()}`)
     .join(' · ');
 
+  // contract v0.4: held_count = readings the VCU kept (covered by run_digest); sample_count = readings the run declared.
+  const v04 = isV04(run);
+  const cancelled = isCancelled(run);
+  const held = run.held_count;
+  const storedShort = v04 && held != null && stored < held;
+  const recordingIncomplete = v04 && run.recording_complete === false;
+  const unverified = clockWarnings(run);
+  const digestExpected = v04 ? held : run.sample_count;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -206,7 +247,8 @@ export default function RunDetailPage({ can }) {
       <section className={`${CARD} p-4 sm:p-5`}>
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <h1 className="font-display text-xl font-bold text-navy-800 font-mono break-all">{run.motor_serial}</h1>
-          <OutcomeBadge outcome={run.outcome} />
+          {cancelled ? <CancelledBadge /> : <OutcomeBadge outcome={run.outcome} />}
+          <RunKindBadge run={run} />
           <span className="text-sm text-gray-500">{run.final_state}</span>
         </div>
         <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3">
@@ -214,16 +256,43 @@ export default function RunDetailPage({ can }) {
             {variantCode ? <span className="font-mono text-xs">{variantCode}</span> : <span className="font-mono text-xs" title={run.variant_id}>{run.variant_id}</span>}
           </Fact>
           <Fact label="Operator">{run.operator_name}</Fact>
-          <Fact label="Started">{formatDateTime(run.started_at)}</Fact>
-          <Fact label="Ended">{formatDateTime(run.ended_at)}</Fact>
+          <Fact label="Started"><TimeValue run={run} which="started" unverified={unverified} /></Fact>
+          <Fact label="Ended"><TimeValue run={run} which="ended" unverified={unverified} /></Fact>
           <Fact label="Final state">{run.final_state}</Fact>
           <Fact label="Stop reason">{run.stop_reason}</Fact>
           <Fact label="Fault code">{run.fault_code || '—'}</Fact>
-          <Fact label="Samples stored / expected">
-            <span className={stored < run.sample_count ? 'text-amber-700 font-semibold' : undefined}>{stored} / {run.sample_count}</span>
-          </Fact>
+          {v04 ? (
+            <>
+              <Fact label="Readings held / declared">
+                <span title="held = readings the VCU kept · declared = readings the run declared">{display(held)} / {display(run.sample_count)}</span>
+              </Fact>
+              <Fact label="Readings stored">
+                <span className={storedShort ? 'text-amber-700 font-semibold' : undefined} title="Readings stored in the ERP">{stored}</span>
+              </Fact>
+              <Fact label="Recording complete (VCU)">
+                {run.recording_complete === true && 'Yes'}
+                {run.recording_complete === false && <span className="text-amber-700 font-semibold">No</span>}
+                {run.recording_complete == null && '—'}
+              </Fact>
+            </>
+          ) : (
+            <Fact label="Samples stored / expected">
+              <span className={stored < run.sample_count ? 'text-amber-700 font-semibold' : undefined}>{stored} / {run.sample_count}</span>
+            </Fact>
+          )}
           <Fact label="VCU">{run.vcu ? `${run.vcu.vcu_id || '—'} · fw ${run.vcu.fw_version || '—'}` : '—'}</Fact>
-          <Fact label="VCU boot id" mono>{run.vcu?.boot_id}</Fact>
+          {v04 ? (
+            <>
+              <Fact label="VCU origin boot id" mono>{run.origin_boot_id ?? run.vcu?.origin_boot_id}</Fact>
+              <Fact label="Contract">v{run.contract_version}</Fact>
+              <Fact label="Run kind" mono>{run.run_kind}</Fact>
+              <Fact label="Config hash" mono>
+                {run.config_hash ? <span title={run.config_hash}>{run.config_hash.length > 16 ? `${run.config_hash.slice(0, 16)}…` : run.config_hash}</span> : '—'}
+              </Fact>
+            </>
+          ) : (
+            <Fact label="VCU boot id" mono>{run.vcu?.boot_id}</Fact>
+          )}
           <Fact label="HMI version">{run.hmi_version}</Fact>
           <Fact label="Received">{formatDateTime(run.received_at)}</Fact>
           <Fact label="Profile">
@@ -242,30 +311,51 @@ export default function RunDetailPage({ can }) {
               </span>
             ) : '—'}
           </Fact>
-          <Fact label="Receipt"><DigestFact receipt={run.receipt} incomplete={run.outcome === 'INCOMPLETE' && stored < run.sample_count} /></Fact>
+          <Fact label="Receipt"><DigestFact receipt={run.receipt} incomplete={run.outcome === 'INCOMPLETE' && digestExpected != null && stored < digestExpected} /></Fact>
           <Fact label="Receipt id" mono>{run.receipt?.receipt_id}</Fact>
+          {v04 && <Fact label="Signed receipt"><SignedReceiptFact receipt={run.receipt} /></Fact>}
         </dl>
         <OutcomeReasons reasons={run.outcome_reasons} />
       </section>
 
-      {(loading || gaps.gaps > 0 || invalidText || error) && (
+      {(loading || gaps.gaps > 0 || invalidText || error || cancelled || recordingIncomplete || storedShort || unverified.length > 0) && (
         <div className="space-y-2">
           {loading && <Loading label={`Loading readings… ${samples.length.toLocaleString()} / ${total.toLocaleString()}`} />}
           {error && <ErrorNote error={error} onRetry={reload} />}
+          {cancelled && (
+            <div className={NOTE_NAVY}>
+              <span className="font-semibold">Cancelled before start — not an executed test.</span> The run was cancelled before START
+              (stop reason CONFIG_CANCELLED), so no readings were taken. Its INCOMPLETE outcome is not a pass/fail result.
+            </div>
+          )}
+          {recordingIncomplete && <div className={NOTE_AMBER}>The VCU reports this recording as incomplete.</div>}
+          {storedShort && (
+            <div className={NOTE_AMBER}>
+              {(held - stored).toLocaleString()} of the {held.toLocaleString()} reading{held === 1 ? '' : 's'} held by the VCU {held - stored === 1 ? 'has' : 'have'} not reached the ERP yet.
+            </div>
+          )}
+          {unverified.length > 0 && (
+            <div className={NOTE_AMBER}>Start / end times are unverified: {unverified.join('; ')}.</div>
+          )}
           {gaps.gaps > 0 && (
-            <div className="text-sm rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-4 py-2">
+            <div className={NOTE_AMBER}>
               {gaps.missing} sample{gaps.missing === 1 ? '' : 's'} missing in {gaps.gaps} gap{gaps.gaps === 1 ? '' : 's'}. Gaps are shown as breaks in the lines, not filled in.
             </div>
           )}
           {invalidText && (
-            <div className="text-sm rounded-lg border border-navy-100 bg-navy-50 text-navy-800 px-4 py-2">
+            <div className={NOTE_NAVY}>
               Readings marked invalid by the VCU: {invalidText}. They are left out of the graphs (shown as breaks); the raw values stay in the CSV export.
             </div>
           )}
         </div>
       )}
 
-      <RunCharts rows={rows} events={run.events} criteria={run.criteria} />
+      <RunCharts
+        rows={rows}
+        events={run.events}
+        criteria={run.criteria}
+        emptyText={cancelled ? 'Cancelled before start — no readings were taken, so there is nothing to plot.' : undefined}
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
         <CriteriaTable criteria={run.criteria} />

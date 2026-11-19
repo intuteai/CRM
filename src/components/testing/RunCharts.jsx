@@ -207,11 +207,15 @@ function SignalVsRpmChart({ rows, events, rules, signalKey, field, title, unit }
   );
 }
 
-function RunCharts({ rows, events, criteria }) {
+function RunCharts({ rows, events, criteria, emptyText }) {
   const rules = criteria?.definition?.rules || [];
   const hasBemf = useMemo(() => rows.some((r) => r.bemf != null), [rows]);
   if (!rows.length) {
-    return <div className="text-sm text-gray-400 p-6 text-center bg-white rounded-xl border border-navy-100">No readings were stored for this run, so there is nothing to plot.</div>;
+    return (
+      <div className="text-sm text-gray-400 p-6 text-center bg-white rounded-xl border border-navy-100">
+        {emptyText || 'No readings were stored for this run, so there is nothing to plot.'}
+      </div>
+    );
   }
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

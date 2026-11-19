@@ -77,3 +77,58 @@ export function display(v, unit = '') {
   if (v === null || v === undefined || v === '') return '—';
   return unit ? `${v} ${unit}` : String(v);
 }
+
+// ---- contract v0.4 (CRM_BACKEND/docs/motor-test/contract/receipt-signing.md sections 2-3) ----
+// v0.3 runs carry contract_version '0.3' and null for every v0.4 field; they keep the old display.
+
+export const isV04 = (run) => run?.contract_version === '0.4';
+
+/**
+ * CANCEL before START: started === false. CONFIG_CANCELLED is allowed only with started = false
+ * (rule CANCEL_SHAPE), so it identifies a cancel on the lookup rows, which do not carry `started`.
+ */
+export const isCancelled = (run) => run?.started === false || (isV04(run) && run?.stop_reason === 'CONFIG_CANCELLED');
+
+/** Not a real bench run (staging only). v0.3 runs (run_kind null) and bench runs are not marked. */
+export const RUN_KIND_LABELS = { host_simulation: 'Simulated', synthetic: 'Synthetic' };
+export const isNotBench = (run) => !!run?.run_kind && run.run_kind !== 'bench';
+export const runKindLabel = (kind) => RUN_KIND_LABELS[kind] || kind;
+
+const SOURCE_TEXT = {
+  HMI: 'approximate (tablet clock)',
+  HMI_DERIVED: 'derived from VCU uptime (approximate)',
+};
+
+/** Small qualifier under a v0.4 start / end time, or null (v0.3 runs: none). which = 'started' | 'ended'. */
+export function timeQualifier(run, which) {
+  if (!isV04(run)) return null;
+  const value = run[`${which}_at`];
+  const source = run[`${which}_at_source`];
+  if (value) return SOURCE_TEXT[source] || null;
+  if (which === 'started' && run.started === false) return 'not started (cancelled)';
+  if (run.started === true) return 'time unknown';
+  return null;
+}
+
+const ms = (v) => {
+  if (!v) return null;
+  const t = new Date(v).getTime();
+  return Number.isNaN(t) ? null : t;
+};
+
+/**
+ * Why the tablet times of a v0.4 run should be treated as unverified ([] when none apply):
+ * automatic time was off, the start is later than the ERP receive time, or the end is before the start.
+ * Rows without hmi_auto_time (lookup list) are checked on the times alone.
+ */
+export function clockWarnings(run) {
+  if (!isV04(run)) return [];
+  const out = [];
+  if (run.hmi_auto_time === false) out.push('the tablet had automatic time switched off');
+  const start = ms(run.started_at);
+  const end = ms(run.ended_at);
+  const received = ms(run.received_at);
+  if (start != null && received != null && start > received) out.push('the start is later than the time the ERP received the run');
+  if (start != null && end != null && end < start) out.push('the end is earlier than the start');
+  return out;
+}
