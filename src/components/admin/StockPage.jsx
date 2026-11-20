@@ -20,12 +20,37 @@ import {
   Upload,
   Eye,
   CheckCircle,
+  SlidersHorizontal,
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { useNotify } from '../../hooks/useNotify';
-import ConnectionError from '../pages/ConnectionError.jsx';
+import { useNotify } from "../../hooks/useNotify";
+import ConnectionError from "../pages/ConnectionError.jsx";
+import { suggestPartNumber, isValidProductCode } from "../../utils/productCode";
+import {
+  normalizeStockItem,
+  applyStockUpdate,
+  EMPTY_FORM,
+  formFromItem,
+  validateStockForm,
+  stockChanged,
+  buildStockPayload,
+  parseImportRows,
+} from "../../utils/stockForm";
+import {
+  fetchStockList,
+  createStock,
+  updateStock,
+  deleteStock,
+  acceptReturn,
+  uploadStockPhoto,
+} from "../../utils/stockApi";
+import ProductCodeBuilder from "../shared/ProductCodeBuilder";
+import StockHistory from "../shared/StockHistory";
+import AdjustStockModal from "../shared/AdjustStockModal";
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+const MAX_IMPORT_ERROR_TOASTS = 5;
 
 // Error Boundary
 class ErrorBoundary extends React.Component {
@@ -44,671 +69,7 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
-/* =====================================================================
-   PRODUCT CODE BUILDER
-   Data sourced directly from ERP_PART_CODE_LIST.pdf:
 
-   Chart         Symbol  DefaultSubCode  DefaultSubLabel
-   IPT           L       5               Bearing BR
-   Rikshaw       R       1               Shaft SH
-   2Wheeler      W       2               Front Flange FF
-   Autonxt       A       0               Rear Flange RF
-   Special       S       (none)          (none)
-
-   Sub Codes (alphabetic abbreviations):
-   0 → RF  Rear Flange
-   1 → SH  Shaft
-   2 → FF  Front Flange
-   3 → AU  Auxiliary
-   4 → (reserved / custom)
-   5 → BR  Bearing BR
-
-   Code structure: NNNN(4) + ChartPair(2, e.g. L5) + SubAbbr(2, e.g. BR) + Store(1) + Col(1) + Row(1) = 11
-   ===================================================================== */
-
-const PRODUCT_CHARTS = [
-  { label: "IPT", symbol: "L", digit: "5", defaultSub: "BR", color: "purple" },
-  {
-    label: "Rikshaw",
-    symbol: "R",
-    digit: "1",
-    defaultSub: "SH",
-    color: "blue",
-  },
-  {
-    label: "2Wheeler",
-    symbol: "W",
-    digit: "2",
-    defaultSub: "FF",
-    color: "indigo",
-  },
-  {
-    label: "Autonxt",
-    symbol: "A",
-    digit: "0",
-    defaultSub: "RF",
-    color: "violet",
-  },
-  {
-    label: "Special",
-    symbol: "S",
-    digit: "3",
-    defaultSub: "",
-    color: "fuchsia",
-  },
-  {
-    label: "CO",
-    symbol: "C",
-    digit: "",
-    pair: "CO", // ✅ NEW
-    defaultSub: "",
-    color: "gray",
-  },
-  {
-    label: "General",
-    symbol: "G",
-    digit: "N",
-    pair: "GN",
-    defaultSub: "",
-    color: "green",
-  },
-  {
-    label: "Motor",
-    symbol: "M",
-    digit: "O",
-    pair: "MO",
-    defaultSub: "",
-    color: "rose",
-  },
-];
-
-const SUB_CODES = [
-  { abbr: "BR", label: "Bearing BR" },
-  { abbr: "SH", label: "Shaft" },
-  { abbr: "FF", label: "Front Flange" },
-  { abbr: "RF", label: "Rear Flange" },
-  { abbr: "AU", label: "Auxiliary" },
-];
-
-const SEG = {
-  part: "text-blue-700",
-  chart: "text-purple-600",
-  sub: "text-green-700",
-  store: "text-red-600",
-  col: "text-orange-500",
-  row: "text-teal-600",
-};
-
-function pad4(val) {
-  const n = parseInt(val, 10);
-  if (isNaN(n) || n < 1) return "0001";
-  return String(Math.min(n, 9999)).padStart(4, "0");
-}
-
-// Builds the full 11-char code
-function buildCode({
-  partNum,
-  chartSymbol,
-  chartDigit,
-  subAbbr,
-  storeNum,
-  colNum,
-  rowNum,
-}) {
-  const p = (partNum || "0001").padStart(4, "0").slice(0, 4); // 4 chars
-  // const cp = (chartSymbol || "") + (chartDigit || ""); // 2 chars e.g. "L5"
-  const cp =
-    chartSymbol === "C" && !chartDigit
-      ? "CO"
-      : (chartSymbol || "") + (chartDigit || "");
-  const s = (subAbbr || "").slice(0, 2).padEnd(2, "_"); // 2 chars e.g. "BR"
-  const st = (storeNum || "").slice(0, 1); // 1 char
-  const co = (colNum || "").slice(0, 1); // 1 char
-  const ro = (rowNum || "").slice(0, 1); // 1 char
-  return p + cp + s + st + co + ro;
-}
-
-// Parses an existing 11-char code back into builder segments
-// Structure: NNNN(4) + ChartSymbol(1) + ChartDigit(1) + SubAbbr(2) + Store(1) + Col(1) + Row(1)
-function parseCode(code) {
-  if (!code || code.length !== 11) return null;
-  const partNum = code.slice(0, 4); // e.g. "0042"
-  let chartSymbol = code.slice(4, 5);
-  let chartDigit = code.slice(5, 6);
-
-  // ✅ Handle CO special case
-  if (code.slice(4, 6) === "CO") {
-    chartSymbol = "C";
-    chartDigit = "";
-  }
-  const subAbbr = code.slice(6, 8); // e.g. "BR"
-  const storeNum = code.slice(8, 9); // e.g. "1"
-  const colNum = code.slice(9, 10); // e.g. "2"
-  const rowNum = code.slice(10, 11); // e.g. "3"
-  const chart =
-    PRODUCT_CHARTS.find(
-      (c) => c.symbol === chartSymbol && c.digit === chartDigit,
-    ) || null;
-  return {
-    partNum,
-    chartSymbol,
-    chartDigit,
-    subAbbr,
-    storeNum,
-    colNum,
-    rowNum,
-    chart,
-  };
-}
-
-function ProductCodeBuilder({
-  value = "",
-  onChange,
-  disabled = false,
-  suggestedPartNumber = null,
-  excludeId = null,
-  onAutoFlagChange,
-  onAvailabilityChange,
-}) {
-  // Prefill from existing code if provided, otherwise use defaults
-  const parsed = parseCode(value);
-
-  const [partNum, setPartNum] = useState(
-    parsed?.partNum ?? (suggestedPartNumber ? pad4(suggestedPartNumber) : "0001"),
-  );
-  const [partInput, setPartInput] = useState(
-    parsed
-      ? String(parseInt(parsed.partNum, 10))
-      : suggestedPartNumber
-        ? String(parseInt(suggestedPartNumber, 10))
-        : "1",
-  );
-  const [partTouched, setPartTouched] = useState(false);
-  const [checkStatus, setCheckStatus] = useState(null);
-  const [chart, setChart] = useState(parsed?.chart ?? null);
-  const [subAbbr, setSubAbbr] = useState(parsed?.subAbbr ?? "");
-  const [storeNum, setStoreNum] = useState(parsed?.storeNum ?? "");
-  const [colNum, setColNum] = useState(parsed?.colNum ?? "");
-  const [rowNum, setRowNum] = useState(parsed?.rowNum ?? "");
-  // If the code can't be parsed into known segments, drop into manual mode so the user can still see and edit it
-  const [manualMode, setManualMode] = useState(!parsed && value.length === 11);
-  const [manualVal, setManualVal] = useState(value);
-
-  const derivedCode = buildCode({
-    partNum,
-    chartSymbol: chart?.symbol,
-    chartDigit: chart?.digit,
-    subAbbr,
-    storeNum,
-    colNum,
-    rowNum,
-  });
-
-  // Count filled segments to show progress
-  const isComplete =
-    derivedCode.length === 11 &&
-    !derivedCode.includes("_") &&
-    !!chart &&
-    !!subAbbr &&
-    !!storeNum &&
-    !!colNum &&
-    !!rowNum;
-
-  // Fire onChange whenever any builder field changes
-  useEffect(() => {
-    if (manualMode) return;
-    onChange?.(derivedCode.replace(/_/g, ""));
-  }, [partNum, chart, subAbbr, storeNum, colNum, rowNum, manualMode]);
-
-  const handleChartClick = (c) => {
-    if (disabled) return;
-    setChart(c);
-
-    // ✅ Only auto-fill if defaultSub exists
-    if (c.defaultSub) {
-      setSubAbbr(c.defaultSub);
-    } else {
-      setSubAbbr(""); // or keep previous if you want
-    }
-  };
-
-  const handlePartInput = (e) => {
-    setPartTouched(true);
-    const raw = e.target.value;
-    setPartInput(raw);
-    if (raw !== "") setPartNum(pad4(raw));
-  };
-  const handlePartBlur = () => {
-    const padded = pad4(partInput);
-    setPartInput(String(parseInt(padded, 10)));
-    setPartNum(padded);
-  };
-
-  useEffect(() => {
-    onAutoFlagChange?.(!partTouched);
-  }, [partTouched]);
-
-  useEffect(() => {
-    if (manualMode || !partNum || partNum.length !== 4) {
-      setCheckStatus(null);
-      onAvailabilityChange?.(true);
-      return;
-    }
-    onAvailabilityChange?.(false);
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      setCheckStatus({ checking: true });
-      try {
-        const token = localStorage.getItem("token");
-        const url = new URL(`${BASE_URL}/api/stock/check-part-number`);
-        url.searchParams.set("part_number", partNum);
-        if (excludeId) url.searchParams.set("exclude_id", excludeId);
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          setCheckStatus(null);
-          onAvailabilityChange?.(true);
-          return;
-        }
-        const data = await res.json();
-        setCheckStatus({ checking: false, ...data });
-        onAvailabilityChange?.(data.available !== false);
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          setCheckStatus(null);
-          onAvailabilityChange?.(true);
-        }
-      }
-    }, 400);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [partNum, excludeId, manualMode]);
-
-  // Colour-coded segments for the preview bar
-  const seg_part = derivedCode.slice(0, 4);
-  const seg_chart = chart ? chart.pair || chart.symbol + chart.digit : "";
-  const seg_sub = subAbbr || "";
-  const seg_store = storeNum || "";
-  const seg_col = colNum || "";
-  const seg_row = rowNum || "";
-
-  if (manualMode) {
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={manualVal}
-            maxLength={11}
-            onChange={(e) => {
-              setManualVal(e.target.value);
-              onChange?.(e.target.value);
-            }}
-            placeholder="Enter 11-char code manually"
-            className="flex-1 p-2 border border-navy-100 rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-gold-400"
-            disabled={disabled}
-          />
-          <button
-            type="button"
-            onClick={() => setManualMode(false)}
-            className="text-xs px-3 py-2 bg-navy-50 text-navy-800 rounded-lg hover:bg-navy-100 transition-colors whitespace-nowrap"
-          >
-            ← Use Builder
-          </button>
-        </div>
-        <p className="text-xs text-gray-400">Must be exactly 11 characters.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="border border-navy-100 rounded-xl bg-white p-3 sm:p-4 space-y-4 shadow-sm">
-      {/* ── Live Preview ── */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Code Preview
-          </p>
-          {isComplete ? (
-            <span className="text-xs bg-green-100 text-green-700 border border-green-300 px-2 py-1 rounded-full font-semibold">
-              ✓ 11 / 11
-            </span>
-          ) : (
-            <span className="text-xs bg-gold-400/25 text-gold-600 border border-gold-400/40 px-2 py-1 rounded-full">
-              {
-                [
-                  seg_part,
-                  seg_chart,
-                  seg_sub,
-                  seg_store,
-                  seg_col,
-                  seg_row,
-                ].join("").length
-              }{" "}
-              / 11
-            </span>
-          )}
-        </div>
-
-        {/* Code display */}
-        <div className="flex items-center gap-1 bg-white border-2 border-navy-100 rounded-xl px-2 sm:px-4 py-3 shadow-inner justify-center font-mono text-lg sm:text-2xl tracking-[0.1em] sm:tracking-[0.2em] select-all overflow-x-auto">
-          <span className={`${SEG.part}  font-black`}>{seg_part}</span>
-          <span className="text-gray-200 font-thin">·</span>
-          <span className={`${SEG.chart} font-black`}>
-            {seg_chart || <span className="text-gray-200 text-lg">??</span>}
-          </span>
-          <span className="text-gray-200 font-thin">·</span>
-          <span className={`${SEG.sub}   font-black`}>
-            {seg_sub || <span className="text-gray-200 text-lg">??</span>}
-          </span>
-          <span className="text-gray-200 font-thin">·</span>
-          <span className={`${SEG.store} font-black`}>
-            {seg_store || <span className="text-gray-200 text-lg">?</span>}
-          </span>
-          <span className={`${SEG.col}   font-black`}>
-            {seg_col || <span className="text-gray-200 text-lg">?</span>}
-          </span>
-          <span className={`${SEG.row}   font-black`}>
-            {seg_row || <span className="text-gray-200 text-lg">?</span>}
-          </span>
-        </div>
-
-        {/* Segment legend */}
-        <div className="flex gap-3 flex-wrap text-[10px] font-bold pt-0.5">
-          {[
-            [SEG.part, "① NNNN  Part #"],
-            [SEG.chart, "② CC  Chart Pair (e.g. L5)"],
-            [SEG.sub, "③ SS  Sub (e.g. BR)"],
-            [SEG.store, "④ T  Store"],
-            [SEG.col, "⑤ C  Col"],
-            [SEG.row, "⑥ R  Row"],
-          ].map(([cls, lbl]) => (
-            <span key={lbl} className={`${cls} flex items-center gap-0.5`}>
-              <span
-                className="w-1.5 h-1.5 rounded-full inline-block"
-                style={{ background: "currentColor", opacity: 0.7 }}
-              />
-              {lbl}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <hr className="border-navy-100" />
-
-      {/* ── ① Part Number ── */}
-      <div>
-        <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1.5">
-          <span className={`${SEG.part} font-black text-sm`}>①</span>
-          Part Number
-          <span className="font-normal text-gray-400">(0001 – 9999)</span>
-        </label>
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            min={1}
-            max={9999}
-            value={partInput}
-            onChange={handlePartInput}
-            onBlur={handlePartBlur}
-            placeholder="1"
-            className="w-28 p-2 border border-gray-300 rounded-lg font-mono text-base focus:ring-2 focus:ring-blue-300 bg-white"
-            disabled={disabled}
-          />
-          <span className="text-gray-400 text-sm">
-            →{" "}
-            <code className={`${SEG.part} font-bold text-base`}>{partNum}</code>
-          </span>
-        </div>
-        {checkStatus?.checking && (
-          <p className="text-xs text-gray-400 mt-1">Checking availability…</p>
-        )}
-        {checkStatus && !checkStatus.checking && checkStatus.available === true && (
-          <p className="text-xs text-green-600 mt-1">✓ Available</p>
-        )}
-        {checkStatus && !checkStatus.checking && checkStatus.available === false && (
-          <p className="text-xs text-red-600 mt-1">
-            ✗ Already used by {checkStatus.conflictProductName} (#{checkStatus.conflictProductId})
-          </p>
-        )}
-      </div>
-
-      {/* ── ② Product Chart ── */}
-      <div>
-        <label className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
-          <span className={`${SEG.chart} font-black text-sm`}>②</span>
-          Product Chart
-          <span className="font-normal text-gray-400 ml-1">
-            — 2-char pair, auto-fills Sub Code
-          </span>
-        </label>
-        <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-          {PRODUCT_CHARTS.map((c) => (
-            <button
-              key={c.symbol}
-              type="button"
-              onClick={() => handleChartClick(c)}
-              title={`Auto-fills sub: ${c.defaultSub}`}
-              className={`py-3 px-1 rounded-xl border-2 text-center transition-all duration-150 select-none
-                ${
-                  chart?.symbol === c.symbol
-                    ? "border-purple-500 bg-purple-100 shadow-md scale-105"
-                    : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50"
-                } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-            >
-              {/* Big chart pair e.g. "L5" */}
-              <div
-                className={`text-xl font-black ${SEG.chart} leading-none tracking-tight`}
-              >
-                {c.symbol}
-                <span className="text-gray-400">{c.digit}</span>
-              </div>
-              <div className="text-[10px] font-semibold text-gray-600 mt-1">
-                {c.label}
-              </div>
-              <div className="text-[9px] text-purple-400 mt-0.5">
-                → {c.defaultSub}
-              </div>
-            </button>
-          ))}
-        </div>
-        {chart && (
-          <div className="mt-2 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5 flex items-center gap-2">
-            <span className="font-semibold">{chart.label}</span>
-            <span className="text-gray-400">·</span>
-            <span>
-              Pair:{" "}
-              <code className={`${SEG.chart} font-black`}>
-                {chart.pair || chart.symbol + chart.digit}
-              </code>
-            </span>
-            <span className="text-gray-400">·</span>
-            <span>
-              Sub auto-set to:{" "}
-              <code className={`${SEG.sub} font-black`}>
-                {chart.defaultSub}
-              </code>
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* ── ③ Sub Code ── */}
-      <div>
-        <label className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
-          <span className={`${SEG.sub} font-black text-sm`}>③</span>
-          Sub Code
-          <span className="font-normal text-gray-400 ml-1">
-            — 2-char abbreviation
-          </span>
-        </label>
-        {/* Preset quick-pick buttons */}
-        <div className="grid grid-cols-5 gap-1.5 mb-2">
-          {SUB_CODES.map((sc) => (
-            <button
-              key={sc.abbr}
-              type="button"
-              onClick={() => !disabled && setSubAbbr(sc.abbr)}
-              className={`py-2.5 px-1 rounded-lg border-2 text-center transition-all duration-150 select-none
-                ${
-                  subAbbr === sc.abbr
-                    ? "border-green-500 bg-green-100 shadow-sm scale-[1.04]"
-                    : "border-gray-200 bg-white hover:border-green-300 hover:bg-green-50"
-                } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-            >
-              <div className={`text-lg font-black ${SEG.sub} leading-none`}>
-                {sc.abbr}
-              </div>
-              <div className="text-[9px] text-gray-400 mt-0.5 leading-tight">
-                {sc.label}
-              </div>
-            </button>
-          ))}
-        </div>
-        {/* Manual sub-code entry */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400 whitespace-nowrap">
-            Custom:
-          </span>
-          <input
-            type="text"
-            maxLength={2}
-            value={subAbbr}
-            onChange={(e) =>
-              !disabled &&
-              setSubAbbr(
-                e.target.value
-                  .toUpperCase()
-                  .replace(/[^A-Z0-9]/g, "")
-                  .slice(0, 2),
-              )
-            }
-            placeholder="XX"
-            className={`w-16 p-1.5 border-2 rounded-lg font-mono text-base text-center focus:ring-2 focus:ring-green-300 bg-white uppercase transition-colors
-              ${
-                subAbbr && !SUB_CODES.find((s) => s.abbr === subAbbr)
-                  ? "border-green-400 bg-green-50 text-green-700"
-                  : "border-gray-200"
-              }`}
-            disabled={disabled}
-          />
-          {subAbbr && !SUB_CODES.find((s) => s.abbr === subAbbr) && (
-            <span className="text-xs text-green-600 font-semibold bg-green-50 border border-green-200 rounded px-2 py-0.5">
-              Custom: <code>{subAbbr}</code>
-            </span>
-          )}
-          {!subAbbr && (
-            <span className="text-xs text-gray-300">
-              type any 2-char code here
-            </span>
-          )}
-        </div>
-      </div>
-
-      <hr className="border-navy-100" />
-
-      {/* ── ④⑤⑥ Store / Column / Row ── */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
-        {/* Store */}
-        <div>
-          <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
-            <span className={`${SEG.store} font-black text-sm`}>④</span> Store #{" "}
-            <span className="font-normal text-gray-400">(1 digit)</span>
-          </label>
-          <input
-            type="text"
-            maxLength={1}
-            value={storeNum}
-            onChange={(e) =>
-              !disabled &&
-              setStoreNum(e.target.value.replace(/\D/g, "").slice(0, 1))
-            }
-            placeholder="1"
-            className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-red-300 bg-white"
-            disabled={disabled}
-          />
-        </div>
-
-        {/* Column */}
-        <div>
-          <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
-            <span className={`${SEG.col} font-black text-sm`}>⑤</span> Column{" "}
-            <span className="font-normal text-gray-400">(1 digit)</span>
-          </label>
-          <input
-            type="text"
-            maxLength={1}
-            value={colNum}
-            onChange={(e) =>
-              !disabled &&
-              setColNum(e.target.value.replace(/\D/g, "").slice(0, 1))
-            }
-            placeholder="1"
-            className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-orange-300 bg-white"
-            disabled={disabled}
-          />
-        </div>
-
-        {/* Row — free text input + quick-pick 1–9 (unrestricted) */}
-        <div>
-          <label className="text-xs font-bold text-gray-600 mb-1.5 flex items-center gap-1">
-            <span className={`${SEG.row} font-black text-sm`}>⑥</span> Row{" "}
-            <span className="font-normal text-gray-400">(1 digit)</span>
-          </label>
-          <input
-            type="text"
-            maxLength={1}
-            value={rowNum}
-            onChange={(e) =>
-              !disabled &&
-              setRowNum(e.target.value.replace(/\D/g, "").slice(0, 1))
-            }
-            placeholder="1"
-            className="w-full p-3 border border-gray-300 rounded-lg font-mono text-2xl text-center focus:ring-2 focus:ring-teal-300 bg-white mb-1.5"
-            disabled={disabled}
-          />
-          {/* Quick-pick 1–9 */}
-          <div className="grid grid-cols-5 gap-1">
-            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => !disabled && setRowNum(r)}
-                className={`py-1.5 sm:py-1 rounded border text-xs font-bold transition-all duration-100
-                  ${
-                    rowNum === r
-                      ? "border-teal-500 bg-teal-100 text-teal-800"
-                      : "border-gray-200 bg-white text-gray-500 hover:border-teal-300 hover:bg-teal-50"
-                  } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Manual override link */}
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => {
-            setManualMode(true);
-            setManualVal(isComplete ? derivedCode.replace(/_/g, "") : "");
-          }}
-          className="text-xs text-gray-400 hover:text-gray-600 underline"
-        >
-          Enter code manually instead →
-        </button>
-      </div>
-    </div>
-  );
-}
 // Debounce Hook
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -722,12 +83,16 @@ function useDebounce(value, delay) {
 // Format Date Helper
 const formatDate = (date) => {
   if (!date) return "N/A";
-  return new Date(date).toLocaleDateString("en-IN", {
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "N/A";
+  return d.toLocaleDateString("en-IN", {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
 };
+
+const formatPrice = (price) => `₹${Number(price || 0).toFixed(2)}`;
 
 // Weserv Image Proxy Helper
 const getWeservUrl = (imageUrl) => {
@@ -740,41 +105,33 @@ const getWeservUrl = (imageUrl) => {
   return `https://images.weserv.nl/?url=${encodeURIComponent(directUrl)}&w=1400&h=1000&fit=outside&output=webp&q=90`;
 };
 
-/* -------------------------
-   Accept Return API helper
-   ------------------------- */
-const acceptReturnApi = async (productId, quantity) => {
-  const token = localStorage.getItem("token");
-  if (!token) throw new Error("Authentication token missing.");
-  const res = await fetch(`${BASE_URL}/api/stock/${productId}/accept-return`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    credentials: "include",
-    body: JSON.stringify({ quantity }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok)
-    throw new Error(
-      data.error || data.message || `Accept return failed (${res.status})`,
-    );
-  return data;
-};
-
 /* Row actions dropdown — top-level component (not recreated on every render) */
-function StockActionsDropdown({ item, onEdit, onDelete, onUploadPhoto, onOpenAccept }) {
+function StockActionsDropdown({
+  item,
+  onEdit,
+  onDelete,
+  onUploadPhoto,
+  onOpenAccept,
+  onOpenAdjust,
+}) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
+    if (!open) return;
     const handleOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
     };
+    const handleEscape = (e) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, []);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
+  const canAccept = (item.returnableQty || 0) > 0;
 
   return (
     <div ref={menuRef} className="relative">
@@ -783,6 +140,7 @@ function StockActionsDropdown({ item, onEdit, onDelete, onUploadPhoto, onOpenAcc
         onClick={() => setOpen((o) => !o)}
         className="p-2 hover:bg-navy-50 rounded-full transition-colors"
         aria-label={`Actions for ${item.productName}`}
+        aria-expanded={open}
       >
         <MoreVertical size={20} className="text-gray-500" />
       </button>
@@ -790,6 +148,7 @@ function StockActionsDropdown({ item, onEdit, onDelete, onUploadPhoto, onOpenAcc
       {open && (
         <div className="absolute right-0 mt-2 w-56 bg-white shadow-lg rounded-lg border border-navy-100 py-1 z-10">
           <button
+            type="button"
             onClick={() => {
               onEdit(item);
               setOpen(false);
@@ -799,14 +158,27 @@ function StockActionsDropdown({ item, onEdit, onDelete, onUploadPhoto, onOpenAcc
             <Edit2 size={16} className="mr-2" /> Edit
           </button>
 
+          <button
+            type="button"
+            onClick={() => {
+              onOpenAdjust(item);
+              setOpen(false);
+            }}
+            className="flex w-full px-4 py-2 text-sm text-navy-800 hover:bg-navy-50 items-center transition-colors"
+          >
+            <SlidersHorizontal size={16} className="mr-2" /> Adjust Stock
+          </button>
+
           <label className="flex w-full px-4 py-2 text-sm text-navy-800 hover:bg-navy-50 items-center cursor-pointer transition-colors">
             <Upload size={16} className="mr-2" /> Upload Photo
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp,image/gif"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
+                // reset so picking the same file again still fires onChange
+                e.target.value = "";
                 if (file) onUploadPhoto(item.productId, file);
                 setOpen(false);
               }}
@@ -814,24 +186,26 @@ function StockActionsDropdown({ item, onEdit, onDelete, onUploadPhoto, onOpenAcc
           </label>
 
           <button
+            type="button"
             onClick={() => {
-              onDelete(item.productId);
+              onOpenAccept(item);
+              setOpen(false);
+            }}
+            disabled={!canAccept}
+            className={`flex w-full px-4 py-2 text-sm items-center transition-colors ${!canAccept ? "text-gray-400 cursor-not-allowed" : "text-navy-800 hover:bg-navy-50"}`}
+          >
+            <CheckCircle size={16} className="mr-2" /> Accept Return
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              onDelete(item);
               setOpen(false);
             }}
             className="flex w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 items-center transition-colors"
           >
             <XCircle size={16} className="mr-2" /> Delete
-          </button>
-
-          <button
-            onClick={() => {
-              onOpenAccept(item);
-              setOpen(false);
-            }}
-            disabled={(item.returnableQty || 0) <= 0}
-            className={`flex w-full px-4 py-2 text-sm items-center transition-colors ${(item.returnableQty || 0) <= 0 ? "text-gray-400 cursor-not-allowed" : "text-navy-800 hover:bg-navy-50"}`}
-          >
-            <CheckCircle size={16} className="mr-2" /> Accept Return
           </button>
         </div>
       )}
@@ -857,37 +231,34 @@ function StockPage({ socket }) {
   });
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState("create");
+  const [modalKey, setModalKey] = useState(0);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [formData, setFormData] = useState({
-    productName: "",
-    description: "",
-    productCode: "",
-    price: "",
-    stockQuantity: "",
-    qtyRequired: "",
-    returnableQty: "",
-    // location: "",
-  });
+  const [formData, setFormData] = useState({ ...EMPTY_FORM });
+  const [stockChangeReason, setStockChangeReason] = useState("");
+  const [suggestedPartNumber, setSuggestedPartNumber] = useState(null);
   const [partNumberAuto, setPartNumberAuto] = useState(true);
   const [partNumberAvailable, setPartNumberAvailable] = useState(true);
   const [formErrors, setFormErrors] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [viewingItem, setViewingItem] = useState(null);
   const [uploadingId, setUploadingId] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [acceptProduct, setAcceptProduct] = useState(null);
+  const [adjustProduct, setAdjustProduct] = useState(null);
 
   const tableRef = useRef(null);
   const searchInputRef = useRef(null);
   const modalRef = useRef(null);
   const fileInputRef = useRef(null);
+  const itemsRef = useRef(stockItems);
+  const fetchSeqRef = useRef(0);
   const debouncedSearch = useDebounce(searchInput, 300);
 
   // ---- Part selector state (for modal) ----
   const [partSearch, setPartSearch] = useState("");
   const [allParts, setAllParts] = useState([]);
-  const [filteredParts, setFilteredParts] = useState([]);
   const [isPartLoading, setIsPartLoading] = useState(false);
   const [showPartDropdown, setShowPartDropdown] = useState(false);
   const [partsLoaded, setPartsLoaded] = useState(false);
@@ -895,154 +266,95 @@ function StockPage({ socket }) {
   const { notifySuccess, notifyError, notifyInfo, notifyWarning } = useNotify();
   // ----------------------------------------
 
-  // Fetch Stock
-  const fetchStock = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    const controller = new AbortController();
+  // Keep a ref of the latest list so socket handlers never work on stale data
+  useEffect(() => {
+    itemsRef.current = stockItems;
+  }, [stockItems]);
 
-    try {
-      const token = localStorage.getItem("token");
-      if (!token)
-        throw new Error("Authentication token missing. Please log in.");
-
-      const response = await fetch(
-        `${BASE_URL}/api/stock?limit=5000&offset=0`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          signal: controller.signal,
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to fetch stock data");
-      }
-
-      const { data, total } = await response.json();
-      if (!Array.isArray(data)) throw new Error("Invalid data format");
-
-      const normalizedData = data.map((item) => ({
-        ...item,
-        price: item.price !== null ? Number(item.price) : 0,
-        stockQuantity:
-          item.stockQuantity !== null ? Number(item.stockQuantity) : 0,
-        qtyRequired:
-          item.qtyRequired !== undefined && item.qtyRequired !== null
-            ? Number(item.qtyRequired)
-            : item.qty_required !== undefined && item.qty_required !== null
-              ? Number(item.qty_required)
-              : 0,
-        returnableQty:
-          item.returnable_qty !== undefined
-            ? Number(item.returnable_qty)
-            : item.returnableQty !== undefined
-              ? Number(item.returnableQty)
-              : 0,
-        description: item.description || "",
-        productCode: item.productCode || item.product_code || "",
-        productName: item.productName || item.product_name || "",
-        productId: item.productId || item.product_id,
-        createdAt: item.createdAt || item.created_at || null,
-        // location: item.location || "",
-        imageUrl: item.imageUrl || item.image_url || null,
-      }));
-
-      setStockItems(normalizedData);
-      setTotalItems(total || normalizedData.length || 0);
-    } catch (err) {
-      if (err.name !== "AbortError") {
-        setError(err.message);
-        notifyError(err.message || "Network error", { autoClose: 3000 });
-        setStockItems([]);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-
-    return () => controller.abort();
+  const setItems = useCallback((next) => {
+    itemsRef.current = next;
+    setStockItems(next);
   }, []);
 
-  // Socket Updates (safe: do not overwrite qtyRequired unless provided)
+  const replaceItem = useCallback(
+    (updatedRaw) => {
+      if (!updatedRaw) return;
+      const updated = normalizeStockItem(updatedRaw);
+      setItems(
+        itemsRef.current.map((it) =>
+          it.productId === updated.productId ? { ...it, ...updated } : it,
+        ),
+      );
+    },
+    [setItems],
+  );
+
+  // Fetch Stock (ignores responses from older, overlapping requests)
+  const fetchStock = useCallback(async () => {
+    const seq = ++fetchSeqRef.current;
+    setIsLoading(true);
+    try {
+      const resp = await fetchStockList();
+      if (seq !== fetchSeqRef.current) return;
+      const data = resp?.data;
+      if (!Array.isArray(data)) throw new Error("Invalid data format from server");
+      const normalized = data.map(normalizeStockItem);
+      setItems(normalized);
+      setTotalItems(Number(resp.total) || normalized.length);
+      setError(null);
+    } catch (err) {
+      if (seq !== fetchSeqRef.current) return;
+      setError(err.message || "Failed to fetch stock data");
+      notifyError(err.message || "Failed to fetch stock data", { autoClose: 3000 });
+    } finally {
+      if (seq === fetchSeqRef.current) setIsLoading(false);
+    }
+  }, [setItems, notifyError]);
+
+  // Socket Updates — registers and removes ONLY its own handlers
   useEffect(() => {
     if (!socket) return;
+    let wasDisconnected = false;
 
-    socket.on("disconnect", () =>
-      notifyWarning("Real-time connection lost"),
-    );
-    socket.on("reconnect", () => {
+    const onDisconnect = () => {
+      wasDisconnected = true;
+      notifyWarning("Real-time connection lost");
+    };
+    const onConnect = () => {
+      if (!wasDisconnected) return;
+      wasDisconnected = false;
       notifySuccess("Reconnected!", { autoClose: 2000 });
       fetchStock();
-    });
-
-    socket.on("stockUpdate", (payload) => {
-      const {
-        product_id,
-        stock_quantity,
-        location,
-        image_url,
-        returnable_qty,
-        qty_required,
-        qtyRequired,
-        status,
-      } = payload || {};
-
-      setStockItems((prev) => {
-        if (!Array.isArray(prev)) return prev || [];
-        if (status === "deleted" || status === "Deleted") {
-          notifyInfo(`Product #${product_id} deleted`, { autoClose: 2000 });
-          return prev.filter((item) => item.productId !== product_id);
+    };
+    const onStockUpdate = (payload) => {
+      const prev = itemsRef.current;
+      const { items, needsRefetch } = applyStockUpdate(prev, payload);
+      if (items !== prev) {
+        setItems(items);
+        if (payload?.status === "deleted") {
+          notifyInfo(`Product #${payload.product_id} deleted`, { autoClose: 2000 });
         }
-        return prev.map((item) =>
-          item.productId === product_id
-            ? {
-                ...item,
-                stockQuantity:
-                  stock_quantity !== undefined
-                    ? Number(stock_quantity)
-                    : item.stockQuantity,
-                location: location || item.location,
-                imageUrl: image_url || item.imageUrl,
-                returnableQty:
-                  returnable_qty !== undefined
-                    ? Number(returnable_qty)
-                    : payload.returnableQty !== undefined
-                      ? Number(payload.returnableQty)
-                      : item.returnableQty,
-                qtyRequired:
-                  qty_required !== undefined
-                    ? Number(qty_required)
-                    : qtyRequired !== undefined
-                      ? Number(qtyRequired)
-                      : item.qtyRequired,
-              }
-            : item,
-        );
-      });
+      }
+      if (needsRefetch) fetchStock();
+    };
 
-      if (tableRef.current) tableRef.current.focus();
-    });
+    socket.on("disconnect", onDisconnect);
+    socket.on("connect", onConnect);
+    socket.on("stockUpdate", onStockUpdate);
 
     return () => {
-      socket.off("connect");
-      socket.off("connect_error");
-      socket.off("disconnect");
-      socket.off("reconnect");
-      socket.off("stockUpdate");
+      socket.off("disconnect", onDisconnect);
+      socket.off("connect", onConnect);
+      socket.off("stockUpdate", onStockUpdate);
     };
-  }, [socket, fetchStock]);
+  }, [socket, fetchStock, setItems, notifyInfo, notifySuccess, notifyWarning]);
 
   // Initial Load
   useEffect(() => {
-    let mounted = true;
-    fetchStock().then((cleanup) => {
-      if (!mounted && cleanup) cleanup();
-    });
+    fetchStock();
     return () => {
-      mounted = false;
+      // invalidate any in-flight request so it can't set state after unmount
+      fetchSeqRef.current += 1;
     };
   }, [fetchStock]);
 
@@ -1050,18 +362,23 @@ function StockPage({ socket }) {
   useEffect(() => setSearchTerm(debouncedSearch), [debouncedSearch]);
   useEffect(() => setPage(0), [searchTerm]);
 
-  // Modal Focus Trap
+  // Modal Focus Trap + Escape to close
   useEffect(() => {
     if (showModal && modalRef.current) {
       const targetInput =
         modalRef.current.querySelector('input[name="productName"]') ||
         modalRef.current.querySelector("input");
       targetInput?.focus();
-      const handleTab = (e) => {
-        if (e.key !== "Tab") return;
+      const handleKey = (e) => {
+        if (e.key === "Escape") {
+          setShowModal(false);
+          return;
+        }
+        if (e.key !== "Tab" || !modalRef.current) return;
         const focusable = modalRef.current.querySelectorAll(
           "button, input, textarea",
         );
+        if (!focusable.length) return;
         const first = focusable[0],
           last = focusable[focusable.length - 1];
         if (e.shiftKey && document.activeElement === first) {
@@ -1072,8 +389,8 @@ function StockPage({ socket }) {
           first.focus();
         }
       };
-      document.addEventListener("keydown", handleTab);
-      return () => document.removeEventListener("keydown", handleTab);
+      document.addEventListener("keydown", handleKey);
+      return () => document.removeEventListener("keydown", handleKey);
     }
   }, [showModal]);
 
@@ -1094,31 +411,26 @@ function StockPage({ socket }) {
         throw new Error(data.error || `Failed to fetch parts (${res.status})`);
       }
       const json = await res.json();
-      const list = json.data || [];
-      setAllParts(list);
+      setAllParts(Array.isArray(json.data) ? json.data : []);
       setPartsLoaded(true);
     } catch (err) {
-      console.error("Failed to load parts:", err);
       notifyError(err.message || "Failed to load parts", { autoClose: 3000 });
     } finally {
       setIsPartLoading(false);
     }
-  }, [partsLoaded, isPartLoading]);
+  }, [partsLoaded, isPartLoading, notifyError]);
 
-  useEffect(() => {
+  const filteredParts = useMemo(() => {
     const term = partSearch.toLowerCase().trim();
-    if (!term) setFilteredParts(allParts.slice(0, 20));
-    else
-      setFilteredParts(
-        allParts
-          .filter(
-            (p) =>
-              (p.partCode || "").toLowerCase().includes(term) ||
-              (p.name || "").toLowerCase().includes(term) ||
-              (p.drawingNo || "").toLowerCase().includes(term),
-          )
-          .slice(0, 20),
-      );
+    if (!term) return allParts.slice(0, 20);
+    return allParts
+      .filter(
+        (p) =>
+          (p.partCode || "").toLowerCase().includes(term) ||
+          (p.name || "").toLowerCase().includes(term) ||
+          (p.drawingNo || "").toLowerCase().includes(term),
+      )
+      .slice(0, 20);
   }, [partSearch, allParts]);
 
   useEffect(() => {
@@ -1135,23 +447,35 @@ function StockPage({ socket }) {
   }, [showPartDropdown]);
 
   const handlePartSearchChange = (e) => {
-    const value = e.target.value;
-    setPartSearch(value);
+    setPartSearch(e.target.value);
+    setShowPartDropdown(true);
     if (!partsLoaded && !isPartLoading) loadParts();
   };
+
   const handlePartSelect = (part) => {
+    const code = String(part.partCode || "").trim().toUpperCase();
+    const codeUsable = isValidProductCode(code);
     setFormData((prev) => ({
       ...prev,
-      productName: part.name || "",
-      productCode: part.partCode || "",
-      description: part.description || "",
+      productName: part.name || prev.productName,
+      description: part.description || prev.description,
+      ...(codeUsable ? { productCode: code } : {}),
     }));
     setFormErrors((prev) => ({
       ...prev,
       productName: "",
-      productCode: "",
       description: "",
+      ...(codeUsable ? { productCode: "" } : {}),
     }));
+    if (codeUsable) {
+      // remount the builder so it shows the selected code
+      setModalKey((k) => k + 1);
+    } else if (code) {
+      notifyInfo(
+        `Part code "${part.partCode}" isn't an 11-character stock code — set the Product Code below.`,
+        { autoClose: 4000 },
+      );
+    }
     setPartSearch(`${part.partCode} — ${part.name}`);
     setShowPartDropdown(false);
   };
@@ -1161,20 +485,27 @@ function StockPage({ socket }) {
   const sortedStock = useMemo(() => {
     const items = [...stockItems];
     if (sortConfig.key) {
+      const numeric = [
+        "productId",
+        "price",
+        "stockQuantity",
+        "qtyRequired",
+        "returnableQty",
+      ].includes(sortConfig.key);
       items.sort((a, b) => {
         let aVal = a[sortConfig.key] ?? "";
         let bVal = b[sortConfig.key] ?? "";
-        if (
-          ["price", "stockQuantity", "qtyRequired", "returnableQty"].includes(
-            sortConfig.key,
-          )
-        ) {
-          aVal = Number(aVal);
-          bVal = Number(bVal);
+        if (numeric) {
+          aVal = Number(aVal) || 0;
+          bVal = Number(bVal) || 0;
         } else if (sortConfig.key === "createdAt") {
-          aVal = new Date(aVal || 0);
-          bVal = new Date(bVal || 0);
+          aVal = new Date(aVal || 0).getTime() || 0;
+          bVal = new Date(bVal || 0).getTime() || 0;
+        } else {
+          aVal = String(aVal).toLowerCase();
+          bVal = String(bVal).toLowerCase();
         }
+        if (aVal === bVal) return 0;
         return (
           (aVal < bVal ? -1 : 1) * (sortConfig.direction === "asc" ? 1 : -1)
         );
@@ -1184,135 +515,106 @@ function StockPage({ socket }) {
   }, [stockItems, sortConfig]);
 
   const filteredStock = useMemo(() => {
-    return sortedStock.filter((item) => {
-      const terms = [
-        item.productId,
-        item.productName,
-        item.productCode,
-        item.location,
-      ].map((s) => String(s || "").toLowerCase());
-      return terms.some((t) => t.includes(searchTerm.toLowerCase()));
-    });
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return sortedStock;
+    return sortedStock.filter((item) =>
+      [item.productId, item.productName, item.productCode, item.location]
+        .map((s) => String(s ?? "").toLowerCase())
+        .some((t) => t.includes(term)),
+    );
   }, [sortedStock, searchTerm]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredStock.length / itemsPerPage));
+
+  // Keep the page in range when rows disappear (delete, live update, filter)
+  useEffect(() => {
+    if (page > pageCount - 1) setPage(pageCount - 1);
+  }, [page, pageCount]);
 
   const paginatedStock = useMemo(() => {
     const start = page * itemsPerPage;
     return filteredStock.slice(start, start + itemsPerPage);
   }, [filteredStock, page, itemsPerPage]);
 
-  // Import Validation (support Returnable Qty)
-  const validateImportRow = useCallback((row, index) => {
-    const errors = [];
-    if (!row["Product Name"]?.trim())
-      errors.push(`Row ${index + 1}: Product Name required`);
-    if (!row["Product Code"]?.trim())
-      errors.push(`Row ${index + 1}: Product Code required`);
-    const price = parseFloat(String(row["Price (₹)"] || "").replace(/₹/g, ""));
-    if (isNaN(price) || price < 0)
-      errors.push(`Row ${index + 1}: Invalid price`);
-    const stock = parseFloat(row["Stock Quantity"] || 0);
-    if (isNaN(stock) || stock < 0)
-      errors.push(`Row ${index + 1}: Invalid stock`);
-    const rq =
-      row["Returnable Qty"] !== undefined
-        ? parseFloat(row["Returnable Qty"])
-        : 0;
-    if (row["Returnable Qty"] !== undefined && (isNaN(rq) || rq < 0))
-      errors.push(`Row ${index + 1}: Invalid Returnable Qty`);
-    return errors;
-  }, []);
-
   // Import Excel
   const importFromExcel = useCallback(
     async (event) => {
-      const file = event.target.files[0];
+      const file = event.target.files?.[0];
+      event.target.value = "";
       if (!file) return;
       const reader = new FileReader();
+      reader.onerror = () => notifyError("Could not read the file", { autoClose: 3000 });
       reader.onload = async (e) => {
+        setIsImporting(true);
         try {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: "array" });
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const json = XLSX.utils.sheet_to_json(sheet);
-          if (!json.length) throw new Error("Empty file");
+          const rows = sheet ? XLSX.utils.sheet_to_json(sheet) : [];
+          if (!rows.length) throw new Error("The file has no rows");
 
-          const errors = [],
-            valid = [];
-          json.forEach((row, i) => {
-            const err = validateImportRow(row, i);
-            if (err.length) errors.push(...err);
-            else {
-              valid.push({
-                productName: String(row["Product Name"] || "").trim(),
-                productCode: String(row["Product Code"] || "").trim(),
-                price: parseFloat(
-                  String(row["Price (₹)"] || "0").replace(/₹/g, ""),
-                ),
-                stockQuantity: parseFloat(row["Stock Quantity"] || 0),
-                qtyRequired: parseInt(row["Qty Required"] || 0),
-                returnableQty:
-                  row["Returnable Qty"] !== undefined
-                    ? parseFloat(row["Returnable Qty"])
-                    : 0,
-                description:
-                  String(row["Description"] || "").trim() || undefined,
-                location: String(row["Location"] || "").trim() || undefined,
-                productId: row["Product ID"]
-                  ? parseInt(row["Product ID"])
-                  : undefined,
-              });
-            }
+          const existingById = new Map(
+            itemsRef.current.map((i) => [i.productId, i]),
+          );
+          const { valid, errors } = parseImportRows(rows, {
+            existingById,
+            includePrice: true,
+            includeReturnable: true,
           });
 
-          if (errors.length)
-            errors.forEach((e) => notifyError(e, { autoClose: 5000 }));
-          if (!valid.length) return;
+          errors
+            .slice(0, MAX_IMPORT_ERROR_TOASTS)
+            .forEach((msg) => notifyError(msg, { autoClose: 5000 }));
+          if (errors.length > MAX_IMPORT_ERROR_TOASTS) {
+            notifyError(
+              `…and ${errors.length - MAX_IMPORT_ERROR_TOASTS} more invalid row(s) skipped`,
+              { autoClose: 5000 },
+            );
+          }
+          if (!valid.length) {
+            notifyWarning("No valid rows to import", { autoClose: 3000 });
+            return;
+          }
 
-          const token = localStorage.getItem("token");
           let created = 0,
-            updated = 0,
-            failed = 0;
-
-          for (const row of valid) {
+            updated = 0;
+          const failures = [];
+          for (const { productId, body } of valid) {
             try {
-              const { productId, returnableQty, ...body } = row;
-              if (returnableQty !== undefined)
-                body.returnableQty = returnableQty;
-              const url = productId
-                ? `${BASE_URL}/api/stock/${productId}`
-                : `${BASE_URL}/api/stock`;
-              const method = productId ? "PUT" : "POST";
-              const res = await fetch(url, {
-                method,
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify(body),
-                credentials: "include",
-              });
-              if (!res.ok)
-                throw new Error((await res.json()).error || "Failed");
-              productId ? updated++ : created++;
-            } catch {
-              failed++;
+              if (productId) {
+                await updateStock(productId, body);
+                updated++;
+              } else {
+                await createStock(body);
+                created++;
+              }
+            } catch (err) {
+              failures.push(
+                `${body.productCode || body.productName || "Row"}: ${err.message}`,
+              );
             }
           }
 
           await fetchStock();
           setPage(0);
-          notifySuccess(
-            `Success: ${created} created, ${updated} updated${failed ? `, ${failed} failed` : ""}`,
-            { autoClose: 5000 },
-          );
+          const summary = `Import: ${created} created, ${updated} updated${failures.length ? `, ${failures.length} failed` : ""}`;
+          if (failures.length) {
+            notifyWarning(summary, { autoClose: 6000 });
+            failures
+              .slice(0, MAX_IMPORT_ERROR_TOASTS)
+              .forEach((msg) => notifyError(msg, { autoClose: 6000 }));
+          } else {
+            notifySuccess(summary, { autoClose: 5000 });
+          }
         } catch (err) {
-          notifyError(`Import failed: ${err.message}`, { autoClose: 3000 });
+          notifyError(`Import failed: ${err.message}`, { autoClose: 4000 });
+        } finally {
+          setIsImporting(false);
         }
       };
       reader.readAsArrayBuffer(file);
-      event.target.value = "";
     },
-    [fetchStock, validateImportRow],
+    [fetchStock, notifyError, notifySuccess, notifyWarning],
   );
 
   // Export Excel (includes Returnable Qty)
@@ -1325,8 +627,8 @@ function StockPage({ socket }) {
       "Stock Quantity": Number(item.stockQuantity),
       "Returnable Qty": Number(item.returnableQty || 0),
       "Qty Required": Number(item.qtyRequired),
-      "Price (₹)": `₹${Number(item.price).toFixed(2)}`,
-      Description: item.description || "N/A",
+      "Price (₹)": formatPrice(item.price),
+      Description: item.description || "",
       "Created At": item.createdAt ? formatDate(item.createdAt) : "N/A",
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -1334,7 +636,7 @@ function StockPage({ socket }) {
     XLSX.utils.book_append_sheet(wb, ws, "Raw Materials");
     XLSX.writeFile(wb, "Raw_Material_Inventory.xlsx");
     notifySuccess("Exported to Excel!", { autoClose: 2000 });
-  }, [filteredStock]);
+  }, [filteredStock, notifySuccess]);
 
   // Sorting
   const sortData = useCallback((key) => {
@@ -1345,239 +647,195 @@ function StockPage({ socket }) {
   }, []);
 
   // Modal Handlers
+  const openModal = useCallback(() => {
+    setFormErrors({});
+    setStockChangeReason("");
+    setPartNumberAvailable(true);
+    setPartSearch("");
+    setShowPartDropdown(false);
+    setModalKey((k) => k + 1);
+    setShowModal(true);
+  }, []);
+
   const handleCreate = useCallback(() => {
     setModalMode("create");
     setSelectedItem(null);
-    setFormData({
-      productName: "",
-      description: "",
-      productCode: "",
-      price: "",
-      stockQuantity: "",
-      qtyRequired: "",
-      returnableQty: "",
-      // location: "",
-    });
-    setFormErrors({});
+    setFormData({ ...EMPTY_FORM });
     setPartNumberAuto(true);
-    setPartNumberAvailable(true);
-    setPartSearch("");
-    setShowPartDropdown(false);
-    setShowModal(true);
-  }, []);
+    // computed once per opening, from the current list
+    setSuggestedPartNumber(suggestPartNumber(itemsRef.current));
+    openModal();
+  }, [openModal]);
 
-  const handleEdit = useCallback((item) => {
-    setModalMode("edit");
-    setSelectedItem(item);
-    setFormData({
-      productName: item.productName || "",
-      description: item.description || "",
-      productCode: item.productCode || "",
-      price: item.price ?? "",
-      stockQuantity: item.stockQuantity ?? "",
-      qtyRequired: item.qtyRequired ?? "",
-      returnableQty: item.returnableQty ?? "",
-      // location: item.location || "",
-    });
-    setFormErrors({});
-    setPartNumberAvailable(true);
-    setPartSearch("");
-    setShowPartDropdown(false);
-    setShowModal(true);
-  }, []);
-
-  const handleDelete = useCallback(
-    async (productId) => {
-      if (!confirm(`Delete product #${productId}?`)) return;
-      try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(`${BASE_URL}/api/stock/${productId}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: "include",
-        });
-        if (!res.ok)
-          throw new Error((await res.json()).error || "Delete failed");
-        await fetchStock();
-        notifySuccess(`Product #${productId} deleted`);
-      } catch (err) {
-        notifyError(err.message);
-      }
+  const handleEdit = useCallback(
+    (item) => {
+      setModalMode("edit");
+      setSelectedItem(item);
+      setFormData(formFromItem(item));
+      setSuggestedPartNumber(null);
+      openModal();
     },
-    [fetchStock],
+    [openModal],
   );
 
-  // Form Validation (includes returnableQty)
-  const validateForm = useCallback(() => {
-    const errors = {};
-    if (!formData.productName.trim()) errors.productName = "Required";
-    if (!formData.productCode || formData.productCode.length !== 11) {
-      errors.productCode = "Must be exactly 11 characters";
-    }
-    const price = parseFloat(formData.price);
-    if (isNaN(price) || price < 0) errors.price = "Must be ≥ 0";
-    const stock = parseFloat(formData.stockQuantity);
-    // require stock for create and edit (keeps previous behavior)
-    if (
-      (modalMode === "create" || modalMode === "edit") &&
-      (isNaN(stock) || stock < 0)
-    )
-      errors.stockQuantity = "Must be ≥ 0";
-    if (formData.returnableQty !== "" && formData.returnableQty !== undefined) {
-      const r = parseInt(formData.returnableQty, 10);
-      if (!Number.isInteger(r) || r < 0)
-        errors.returnableQty = "Must be integer ≥ 0";
-    }
-    return errors;
-  }, [formData, modalMode]);
+  const handleDelete = useCallback(
+    async (item) => {
+      const label = item.productName
+        ? `"${item.productName}" (#${item.productId})`
+        : `product #${item.productId}`;
+      if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+      try {
+        await deleteStock(item.productId);
+        setItems(itemsRef.current.filter((i) => i.productId !== item.productId));
+        setTotalItems((t) => Math.max(0, t - 1));
+        notifySuccess(`Product #${item.productId} deleted`);
+      } catch (err) {
+        notifyError(err.message || "Delete failed", { autoClose: 5000 });
+      }
+    },
+    [setItems, notifySuccess, notifyError],
+  );
 
-  // Submit (create/update) - includes returnableQty and fixes edit stock bug
+  const isCreateMode = modalMode === "create";
+  const editStockChanged =
+    !isCreateMode && !!selectedItem && stockChanged(formData, selectedItem);
+
+  // Submit (create/update)
   const handleSubmit = useCallback(
     async (e) => {
       e.preventDefault();
-      const errors = validateForm();
-      if (Object.keys(errors).length) {
-        setFormErrors(errors);
-        Object.values(errors).forEach((e) => notifyError(e));
+      if (isSaving) return;
+      const isCreate = modalMode === "create";
+      const errors = validateStockForm(formData, {
+        mode: modalMode,
+        requirePrice: true,
+      });
+      const realErrors = Object.fromEntries(
+        Object.entries(errors).filter(([, v]) => v),
+      );
+      if (Object.keys(realErrors).length) {
+        setFormErrors(realErrors);
+        notifyError("Please fix the highlighted fields.");
         return;
       }
-      if (!partNumberAvailable) {
+      // In auto mode the server assigns the part number, so a clash with the
+      // suggestion doesn't matter. A typed / edited part number must be free.
+      if (!partNumberAvailable && !(isCreate && partNumberAuto)) {
+        setFormErrors((prev) => ({
+          ...prev,
+          productCode: "Part Number is already in use — choose a different one.",
+        }));
         notifyError("Part Number is already in use — choose a different one.");
         return;
       }
 
+      const body = buildStockPayload(formData, {
+        mode: modalMode,
+        original: selectedItem,
+        includePrice: true,
+        includeReturnable: true,
+        partNumberAuto,
+        stockChangeReason: stockChangeReason.trim() || undefined,
+      });
+
+      setIsSaving(true);
       try {
-        const token = localStorage.getItem("token");
-        const isCreate = modalMode === "create";
-        const url = isCreate
-          ? `${BASE_URL}/api/stock`
-          : `${BASE_URL}/api/stock/${selectedItem.productId}`;
+        const saved = isCreate
+          ? await createStock(body)
+          : await updateStock(selectedItem.productId, body);
 
-        // Build body — include stockQuantity for both create and edit when provided
-        const body = {
-          productName: formData.productName,
-          description: formData.description || undefined,
-          productCode: formData.productCode,
-          price: parseFloat(formData.price),
-          qtyRequired: parseInt(formData.qtyRequired) || 0,
-          // location: formData.location || undefined,
-          ...(isCreate ? { part_number_auto: partNumberAuto } : {}),
-        };
-
-        // include stockQuantity always when editing or creating (if present)
-        if (
-          formData.stockQuantity !== "" &&
-          formData.stockQuantity !== undefined
-        ) {
-          body.stockQuantity = parseFloat(formData.stockQuantity);
-        } else if (isCreate) {
-          // ensure numeric 0 if empty on create
-          body.stockQuantity = 0;
+        if (isCreate) {
+          await fetchStock();
+          setPage(0);
+        } else {
+          replaceItem(saved);
         }
-
-        if (
-          formData.returnableQty !== "" &&
-          formData.returnableQty !== undefined
-        ) {
-          body.returnableQty = parseInt(formData.returnableQty, 10);
-        }
-
-        const res = await fetch(url, {
-          method: isCreate ? "POST" : "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
-          credentials: "include",
-        });
-
-        if (!res.ok) {
-          const resp = await res.json().catch(() => ({}));
-          throw new Error(resp.error || resp.message || "Save failed");
-        }
-
-        await fetchStock();
         setShowModal(false);
-        setPage(0);
         notifySuccess(isCreate ? "Product created!" : "Product updated!");
+        if (saved?.partNumberWarning) {
+          notifyWarning(saved.partNumberWarning, { autoClose: 6000 });
+        }
       } catch (err) {
-        notifyError(err.message || "Save failed");
+        if (err.code === "PART_NUMBER_TAKEN" || err.code === "DUPLICATE_CODE") {
+          setFormErrors((prev) => ({ ...prev, productCode: err.message }));
+        }
+        notifyError(err.message || "Save failed", { autoClose: 5000 });
+      } finally {
+        setIsSaving(false);
       }
     },
-    [formData, modalMode, selectedItem, fetchStock, validateForm, partNumberAuto, partNumberAvailable],
+    [
+      isSaving,
+      formData,
+      modalMode,
+      selectedItem,
+      partNumberAuto,
+      partNumberAvailable,
+      stockChangeReason,
+      fetchStock,
+      replaceItem,
+      notifyError,
+      notifySuccess,
+      notifyWarning,
+    ],
   );
 
   // Upload Photo
-  const uploadPhoto = useCallback(async (productId, file) => {
-    if (!file) return;
-    setUploadingId(productId);
-    notifyInfo(`Uploading ${file.name}...`);
-    const formDataUpload = new FormData();
-    formDataUpload.append("photo", file);
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${BASE_URL}/api/stock/${productId}/photo`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formDataUpload,
-        credentials: "include",
-      });
-      const result = await res.json().catch(() => ({}));
-      if (!res.ok)
-        throw new Error(result.message || result.error || "Upload failed");
-      const rawImageUrl =
-        result.imageUrl || result.image_url || result.link || null;
-      const weservImageUrl = getWeservUrl(rawImageUrl);
-      setStockItems((prev) =>
-        prev.map((item) =>
-          item.productId === productId
-            ? { ...item, imageUrl: weservImageUrl }
-            : item,
-        ),
-      );
-      notifySuccess("Image uploaded successfully!");
-    } catch (err) {
-      notifyError(`Upload failed: ${err.message}`);
-    } finally {
-      setUploadingId(null);
-    }
-  }, []);
-
-  // After accept: safe local update (does NOT overwrite qtyRequired unless server explicitly returns it)
-  const handleAfterAccept = useCallback(
-    (productId, acceptedQty, serverResp = {}) => {
-      setStockItems((prev) =>
-        prev.map((it) => {
-          if (it.productId !== productId) return it;
-          const newStock =
-            serverResp.stock_quantity !== undefined
-              ? Number(serverResp.stock_quantity)
-              : Number((it.stockQuantity || 0) + acceptedQty);
-          const newReturnable =
-            serverResp.returnable_qty !== undefined
-              ? Number(serverResp.returnable_qty)
-              : Math.max(0, (it.returnableQty || 0) - acceptedQty);
-          const newQtyRequired =
-            serverResp.qty_required !== undefined
-              ? Number(serverResp.qty_required)
-              : serverResp.qtyRequired !== undefined
-                ? Number(serverResp.qtyRequired)
-                : it.qtyRequired;
-          return {
-            ...it,
-            stockQuantity: newStock,
-            returnableQty: newReturnable,
-            qtyRequired: newQtyRequired,
-          };
-        }),
-      );
-      setShowAcceptModal(false);
-      setAcceptProduct(null);
-      notifySuccess("Accept processed (UI updated)", { autoClose: 2000 });
+  const uploadPhoto = useCallback(
+    async (productId, file) => {
+      if (!file) return;
+      if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) {
+        notifyError("Only JPEG, PNG, WebP or GIF images can be uploaded.");
+        return;
+      }
+      if (file.size > MAX_PHOTO_BYTES) {
+        notifyError("Image is larger than 8 MB.");
+        return;
+      }
+      setUploadingId(productId);
+      notifyInfo(`Uploading ${file.name}...`);
+      try {
+        const result = await uploadStockPhoto(productId, file);
+        const imageUrl = result?.imageUrl || result?.image_url || null;
+        if (imageUrl) {
+          setItems(
+            itemsRef.current.map((item) =>
+              item.productId === productId ? { ...item, imageUrl } : item,
+            ),
+          );
+        }
+        notifySuccess("Image uploaded successfully!");
+      } catch (err) {
+        notifyError(`Upload failed: ${err.message}`, { autoClose: 5000 });
+      } finally {
+        setUploadingId(null);
+      }
     },
-    [],
+    [setItems, notifyError, notifyInfo, notifySuccess],
   );
+
+  const handleAccepted = useCallback(
+    (updated) => {
+      replaceItem(updated);
+      setAcceptProduct(null);
+      notifySuccess("Return accepted — stock updated", { autoClose: 2500 });
+    },
+    [replaceItem, notifySuccess],
+  );
+
+  const handleAdjusted = useCallback(
+    (updated) => {
+      // AdjustStockModal shows its own success toast
+      replaceItem(updated);
+      setAdjustProduct(null);
+    },
+    [replaceItem],
+  );
+
+  // Keep an open View modal in sync with live/edited data
+  const viewingLive = viewingItem
+    ? stockItems.find((i) => i.productId === viewingItem.productId) || viewingItem
+    : null;
 
   // Render
   if (isLoading && !stockItems.length) {
@@ -1594,7 +852,9 @@ function StockPage({ socket }) {
     );
   }
 
-  if (error && !showModal && !viewingItem) return <ConnectionError onRetry={fetchStock} />;
+  // Only replace the page when nothing has loaded; a failed refresh keeps the table
+  if (error && !stockItems.length && !showModal && !viewingItem)
+    return <ConnectionError onRetry={fetchStock} />;
 
   return (
     <ErrorBoundary>
@@ -1609,14 +869,18 @@ function StockPage({ socket }) {
                 placeholder="Search by ID, Name, Code, or Location..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === "Escape" && (setSearchInput(""), setSearchTerm(""))
-                }
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setSearchInput("");
+                    setSearchTerm("");
+                  }
+                }}
                 className="w-full p-3 pl-11 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 bg-white shadow-sm transition-colors"
               />
               <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               {searchInput && (
                 <button
+                  type="button"
                   onClick={() => {
                     setSearchInput("");
                     setSearchTerm("");
@@ -1629,18 +893,21 @@ function StockPage({ socket }) {
               )}
             </div>
             <button
+              type="button"
               onClick={fetchStock}
               disabled={isLoading}
               className="flex items-center gap-2 px-4 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
             >
-              <RefreshCw size={16} />
+              <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
               {isLoading ? "Refreshing..." : "Refresh"}
             </button>
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              disabled={isImporting}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors disabled:opacity-50"
             >
-              <Upload size={16} /> Import Excel
+              <Upload size={16} /> {isImporting ? "Importing..." : "Import Excel"}
             </button>
             <input
               type="file"
@@ -1650,6 +917,7 @@ function StockPage({ socket }) {
               className="hidden"
             />
             <button
+              type="button"
               onClick={exportToExcel}
               disabled={!filteredStock.length}
               className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1657,10 +925,8 @@ function StockPage({ socket }) {
               <Download size={16} /> Export Excel
             </button>
             <button
-              onClick={() => {
-                setModalMode("create");
-                handleCreate();
-              }}
+              type="button"
+              onClick={handleCreate}
               className="flex items-center gap-2 px-4 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors ml-auto"
             >
               <Plus size={16} /> Create Product
@@ -1681,10 +947,8 @@ function StockPage({ socket }) {
               </p>
               {!searchTerm && (
                 <button
-                  onClick={() => {
-                    setModalMode("create");
-                    handleCreate();
-                  }}
+                  type="button"
+                  onClick={handleCreate}
                   className="px-5 py-2.5 bg-gold-500 text-navy-900 rounded-lg font-semibold hover:bg-gold-400 transition-colors flex items-center gap-2 mx-auto"
                 >
                   <Plus size={16} /> Create First Product
@@ -1745,11 +1009,10 @@ function StockPage({ socket }) {
                 </thead>
                 <tbody className="divide-y divide-navy-100">
                   {paginatedStock.map((item) => {
-                    const stockClass =
-                      item.stockQuantity >= item.qtyRequired
-                        ? "text-green-600"
-                        : "text-red-600";
+                    const isLow = item.stockQuantity < item.qtyRequired;
+                    const stockClass = isLow ? "text-red-600" : "text-green-600";
                     const weservImageUrl = getWeservUrl(item.imageUrl);
+                    const priceNotSet = !(Number(item.price) > 0);
                     return (
                       <tr
                         key={item.productId}
@@ -1793,7 +1056,7 @@ function StockPage({ socket }) {
                         </td>
                         <td className={`px-5 py-3.5 font-medium ${stockClass}`}>
                           {item.stockQuantity}
-                          {item.stockQuantity < item.qtyRequired && (
+                          {isLow && (
                             <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">
                               Low
                             </span>
@@ -1803,6 +1066,7 @@ function StockPage({ socket }) {
                         {/* Returnable Qty (clickable -> opens edit modal) */}
                         <td className="px-5 py-3.5">
                           <button
+                            type="button"
                             onClick={() => handleEdit(item)}
                             title="Click to edit returnable qty"
                             className={`px-3 py-1 rounded-full text-white text-sm transition-colors ${item.returnableQty > 0 ? "bg-indigo-600 hover:bg-indigo-700" : "bg-gray-400 hover:bg-gray-500"}`}
@@ -1811,11 +1075,21 @@ function StockPage({ socket }) {
                           </button>
                         </td>
 
-                        <td className="px-5 py-3.5 text-gray-600">
-                          ₹{Number(item.price).toFixed(2)}
+                        <td className="px-5 py-3.5 text-gray-600 whitespace-nowrap">
+                          {priceNotSet ? (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gold-400/25 text-gold-600 border border-gold-400/40"
+                              title="No price set — edit this item to add one"
+                            >
+                              Not set
+                            </span>
+                          ) : (
+                            formatPrice(item.price)
+                          )}
                         </td>
                         <td className="px-5 py-3.5">
                           <button
+                            type="button"
                             onClick={() => setViewingItem(item)}
                             className="flex items-center gap-1.5 text-navy-800 hover:text-navy-600 font-medium text-sm transition-colors"
                             aria-label={`View details for ${item.productName}`}
@@ -1830,10 +1104,8 @@ function StockPage({ socket }) {
                               onEdit={handleEdit}
                               onDelete={handleDelete}
                               onUploadPhoto={uploadPhoto}
-                              onOpenAccept={(it) => {
-                                setAcceptProduct(it);
-                                setShowAcceptModal(true);
-                              }}
+                              onOpenAccept={setAcceptProduct}
+                              onOpenAdjust={setAdjustProduct}
                             />
                             {uploadingId === item.productId && (
                               <span className="text-sm text-gold-600 animate-pulse">
@@ -1851,7 +1123,7 @@ function StockPage({ socket }) {
               <div className="flex flex-wrap gap-3 justify-between items-center p-4 bg-navy-50 border-t border-navy-100">
                 <div className="text-gray-500 text-sm">
                   Showing {paginatedStock.length} of {filteredStock.length}{" "}
-                  (Total: {totalItems})
+                  (Total: {totalItems}) · Page {page + 1} of {pageCount}
                 </div>
                 <div className="flex flex-wrap items-center gap-3 sm:gap-6">
                   <div className="flex items-center gap-4 text-sm text-gray-600">
@@ -1866,17 +1138,19 @@ function StockPage({ socket }) {
                   </div>
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={() => setPage((p) => Math.max(0, p - 1))}
                       disabled={page === 0}
+                      aria-label="Previous page"
                       className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                     >
                       <ChevronLeft size={18} />
                     </button>
                     <button
-                      onClick={() => setPage((p) => p + 1)}
-                      disabled={
-                        (page + 1) * itemsPerPage >= filteredStock.length
-                      }
+                      type="button"
+                      onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                      disabled={page >= pageCount - 1}
+                      aria-label="Next page"
                       className="p-2 bg-white border border-navy-100 rounded-lg disabled:opacity-50 hover:bg-navy-100 transition-colors"
                     >
                       <ChevronRight size={18} />
@@ -1892,12 +1166,14 @@ function StockPage({ socket }) {
           <div
             className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4"
             role="dialog"
+            aria-modal="true"
           >
             <div
               className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto relative"
               ref={modalRef}
             >
               <button
+                type="button"
                 onClick={() => setShowModal(false)}
                 className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
                 aria-label="Close"
@@ -1905,11 +1181,11 @@ function StockPage({ socket }) {
                 <XCircle size={22} />
               </button>
               <h2 className="font-display text-xl font-bold text-navy-800 mb-5">
-                {modalMode === "create"
+                {isCreateMode
                   ? "Create Product"
                   : `Edit #${selectedItem?.productId}`}
               </h2>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4" noValidate>
                 {/* Part search */}
                 <div>
                   <label className="block text-sm font-semibold text-navy-800 mb-1.5">
@@ -1967,8 +1243,8 @@ function StockPage({ socket }) {
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Selecting a part will fill Product Name, Product Code and
-                    Description.
+                    Selecting a part fills Product Name and Description, and the
+                    Product Code when it is a valid 11-character code.
                   </p>
                 </div>
 
@@ -1979,12 +1255,12 @@ function StockPage({ socket }) {
                   <input
                     name="productName"
                     type="text"
+                    maxLength={100}
                     value={formData.productName}
                     onChange={(e) =>
-                      setFormData({ ...formData, productName: e.target.value })
+                      setFormData((prev) => ({ ...prev, productName: e.target.value }))
                     }
                     className={`w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.productName ? "border-red-500" : "border-navy-100"}`}
-                    required
                   />
                   {formErrors.productName && (
                     <p className="text-red-500 text-sm mt-1">
@@ -1998,21 +1274,30 @@ function StockPage({ socket }) {
                     Product Code *
                   </label>
                   <ProductCodeBuilder
+                    key={modalKey}
                     value={formData.productCode}
-                    onChange={(code) =>
-                      setFormData((prev) => ({ ...prev, productCode: code }))
-                    }
-                    suggestedPartNumber={
-                      modalMode === "create"
-                        ? String(
-                            (stockItems.length ? Math.max(...stockItems.map((i) => i.productId)) : 0) + 1,
-                          ).padStart(4, "0")
-                        : null
-                    }
-                    excludeId={modalMode === "edit" ? selectedItem?.productId : null}
+                    onChange={(code) => {
+                      setFormData((prev) => ({ ...prev, productCode: code }));
+                      setFormErrors((prev) =>
+                        prev.productCode ? { ...prev, productCode: "" } : prev,
+                      );
+                    }}
+                    suggestedPartNumber={isCreateMode ? suggestedPartNumber : null}
+                    excludeId={!isCreateMode ? selectedItem?.productId : null}
                     onAutoFlagChange={setPartNumberAuto}
                     onAvailabilityChange={setPartNumberAvailable}
                   />
+                  {isCreateMode && partNumberAuto && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Part number is assigned automatically when you save
+                      (matches the new product ID). Type one to set it yourself.
+                    </p>
+                  )}
+                  {formErrors.productCode && (
+                    <p className="text-red-500 text-sm mt-1">
+                      {formErrors.productCode}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -2025,10 +1310,9 @@ function StockPage({ socket }) {
                     min="0"
                     value={formData.price}
                     onChange={(e) =>
-                      setFormData({ ...formData, price: e.target.value })
+                      setFormData((prev) => ({ ...prev, price: e.target.value }))
                     }
                     className={`w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.price ? "border-red-500" : "border-navy-100"}`}
-                    required
                   />
                   {formErrors.price && (
                     <p className="text-red-500 text-sm mt-1">
@@ -2039,9 +1323,7 @@ function StockPage({ socket }) {
 
                 <div>
                   <label className="block text-sm font-semibold text-navy-800 mb-1.5">
-                    {modalMode === "create"
-                      ? "Initial Stock"
-                      : "Stock Quantity"}
+                    {isCreateMode ? "Initial Stock" : "Stock Quantity"}
                   </label>
                   <input
                     type="number"
@@ -2049,18 +1331,35 @@ function StockPage({ socket }) {
                     min="0"
                     value={formData.stockQuantity}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
+                      setFormData((prev) => ({
+                        ...prev,
                         stockQuantity: e.target.value,
-                      })
+                      }))
                     }
                     className={`w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.stockQuantity ? "border-red-500" : "border-navy-100"}`}
-                    required={modalMode === "create"}
                   />
                   {formErrors.stockQuantity && (
                     <p className="text-red-500 text-sm mt-1">
                       {formErrors.stockQuantity}
                     </p>
+                  )}
+                  {editStockChanged && (
+                    <div className="mt-2">
+                      <label className="block text-xs font-semibold text-navy-800 mb-1">
+                        Reason for stock change (optional)
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={500}
+                        value={stockChangeReason}
+                        onChange={(e) => setStockChangeReason(e.target.value)}
+                        placeholder={`Was ${selectedItem?.stockQuantity} — e.g. physical count correction`}
+                        className="w-full p-2.5 border border-gold-400/60 bg-gold-400/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 text-sm"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        The change is recorded in the item&apos;s stock history.
+                      </p>
+                    </div>
                   )}
                 </div>
 
@@ -2071,12 +1370,22 @@ function StockPage({ socket }) {
                   <input
                     type="number"
                     min="0"
+                    step="1"
                     value={formData.qtyRequired}
                     onChange={(e) =>
-                      setFormData({ ...formData, qtyRequired: e.target.value })
+                      setFormData((prev) => ({ ...prev, qtyRequired: e.target.value }))
                     }
-                    className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
+                    className={`w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.qtyRequired ? "border-red-500" : "border-navy-100"}`}
                   />
+                  {formErrors.qtyRequired && (
+                    <p className="text-red-500 text-sm mt-1">
+                      {formErrors.qtyRequired}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Recalculated automatically whenever a BOM using this
+                    material changes.
+                  </p>
                 </div>
 
                 <div>
@@ -2086,12 +1395,13 @@ function StockPage({ socket }) {
                   <input
                     type="number"
                     min="0"
+                    step="0.01"
                     value={formData.returnableQty}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
+                      setFormData((prev) => ({
+                        ...prev,
                         returnableQty: e.target.value,
-                      })
+                      }))
                     }
                     className={`w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.returnableQty ? "border-red-500" : "border-navy-100"}`}
                   />
@@ -2112,12 +1422,18 @@ function StockPage({ socket }) {
                   </label>
                   <textarea
                     value={formData.description}
+                    maxLength={5000}
                     onChange={(e) =>
-                      setFormData({ ...formData, description: e.target.value })
+                      setFormData((prev) => ({ ...prev, description: e.target.value }))
                     }
-                    className="w-full p-3 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400"
+                    className={`w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 ${formErrors.description ? "border-red-500" : "border-navy-100"}`}
                     rows="2"
                   />
+                  {formErrors.description && (
+                    <p className="text-red-500 text-sm mt-1">
+                      {formErrors.description}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-3 mt-6">
@@ -2130,9 +1446,14 @@ function StockPage({ socket }) {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors"
+                    disabled={isSaving}
+                    className="px-5 py-2.5 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors disabled:opacity-50"
                   >
-                    {modalMode === "create" ? "Create" : "Update"}
+                    {isSaving
+                      ? "Saving..."
+                      : isCreateMode
+                        ? "Create"
+                        : "Update"}
                   </button>
                 </div>
               </form>
@@ -2141,10 +1462,15 @@ function StockPage({ socket }) {
         )}
 
         {/* View Details Modal */}
-        {viewingItem && (
-          <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+        {viewingLive && (
+          <div
+            className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4"
+            role="dialog"
+            aria-modal="true"
+          >
             <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto relative">
               <button
+                type="button"
                 onClick={() => setViewingItem(null)}
                 className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
                 aria-label="Close"
@@ -2152,26 +1478,30 @@ function StockPage({ socket }) {
                 <X size={18} />
               </button>
               <h2 className="font-display text-xl font-bold text-navy-800 mb-5">
-                {viewingItem.productName || "Product Details"}
+                {viewingLive.productName || "Product Details"}
               </h2>
               <dl className="space-y-4">
                 {[
-                  { label: "Product ID", value: viewingItem.productId },
-                  { label: "Product Code", value: viewingItem.productCode },
+                  { label: "Product ID", value: viewingLive.productId },
+                  { label: "Product Code", value: viewingLive.productCode },
                   {
                     label: "Price (₹)",
-                    value: `₹${Number(viewingItem.price).toFixed(2)}`,
+                    value:
+                      Number(viewingLive.price) > 0
+                        ? formatPrice(viewingLive.price)
+                        : "Not set",
                   },
-                  { label: "Stock Quantity", value: viewingItem.stockQuantity },
+                  { label: "Stock Quantity", value: viewingLive.stockQuantity },
                   {
                     label: "Returnable Qty",
-                    value: viewingItem.returnableQty ?? 0,
+                    value: viewingLive.returnableQty ?? 0,
                   },
-                  { label: "Qty Required", value: viewingItem.qtyRequired },
-                  { label: "Description", value: viewingItem.description },
+                  { label: "Qty Required", value: viewingLive.qtyRequired },
+                  { label: "Location", value: viewingLive.location },
+                  { label: "Description", value: viewingLive.description },
                   {
                     label: "Created At",
-                    value: formatDate(viewingItem.createdAt),
+                    value: formatDate(viewingLive.createdAt),
                   },
                 ].map(({ label, value }) => (
                   <div key={label}>
@@ -2184,8 +1514,15 @@ function StockPage({ socket }) {
                   </div>
                 ))}
               </dl>
+              <div className="mt-6">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
+                  Stock History
+                </h3>
+                <StockHistory productId={viewingLive.productId} />
+              </div>
               <div className="flex justify-end mt-6">
                 <button
+                  type="button"
                   onClick={() => setViewingItem(null)}
                   className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
                 >
@@ -2204,8 +1541,10 @@ function StockPage({ socket }) {
           >
             <div className="relative max-w-7xl max-h-full">
               <button
+                type="button"
                 onClick={() => setShowImageModal(false)}
                 className="absolute -top-12 right-0 text-white hover:text-gold-400 transition-colors"
+                aria-label="Close image"
               >
                 <XCircle size={32} />
               </button>
@@ -2222,72 +1561,82 @@ function StockPage({ socket }) {
           </div>
         )}
 
-        {/* Accept Return Modal (quantity only) */}
-        {showAcceptModal && acceptProduct && (
+        {/* Accept Return Modal */}
+        {acceptProduct && (
           <AcceptReturnModal
             product={acceptProduct}
-            onClose={() => {
-              setShowAcceptModal(false);
-              setAcceptProduct(null);
-            }}
-            onAccepted={handleAfterAccept}
+            onClose={() => setAcceptProduct(null)}
+            onAccepted={handleAccepted}
           />
         )}
 
-</div>
+        {/* Adjust Stock Modal */}
+        {adjustProduct && (
+          <AdjustStockModal
+            item={adjustProduct}
+            onClose={() => setAdjustProduct(null)}
+            onDone={handleAdjusted}
+          />
+        )}
+      </div>
     </ErrorBoundary>
   );
 }
 
-/* ========= AcceptReturnModal (quantity-only, no notes) ========= */
+/* ========= AcceptReturnModal — closes only after the server accepts ========= */
 const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
-  const [qty, setQty] = useState(product.returnableQty ?? 0);
+  const available = Number(product.returnableQty) || 0;
+  const [qty, setQty] = useState(String(available));
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { notifySuccess, notifyError, notifyInfo } = useNotify();
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleAccept = async () => {
-    const parsed = parseInt(qty, 10);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      notifyError("Please enter a positive integer quantity to accept.", {
-        autoClose: 3000,
-      });
+    const parsed = Number(qty);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setErrorMsg("Enter a quantity greater than 0.");
       return;
     }
-    if (parsed > (product.returnableQty ?? 0)) {
-      notifyError(`Cannot accept more than ${product.returnableQty}`, {
-        autoClose: 3000,
-      });
+    if (parsed > available) {
+      setErrorMsg(`Cannot accept more than ${available}.`);
       return;
     }
-
+    setErrorMsg("");
+    setIsSubmitting(true);
     try {
-      setIsSubmitting(true);
-      const data = await acceptReturnApi(product.productId, parsed);
-      if (onAccepted) onAccepted(product.productId, parsed, data || {});
+      const updated = await acceptReturn(product.productId, Math.round(parsed * 100) / 100);
+      onAccepted(updated);
     } catch (err) {
-      console.error("Accept return failed", err);
-      notifyError(err.message || "Accept return failed", { autoClose: 4000 });
+      // keep the modal open so the user can see what went wrong and retry
+      setErrorMsg(err.message || "Accept return failed");
     } finally {
       setIsSubmitting(false);
-      onClose();
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4">
+    <div
+      className="fixed inset-0 bg-navy-900/50 flex items-center justify-center z-50 p-4"
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 w-[420px] max-w-full max-h-[90vh] overflow-y-auto relative">
         <button
+          type="button"
           onClick={onClose}
+          disabled={isSubmitting}
           className="absolute top-4 right-4 text-gray-400 hover:text-navy-800 transition-colors"
           aria-label="Close accept return modal"
         >
           <XCircle size={22} />
         </button>
-        <h3 className="font-display text-xl font-bold text-navy-800 mb-3">
+        <h3 className="font-display text-xl font-bold text-navy-800 mb-3 pr-8">
           Accept Return — {product.productName}
         </h3>
         <p className="text-sm text-gray-600 mb-4">
-          Available to accept: <strong>{product.returnableQty}</strong>
+          Available to accept: <strong>{available}</strong>
+          <span className="block text-xs text-gray-500 mt-1">
+            Accepted units are added back to stock ({product.stockQuantity} now).
+          </span>
         </p>
 
         <label className="text-sm font-semibold text-navy-800 mb-1.5 block">
@@ -2295,15 +1644,22 @@ const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
         </label>
         <input
           type="number"
-          min={1}
-          max={product.returnableQty}
+          min={0.01}
+          step="0.01"
+          max={available}
           value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          className="w-full p-2 border border-navy-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 mb-3"
+          onChange={(e) => {
+            setQty(e.target.value);
+            if (errorMsg) setErrorMsg("");
+          }}
+          onKeyDown={(e) => e.key === "Enter" && !isSubmitting && handleAccept()}
+          className={`w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400 mb-2 ${errorMsg ? "border-red-500" : "border-navy-100"}`}
         />
+        {errorMsg && <p className="text-red-500 text-sm mb-2">{errorMsg}</p>}
 
-        <div className="flex gap-3 justify-end">
+        <div className="flex gap-3 justify-end mt-2">
           <button
+            type="button"
             onClick={onClose}
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
             disabled={isSubmitting}
@@ -2311,8 +1667,9 @@ const AcceptReturnModal = ({ product, onClose, onAccepted }) => {
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleAccept}
-            className="px-4 py-2 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-navy-800 text-white rounded-lg font-medium hover:bg-navy-700 transition-colors flex items-center gap-2 disabled:opacity-50"
             disabled={isSubmitting}
           >
             {isSubmitting ? (

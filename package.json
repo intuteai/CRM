@@ -8,6 +8,7 @@
     "build": "vite build",
     "start": "serve dist -s -p $PORT",
     "lint": "eslint .",
+    "test:unit": "node --test \"src/utils/__tests__/*.test.js\"",
     "preview": "vite preview"
   },
   "dependencies": {
