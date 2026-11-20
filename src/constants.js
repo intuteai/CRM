@@ -17,6 +17,8 @@ export const ROLES = {
   SERVICE_REPAIR: "service_repair",
   // Field sales
   REPRESENTATIVE: "representative",
+  // Innopack (separate organization; sees none of Compage's or Intute AI's data)
+  INNOPACK_DESIGN: "innopack_design",
 };
 
 export const DASHBOARD_ROUTES = {
@@ -38,6 +40,8 @@ export const DASHBOARD_ROUTES = {
   [ROLES.SERVICE_REPAIR]: "/service-repair-dashboard",
   // Field sales
   [ROLES.REPRESENTATIVE]: "/representative-dashboard",
+  // Innopack
+  [ROLES.INNOPACK_DESIGN]: "/innopack-design-dashboard",
 };
 
 export const allowedPathsByRole = {
@@ -217,6 +221,13 @@ export const allowedPathsByRole = {
   [ROLES.REPRESENTATIVE]: [
     "/representative-dashboard",
     "/representative/enquiries",
+    "/edit-profile",
+  ],
+
+  // ── Innopack ───────────────────────────────────────────
+  [ROLES.INNOPACK_DESIGN]: [
+    "/innopack-design-dashboard",
+    "/innopack/parts-roster",
     "/edit-profile",
   ],
 };

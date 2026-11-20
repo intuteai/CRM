@@ -1,6 +1,6 @@
 import {
   Truck, FileText, FilePlus, Mail, MessageSquare, Package, DollarSign, MapPin,
-  PenTool, CheckSquare, BarChart, Wrench, Boxes, Layers, ShoppingCart,
+  PenTool, CheckSquare, BarChart, Wrench, Boxes, Layers, ShoppingCart, ClipboardList,
 } from 'lucide-react';
 import { adminNavSections } from './adminNav';
 
@@ -191,6 +191,18 @@ const representativeNavSections = [
   },
 ];
 
+// Innopack is a separate organization; its role sees only its own modules.
+const innopackDesignNavSections = [
+  {
+    title: 'Design',
+    shortLabel: 'Design',
+    accent: { bg: 'bg-indigo-50', text: 'text-indigo-600' },
+    items: [
+      { to: '/innopack/parts-roster', icon: ClipboardList, label: 'Parts Roster', desc: 'Machine parts list, drawings and design status' },
+    ],
+  },
+];
+
 const roleNav = {
   admin: { dashboardPath: '/admin-dashboard', sections: adminNavSections },
   sales: { dashboardPath: '/sales-dashboard', sections: salesNavSections },
@@ -201,6 +213,7 @@ const roleNav = {
   store: { dashboardPath: '/store-dashboard', sections: storeNavSections },
   dispatch: { dashboardPath: '/dispatch-dashboard', sections: dispatchNavSections },
   representative: { dashboardPath: '/representative-dashboard', sections: representativeNavSections },
+  innopack_design: { dashboardPath: '/innopack-design-dashboard', sections: innopackDesignNavSections },
   customer: {
     dashboardPath: '/customer-dashboard',
     sections: customerNavSections,

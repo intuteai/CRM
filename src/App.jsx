@@ -26,6 +26,8 @@ import { useTestingAccess } from "./components/testing/useTestingAccess";
 import { withTestingNav, testingNavSection, isTestingPath, TESTING_ERP_ROLES } from "./components/testing/testingNav";
 import "./styles.css";
 
+const NO_TESTING_ROLES = [];
+
 function App() {
   const dispatch = useDispatch();
   const { userRole, userName, token, showLogin, socketStatus } = useSelector(
@@ -168,8 +170,10 @@ function App() {
   };
 
   const showNavbar = userRole && location.pathname !== "/";
-  const roleNav = useMemo(() => withTestingNav(getRoleNav(userRole), testingRoles), [userRole, testingRoles]);
-  const testingSection = useMemo(() => testingNavSection(testingRoles), [testingRoles]);
+  // Only Compage roles can get the Motor Testing menu (never Innopack or Intute AI).
+  const navTestingRoles = TESTING_ERP_ROLES.includes(userRole) ? testingRoles : NO_TESTING_ROLES;
+  const roleNav = useMemo(() => withTestingNav(getRoleNav(userRole), navTestingRoles), [userRole, navTestingRoles]);
+  const testingSection = useMemo(() => testingNavSection(navTestingRoles), [navTestingRoles]);
   const useAppShell = showNavbar && !!roleNav;
   const socket = getSocket();
 

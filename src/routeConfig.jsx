@@ -99,6 +99,10 @@ import IAInvoiceForm from "./components/IA/IAInvoiceForm";
 import IAAttendanceSummary from "./components/IA/IAAttendanceSummary";
 import IAAttendanceHistory from "./components/IA/IAAttendanceHistory";
 
+// ── Innopack ─────────────────────────────────────────────────
+import InnopackDashboard from "./components/innopack/InnopackDashboard";
+import PartsRosterPage from "./components/innopack/PartsRosterPage";
+
 // ── Motor Testing ────────────────────────────────────────────
 import MotorTestingModule from "./components/testing/MotorTestingModule";
 import { TESTING_BASE, TESTING_ERP_ROLES } from "./components/testing/testingNav";
@@ -184,6 +188,19 @@ export const routeConfig = [
     path: "/hr-payslips",
     allowedRoles: ["ia_hr"],
     component: IAHRPayslipForm,
+  },
+
+  // ── Innopack Routes ──────────────────────────────────────────
+  // Separate organization (sidebar shell, menu in config/roleNav.js).
+  {
+    path: "/innopack-design-dashboard",
+    allowedRoles: ["innopack_design"],
+    component: InnopackDashboard,
+  },
+  {
+    path: "/innopack/parts-roster",
+    allowedRoles: ["innopack_design"],
+    component: PartsRosterPage,
   },
 
   // ── Intute Employee Routes ───────────────────────────────────
@@ -476,7 +493,8 @@ export const routeConfig = [
     allowedRoles: [
       "admin", "customer", "sales", "design", "production",
       "store", "dispatch", "accounts", "employee", "hr",
-      "ia_employee", "ia_hr", "service_repair",
+      "ia_employee", "ia_hr", "service_repair", "representative",
+      "innopack_design",
     ],
     component: EditProfile,
   },

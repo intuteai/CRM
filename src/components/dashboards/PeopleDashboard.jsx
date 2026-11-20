@@ -15,6 +15,7 @@ const GRID_COLS = {
 };
 
 // Dashboard for the people-management roles (HR / Employee / IA HR / IA Employee).
+// A config with no cards shows an empty state (`emptyMessage`).
 // Menu, copy and live toasts come from config/peopleNav.js.
 function PeopleDashboard({ userRole, socket }) {
   const config = getPeopleDashboard(userRole);
@@ -42,6 +43,13 @@ function PeopleDashboard({ userRole, socket }) {
     <PeopleBackdrop>
       <div className="max-w-5xl mx-auto px-6 py-6">
         <DashboardGreeting subtitle={config.title} />
+
+        {count === 0 && (
+          <div className="anim-in max-w-2xl bg-white rounded-xl border border-[#f0e6c8] p-6 shadow-sm text-center" style={{ '--i': 1 }}>
+            <p className="font-display text-sm font-bold text-navy-800">No modules yet</p>
+            <p className="text-xs text-gray-500 mt-1">{config.emptyMessage || 'Your modules will appear here.'}</p>
+          </div>
+        )}
 
         <div className={`grid grid-cols-1 sm:grid-cols-2 ${GRID_COLS[count] || 'lg:grid-cols-4'} gap-4 ${count <= 2 ? 'max-w-2xl' : ''}`}>
           {config.cards.map(({ to, icon: Icon, title, desc, accent }, index) => (
