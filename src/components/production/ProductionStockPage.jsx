@@ -39,7 +39,11 @@ import {
   stockChanged,
   buildStockPayload,
   parseImportRows,
+  compareLeadDate,
+  formatLeadDate,
 } from "../../utils/stockForm";
+import { formatDisplay } from "../../utils/leadDate";
+import { LeadDateCell, LeadDateField } from "../shared/LeadDate";
 import { fetchStockList, createStock, updateStock } from "../../utils/stockApi";
 
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
@@ -283,6 +287,8 @@ function ProductionStockPage() {
     const items = [...stockItems];
     if (sortConfig.key) {
       items.sort((a, b) => {
+        if (sortConfig.key === "leadDate")
+          return compareLeadDate(a.leadDate, b.leadDate, sortConfig.direction);
         let aVal = a[sortConfig.key] ?? "";
         let bVal = b[sortConfig.key] ?? "";
         if (
@@ -416,6 +422,7 @@ function ProductionStockPage() {
       Description: item.description || "N/A",
       "Stock Quantity": item.stockQuantity,
       "Qty Required": item.qtyRequired,
+      "Lead Date": formatDisplay(item.leadDate),
       // Plain number so the file can be re-imported (parseImportRows strips ₹).
       "Price (₹)": Number(item.price) || 0,
       "Created At (IST)": item.createdAt ? formatDate(item.createdAt) : "N/A",
@@ -678,6 +685,7 @@ function ProductionStockPage() {
                   { key: "productCode", label: "Code" },
                   { key: "productName", label: "Name" },
                   { key: "stockQuantity", label: "Stock" },
+                  { key: "leadDate", label: "Lead Date" },
                   { key: "qtyRequired", label: "Req" },
                   { key: "price", label: "Price" },
                   { key: "details", label: "Details" },
@@ -731,6 +739,9 @@ function ProductionStockPage() {
                       >
                         {item.stockQuantity}
                       </span>
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <LeadDateCell leadDate={item.leadDate} isLow={isLow} />
                     </td>
                     <td className="py-3.5 px-3 text-gray-600">
                       {item.qtyRequired}
@@ -908,6 +919,15 @@ function ProductionStockPage() {
                   </p>
                 </div>
               )}
+              <LeadDateField
+                value={formData.leadDate}
+                onChange={(iso) => {
+                  setFormData((prev) => ({ ...prev, leadDate: iso }));
+                  setFormErrors((prev) => ({ ...prev, leadDate: undefined }));
+                }}
+                error={formErrors.leadDate}
+                labelClassName="block text-sm font-medium text-navy-800 mb-1"
+              />
               <div>
                 <label className="block text-sm font-medium text-navy-800 mb-1">Qty Required</label>
                 <input
@@ -976,6 +996,7 @@ function ProductionStockPage() {
                 { label: "Description", value: viewingItem.description },
                 { label: "Stock Quantity", value: viewingItem.stockQuantity },
                 { label: "Qty Required", value: viewingItem.qtyRequired },
+                { label: "Lead Date", value: formatLeadDate(viewingItem.leadDate) },
                 { label: "Price", value: formatCurrency(viewingItem.price) },
                 { label: "Created", value: formatDate(viewingItem.createdAt) },
               ].map(({ label, value }) => (

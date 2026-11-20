@@ -39,7 +39,11 @@ import {
   stockChanged,
   buildStockPayload,
   parseImportRows,
+  compareLeadDate,
+  formatLeadDate,
 } from "../../utils/stockForm";
+import { formatDisplay } from "../../utils/leadDate";
+import { LeadDateCell, LeadDateField } from "../shared/LeadDate";
 import { fetchStockList, createStock, updateStock } from "../../utils/stockApi";
 
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
@@ -276,6 +280,8 @@ function StoreStockPage() {
     const items = [...stockItems];
     if (sortConfig.key) {
       items.sort((a, b) => {
+        if (sortConfig.key === "leadDate")
+          return compareLeadDate(a.leadDate, b.leadDate, sortConfig.direction);
         let aVal = a[sortConfig.key] ?? "";
         let bVal = b[sortConfig.key] ?? "";
         if (
@@ -404,6 +410,7 @@ function StoreStockPage() {
       Description: item.description || "N/A",
       "Stock Quantity": item.stockQuantity,
       "Qty Required": item.qtyRequired,
+      "Lead Date": formatDisplay(item.leadDate),
       "Created At (IST)": item.createdAt ? formatDate(item.createdAt) : "N/A",
     }));
 
@@ -663,6 +670,7 @@ function StoreStockPage() {
                   { key: "productCode", label: "Code" },
                   { key: "productName", label: "Name" },
                   { key: "stockQuantity", label: "Stock" },
+                  { key: "leadDate", label: "Lead Date" },
                   { key: "qtyRequired", label: "Req" },
                   { key: "details", label: "Details" },
                   { key: "actions", label: "Actions" },
@@ -715,6 +723,9 @@ function StoreStockPage() {
                       >
                         {item.stockQuantity}
                       </span>
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <LeadDateCell leadDate={item.leadDate} isLow={isLow} />
                     </td>
                     <td className="py-3.5 px-3 text-gray-600">
                       {item.qtyRequired}
@@ -872,6 +883,15 @@ function StoreStockPage() {
                   </p>
                 </div>
               )}
+              <LeadDateField
+                value={formData.leadDate}
+                onChange={(iso) => {
+                  setFormData((prev) => ({ ...prev, leadDate: iso }));
+                  setFormErrors((prev) => ({ ...prev, leadDate: undefined }));
+                }}
+                error={formErrors.leadDate}
+                labelClassName="block text-sm font-medium text-navy-800 mb-1"
+              />
               <div>
                 <label className="block text-sm font-medium text-navy-800 mb-1">Qty Required</label>
                 <input
@@ -940,6 +960,7 @@ function StoreStockPage() {
                 { label: "Description", value: viewingItem.description },
                 { label: "Stock Quantity", value: viewingItem.stockQuantity },
                 { label: "Qty Required", value: viewingItem.qtyRequired },
+                { label: "Lead Date", value: formatLeadDate(viewingItem.leadDate) },
                 { label: "Location", value: viewingItem.location },
                 { label: "Created", value: formatDate(viewingItem.createdAt) },
               ].map(({ label, value }) => (

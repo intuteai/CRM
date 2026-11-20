@@ -35,7 +35,11 @@ import {
   stockChanged,
   buildStockPayload,
   parseImportRows,
+  compareLeadDate,
+  formatLeadDate,
 } from "../../utils/stockForm";
+import { formatDisplay } from "../../utils/leadDate";
+import { LeadDateCell, LeadDateField } from "../shared/LeadDate";
 import {
   fetchStockList,
   createStock,
@@ -493,6 +497,8 @@ function StockPage({ socket }) {
         "returnableQty",
       ].includes(sortConfig.key);
       items.sort((a, b) => {
+        if (sortConfig.key === "leadDate")
+          return compareLeadDate(a.leadDate, b.leadDate, sortConfig.direction);
         let aVal = a[sortConfig.key] ?? "";
         let bVal = b[sortConfig.key] ?? "";
         if (numeric) {
@@ -627,6 +633,7 @@ function StockPage({ socket }) {
       "Stock Quantity": Number(item.stockQuantity),
       "Returnable Qty": Number(item.returnableQty || 0),
       "Qty Required": Number(item.qtyRequired),
+      "Lead Date": formatDisplay(item.leadDate),
       "Price (₹)": formatPrice(item.price),
       Description: item.description || "",
       "Created At": item.createdAt ? formatDate(item.createdAt) : "N/A",
@@ -968,6 +975,7 @@ function StockPage({ socket }) {
                       { key: "productId", label: "ID" },
                       { key: "productName", label: "Name" },
                       { key: "stockQuantity", label: "Stock" },
+                      { key: "leadDate", label: "Lead Date" },
                       { key: "returnableQty", label: "Returnable Qty" },
                       { key: "price", label: "Price (₹)" },
                       { key: "view", label: "View" },
@@ -1061,6 +1069,10 @@ function StockPage({ socket }) {
                               Low
                             </span>
                           )}
+                        </td>
+
+                        <td className="px-5 py-3.5">
+                          <LeadDateCell leadDate={item.leadDate} isLow={isLow} />
                         </td>
 
                         {/* Returnable Qty (clickable -> opens edit modal) */}
@@ -1363,6 +1375,15 @@ function StockPage({ socket }) {
                   )}
                 </div>
 
+                <LeadDateField
+                  value={formData.leadDate}
+                  onChange={(iso) => {
+                    setFormData((prev) => ({ ...prev, leadDate: iso }));
+                    setFormErrors((prev) => ({ ...prev, leadDate: undefined }));
+                  }}
+                  error={formErrors.leadDate}
+                />
+
                 <div>
                   <label className="block text-sm font-semibold text-navy-800 mb-1.5">
                     Qty Required
@@ -1497,6 +1518,7 @@ function StockPage({ socket }) {
                     value: viewingLive.returnableQty ?? 0,
                   },
                   { label: "Qty Required", value: viewingLive.qtyRequired },
+                  { label: "Lead Date", value: formatLeadDate(viewingLive.leadDate) },
                   { label: "Location", value: viewingLive.location },
                   { label: "Description", value: viewingLive.description },
                   {

@@ -4,6 +4,7 @@
    The API rules these mirror live in CRM_BACKEND/controllers/core/stock.*.
    ===================================================================== */
 import { isValidProductCode } from "./productCode.js";
+import { isValidIsoDate, isoFromParts, formatDisplay, parseDisplay, todayIso, MONTH_SHORT } from "./leadDate.js";
 
 export const NUMERIC_MAX = 99999999.99; // numeric(10,2)
 export const INT_MAX = 2147483647;
@@ -29,6 +30,84 @@ export function parseLooseNumber(v) {
   return Number(cleaned);
 }
 
+/* ---------------------------------------------------------------------
+   Lead date: the expected arrival date of a material. Always handled as a
+   plain 'YYYY-MM-DD' string (never a JS Date), so no timezone can shift it.
+   Shown to users as DD-MM-YYYY. Date logic lives in ./leadDate.js.
+   --------------------------------------------------------------------- */
+export { LEAD_YEAR_MIN, LEAD_YEAR_MAX, todayIso } from "./leadDate.js";
+
+/** True for a real calendar date 'YYYY-MM-DD' with year 2000..2100. */
+export const isValidLeadDate = isValidIsoDate;
+
+/** API value → 'YYYY-MM-DD' or null (anything else → null). */
+export function normalizeLeadDate(value) {
+  return isValidIsoDate(value) ? value : null;
+}
+
+/** 'YYYY-MM-DD' → '25-11-2026'; '—' when empty or invalid. */
+export function formatLeadDate(iso) {
+  return formatDisplay(iso) || "—";
+}
+
+/** True when the lead date is before today (both 'YYYY-MM-DD'). */
+export function isLeadDateOverdue(iso, today = todayIso()) {
+  return isValidIsoDate(iso) && typeof today === "string" && iso < today;
+}
+
+/** Sort comparator for lead dates; items without a date always sort last. */
+export function compareLeadDate(a, b, direction = "asc") {
+  const av = isValidLeadDate(a) ? a : null;
+  const bv = isValidLeadDate(b) ? b : null;
+  if (av === bv) return 0;
+  if (av === null) return 1;
+  if (bv === null) return -1;
+  return (av < bv ? -1 : 1) * (direction === "asc" ? 1 : -1);
+}
+
+/**
+ * One spreadsheet "Lead Date" cell → { value } where value is 'YYYY-MM-DD',
+ * or undefined for a blank cell; { error: true } when it can't be read.
+ * Accepts YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY, 'DD MMM YYYY', an Excel serial
+ * number or a JS Date.
+ */
+export function parseLeadDateCell(cell) {
+  if (cell === undefined || cell === null) return { value: undefined };
+
+  if (cell instanceof Date) {
+    if (Number.isNaN(cell.getTime())) return { error: true };
+    const iso = isoFromParts(cell.getFullYear(), cell.getMonth() + 1, cell.getDate());
+    return iso ? { value: iso } : { error: true };
+  }
+
+  const fromSerial = (n) => {
+    if (!Number.isFinite(n) || n <= 0) return { error: true };
+    // Excel day 1 = 1900-01-01; 1899-12-30 base absorbs the 1900 leap-year bug.
+    const dt = new Date(Date.UTC(1899, 11, 30) + Math.floor(n) * 86400000);
+    const iso = isoFromParts(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+    return iso ? { value: iso } : { error: true };
+  };
+
+  if (typeof cell === "number") return fromSerial(cell);
+
+  const s = String(cell).trim();
+  if (s === "") return { value: undefined };
+
+  // DD-MM-YYYY (also / . or space), YYYY-MM-DD, DDMMYYYY
+  if (/^\d{1,4}[-/.\s]\d{1,2}[-/.\s]\d{1,4}$/.test(s) || /^\d{8}$/.test(s)) {
+    const iso = parseDisplay(s);
+    return iso ? { value: iso } : { error: true };
+  }
+  let m;
+  if ((m = /^(\d{1,2})[\s-]+([A-Za-z]{3,9})[\s-]+(\d{4})$/.exec(s))) {
+    const mon = MONTH_SHORT.findIndex((x) => x.toLowerCase() === m[2].slice(0, 3).toLowerCase());
+    const iso = mon === -1 ? null : isoFromParts(Number(m[3]), mon + 1, Number(m[1]));
+    return iso ? { value: iso } : { error: true };
+  }
+  if (/^\d+(\.\d+)?$/.test(s)) return fromSerial(Number(s));
+  return { error: true };
+}
+
 /** API row (snake_case or camelCase, numeric strings) → page item with real numbers. */
 export function normalizeStockItem(raw = {}) {
   const r = raw || {};
@@ -43,6 +122,7 @@ export function normalizeStockItem(raw = {}) {
     returnableQty: toNumber(r.returnableQty ?? r.returnable_qty),
     location: r.location ?? null,
     imageUrl: r.imageUrl ?? r.image_url ?? null,
+    leadDate: normalizeLeadDate(r.leadDate ?? r.lead_date),
     createdAt: r.createdAt ?? r.created_at ?? null,
   };
 }
@@ -81,6 +161,8 @@ export function applyStockUpdate(items, payload) {
   if (payload.location !== undefined) patch.location = payload.location;
   if (payload.image_url !== undefined) patch.imageUrl = payload.image_url;
   else if (payload.imageUrl !== undefined) patch.imageUrl = payload.imageUrl;
+  if (payload.lead_date !== undefined) patch.leadDate = normalizeLeadDate(payload.lead_date);
+  else if (payload.leadDate !== undefined) patch.leadDate = normalizeLeadDate(payload.leadDate);
 
   const next = list.slice();
   next[idx] = { ...list[idx], ...patch };
@@ -95,6 +177,7 @@ export const EMPTY_FORM = Object.freeze({
   qtyRequired: "",
   returnableQty: "",
   description: "",
+  leadDate: "",
 });
 
 const str = (v) => (v === undefined || v === null ? "" : String(v));
@@ -110,6 +193,7 @@ export function formFromItem(item = {}) {
     qtyRequired: str(it.qtyRequired),
     returnableQty: str(it.returnableQty),
     description: str(it.description),
+    leadDate: it.leadDate ?? "",
   };
 }
 
@@ -152,6 +236,9 @@ export function validateStockForm(form, { mode = "create", requirePrice = true }
   if (str(f.description).trim().length > DESCRIPTION_MAX)
     errors.description = `Max ${DESCRIPTION_MAX} characters`;
 
+  if (!isBlank(f.leadDate) && !isValidLeadDate(str(f.leadDate).trim()))
+    errors.leadDate = "Lead date must be a valid date";
+
   void mode;
   return errors;
 }
@@ -188,6 +275,7 @@ export function buildStockPayload(
     productCode: str(f.productCode).trim().toUpperCase(),
     description: str(f.description).trim(),
     price,
+    leadDate: str(f.leadDate).trim() || null,
   };
 
   if (!isBlank(f.stockQuantity)) body.stockQuantity = round2(parseLooseNumber(f.stockQuantity));
@@ -281,12 +369,16 @@ export function parseImportRows(
       else returnableQty = round2(q);
     }
 
+    const lead = parseLeadDateCell(r["Lead Date"]);
+    if (lead.error) rowErrors.push(`${label}: Invalid Lead Date`);
+
     if (rowErrors.length) {
       errors.push(...rowErrors);
       return;
     }
 
     const body = { productName: name, productCode: code, price };
+    if (lead.value !== undefined) body.leadDate = lead.value;
     if (stockQuantity !== undefined) body.stockQuantity = stockQuantity;
     if (qtyRequired !== undefined) body.qtyRequired = qtyRequired;
     if (returnableQty !== undefined) body.returnableQty = returnableQty;

@@ -11,6 +11,13 @@ import {
   parseImportRows,
   apiErrorMessage,
   parseLooseNumber,
+  isValidLeadDate,
+  normalizeLeadDate,
+  formatLeadDate,
+  isLeadDateOverdue,
+  todayIso,
+  parseLeadDateCell,
+  compareLeadDate,
 } from "../stockForm.js";
 
 const item = (over = {}) => ({
@@ -73,6 +80,7 @@ describe("normalizeStockItem", () => {
       returnableQty: 1.5,
       location: "A1",
       imageUrl: "u",
+      leadDate: null,
       createdAt: "d",
     });
   });
@@ -238,6 +246,7 @@ describe("buildStockPayload", () => {
       stockQuantity: 10,
       qtyRequired: 3,
       returnableQty: 2,
+      leadDate: null,
       part_number_auto: true,
     });
   });
@@ -377,5 +386,132 @@ describe("apiErrorMessage", () => {
     assert.equal(apiErrorMessage(null, 502), "Request failed (502)");
     assert.equal(apiErrorMessage("oops", 500), "Request failed (500)");
     assert.equal(apiErrorMessage({ details: [] }, 404), "Request failed (404)");
+  });
+});
+
+describe("lead date helpers", () => {
+  test("isValidLeadDate: real calendar dates in 2000..2100 only", () => {
+    assert.equal(isValidLeadDate("2026-11-25"), true);
+    assert.equal(isValidLeadDate("2028-02-29"), true, "leap year");
+    assert.equal(isValidLeadDate("2026-02-29"), false, "non-leap year");
+    assert.equal(isValidLeadDate("2100-02-29"), false, "2100 is not a leap year");
+    assert.equal(isValidLeadDate("2026-13-01"), false);
+    assert.equal(isValidLeadDate("2026-04-31"), false);
+    assert.equal(isValidLeadDate("2026-1-5"), false);
+    assert.equal(isValidLeadDate("1999-12-31"), false);
+    assert.equal(isValidLeadDate("2101-01-01"), false);
+    assert.equal(isValidLeadDate("2026-11-25T00:00:00Z"), false);
+    assert.equal(isValidLeadDate(""), false);
+    assert.equal(isValidLeadDate(null), false);
+    assert.equal(isValidLeadDate(new Date()), false);
+  });
+  test("normalizeLeadDate keeps valid strings, everything else → null", () => {
+    assert.equal(normalizeLeadDate("2026-11-25"), "2026-11-25");
+    assert.equal(normalizeLeadDate("2026-11-25T00:00:00.000Z"), null);
+    assert.equal(normalizeLeadDate(undefined), null);
+    assert.equal(normalizeLeadDate(""), null);
+  });
+  test("formatLeadDate never shifts the day (no Date/timezone involved)", () => {
+    assert.equal(formatLeadDate("2026-11-25"), "25-11-2026");
+    assert.equal(formatLeadDate("2026-01-01"), "01-01-2026");
+    assert.equal(formatLeadDate("2026-12-31"), "31-12-2026");
+    assert.equal(formatLeadDate(null), "—");
+    assert.equal(formatLeadDate("bad"), "—");
+  });
+  test("todayIso uses the local calendar date", () => {
+    assert.equal(todayIso(new Date(2026, 0, 5, 23, 59)), "2026-01-05");
+    assert.equal(todayIso(new Date(2026, 11, 31, 0, 0)), "2026-12-31");
+    assert.match(todayIso(), /^\d{4}-\d{2}-\d{2}$/);
+  });
+  test("isLeadDateOverdue compares against today", () => {
+    assert.equal(isLeadDateOverdue("2026-11-19", "2026-11-20"), true);
+    assert.equal(isLeadDateOverdue("2026-11-20", "2026-11-20"), false, "today is not overdue");
+    assert.equal(isLeadDateOverdue("2026-11-21", "2026-11-20"), false);
+    assert.equal(isLeadDateOverdue(null, "2026-11-20"), false);
+    assert.equal(isLeadDateOverdue("garbage", "2026-11-20"), false);
+  });
+  test("parseLeadDateCell formats", () => {
+    assert.deepEqual(parseLeadDateCell("2026-11-25"), { value: "2026-11-25" });
+    assert.deepEqual(parseLeadDateCell("2026-1-5"), { value: "2026-01-05" });
+    assert.deepEqual(parseLeadDateCell("25-11-2026"), { value: "2026-11-25" });
+    assert.deepEqual(parseLeadDateCell("5/1/2026"), { value: "2026-01-05" });
+    assert.deepEqual(parseLeadDateCell("25 Nov 2026"), { value: "2026-11-25" });
+    assert.deepEqual(parseLeadDateCell("25 november 2026"), { value: "2026-11-25" });
+    assert.deepEqual(parseLeadDateCell("25-Nov-2026"), { value: "2026-11-25" });
+    assert.deepEqual(parseLeadDateCell("25.11.2026"), { value: "2026-11-25" });
+    assert.deepEqual(parseLeadDateCell(46351), { value: "2026-11-25" }, "Excel serial");
+    assert.deepEqual(parseLeadDateCell("46351"), { value: "2026-11-25" });
+    assert.deepEqual(parseLeadDateCell(new Date(2026, 10, 25)), { value: "2026-11-25" });
+    assert.deepEqual(parseLeadDateCell("  "), { value: undefined });
+    assert.deepEqual(parseLeadDateCell(undefined), { value: undefined });
+    assert.deepEqual(parseLeadDateCell(null), { value: undefined });
+  });
+  test("parseLeadDateCell rejects nonsense", () => {
+    for (const bad of ["31-02-2026", "2026-13-01", "soon", "25 Foo 2026", "1999-01-01", -5, 0, new Date("x")]) {
+      assert.deepEqual(parseLeadDateCell(bad), { error: true }, String(bad));
+    }
+  });
+});
+
+describe("lead date in forms and payloads", () => {
+  test("normalizeStockItem reads lead_date / leadDate", () => {
+    assert.equal(normalizeStockItem({ lead_date: "2026-11-25" }).leadDate, "2026-11-25");
+    assert.equal(normalizeStockItem({ leadDate: "2026-11-25" }).leadDate, "2026-11-25");
+    assert.equal(normalizeStockItem({ lead_date: "2026-11-25T18:30:00.000Z" }).leadDate, null);
+    assert.equal(normalizeStockItem({}).leadDate, null);
+  });
+  test("applyStockUpdate merges lead_date only when present", () => {
+    const list = [item({ leadDate: "2026-11-25" })];
+    const same = applyStockUpdate(list, { source: "raw_materials", product_id: 7, stock_quantity: 3 });
+    assert.equal(same.items[0].leadDate, "2026-11-25");
+    const cleared = applyStockUpdate(list, { source: "raw_materials", product_id: 7, lead_date: null });
+    assert.equal(cleared.items[0].leadDate, null);
+    const moved = applyStockUpdate(list, { source: "raw_materials", product_id: 7, lead_date: "2026-12-01" });
+    assert.equal(moved.items[0].leadDate, "2026-12-01");
+  });
+  test("EMPTY_FORM / formFromItem", () => {
+    assert.equal(EMPTY_FORM.leadDate, "");
+    assert.equal(formFromItem(item({ leadDate: "2026-11-25" })).leadDate, "2026-11-25");
+    assert.equal(formFromItem(item({ leadDate: null })).leadDate, "");
+  });
+  test("validateStockForm: optional, must be a real date when set", () => {
+    assert.equal(validateStockForm(form({ leadDate: "" })).leadDate, undefined);
+    assert.equal(validateStockForm(form({ leadDate: "2026-11-25" })).leadDate, undefined);
+    assert.ok(validateStockForm(form({ leadDate: "2026-02-30" })).leadDate);
+    assert.ok(validateStockForm(form({ leadDate: "25/11/2026" })).leadDate);
+  });
+  test("buildStockPayload always sends leadDate (null clears)", () => {
+    assert.equal(buildStockPayload(form({ leadDate: "2026-11-25" }), { mode: "create" }).leadDate, "2026-11-25");
+    assert.equal(buildStockPayload(form({ leadDate: "" }), { mode: "create" }).leadDate, null);
+    const edit = buildStockPayload(form({ leadDate: "" }), { mode: "edit", original: item({ leadDate: "2026-11-25" }) });
+    assert.ok("leadDate" in edit);
+    assert.equal(edit.leadDate, null);
+  });
+  test("parseImportRows: Lead Date column", () => {
+    const existingById = new Map([[7, item()]]);
+    const base = { "Product Name": "Bearing", "Product Code": "0007L5BR123", "Price (₹)": "10" };
+    const { valid, errors } = parseImportRows(
+      [
+        { ...base, "Lead Date": "25/11/2026" },
+        { ...base, "Product ID": 7, "Lead Date": "" },
+        { ...base, "Lead Date": "someday" },
+        { ...base },
+      ],
+      { existingById },
+    );
+    assert.deepEqual(errors, ["Row 4: Invalid Lead Date"]);
+    assert.equal(valid[0].body.leadDate, "2026-11-25");
+    assert.equal("leadDate" in valid[1].body, false, "blank keeps stored value");
+    assert.equal("leadDate" in valid[2].body, false, "missing column → omitted");
+  });
+});
+
+describe("compareLeadDate", () => {
+  test("orders by date and keeps blanks last in both directions", () => {
+    const vals = ["2026-12-01", null, "2026-01-05", "", "2026-06-30"];
+    assert.deepEqual([...vals].sort((a, b) => compareLeadDate(a, b, "asc")), ["2026-01-05", "2026-06-30", "2026-12-01", null, ""]);
+    const desc = [...vals].sort((a, b) => compareLeadDate(a, b, "desc"));
+    assert.deepEqual(desc.slice(0, 3), ["2026-12-01", "2026-06-30", "2026-01-05"]);
+    assert.ok(!desc[3] && !desc[4]);
   });
 });
