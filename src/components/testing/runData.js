@@ -125,6 +125,90 @@ export function flagStats(rows, sampleHz) {
 }
 
 /**
+ * Warning intervals from a v0.5 warnings[] journal (v05-warning-events.md section 3), per source + limit_id, in seq order:
+ * an interval opens at ACTIVE_AT_START / RAISED / STATUS_UNKNOWN and closes at CLEARED or at STATUS_KNOWN with
+ * restored_state CLEAR; STATUS_KNOWN with restored_state ACTIVE keeps it open. One still open at the end runs to
+ * capture_end_ms (toEnd = true). Records with no open interval to act on (e.g. an unproven CLEARED whose RAISED was lost)
+ * open nothing: intervals are never invented.
+ * Each interval has segments [{ state: 'active' | 'unknown', t1, t2 }] so the unknown-status stretches can be drawn
+ * in their own tone. Returns [{ key, source, limitId, t1, t2, toEnd, segments }] sorted by t1.
+ */
+export function warningIntervals(warnings, captureEndMs) {
+  const list = (Array.isArray(warnings) ? warnings : [])
+    .filter((w) => w && (w.source === 'STATUS_BIT6' || w.source === 'VCU_LIMIT') && toNum(w.t_ms) != null)
+    .slice()
+    .sort((a, b) => toNum(a.seq) - toNum(b.seq));
+  const end = toNum(captureEndMs);
+  const open = new Map();
+  const out = [];
+  const closeSeg = (iv, t) => {
+    const seg = iv.segments[iv.segments.length - 1];
+    if (seg && seg.t2 == null) seg.t2 = t;
+  };
+  const finish = (k, iv, t) => {
+    closeSeg(iv, t);
+    iv.t2 = t;
+    out.push(iv);
+    open.delete(k);
+  };
+  for (const w of list) {
+    const k = `${w.source}|${w.limit_id ?? ''}`;
+    const t = toNum(w.t_ms);
+    const iv = open.get(k);
+    switch (w.kind) {
+      case 'ACTIVE_AT_START':
+      case 'RAISED':
+        if (!iv) open.set(k, { key: k, source: w.source, limitId: w.limit_id ?? null, t1: t, t2: null, toEnd: false, segments: [{ state: 'active', t1: t, t2: null }] });
+        break;
+      case 'STATUS_UNKNOWN':
+        if (!iv) open.set(k, { key: k, source: w.source, limitId: w.limit_id ?? null, t1: t, t2: null, toEnd: false, segments: [{ state: 'unknown', t1: t, t2: null }] });
+        else if (iv.segments[iv.segments.length - 1].state !== 'unknown') {
+          closeSeg(iv, t);
+          iv.segments.push({ state: 'unknown', t1: t, t2: null });
+        }
+        break;
+      case 'STATUS_KNOWN':
+        if (!iv) break;
+        if (w.restored_state === 'CLEAR') finish(k, iv, t);
+        else if (w.restored_state === 'ACTIVE' && iv.segments[iv.segments.length - 1].state === 'unknown') {
+          closeSeg(iv, t);
+          iv.segments.push({ state: 'active', t1: t, t2: null });
+        }
+        break;
+      case 'CLEARED':
+        if (iv) finish(k, iv, t);
+        break;
+      default:
+        break;
+    }
+  }
+  for (const [k, iv] of [...open]) {
+    // Still open when the journal ends: runs to capture_end_ms (or, if that is missing, to its own last time).
+    const last = iv.segments[iv.segments.length - 1].t1;
+    iv.toEnd = true;
+    finish(k, iv, end != null ? Math.max(end, last) : last);
+  }
+  return out.sort((a, b) => a.t1 - b.t1);
+}
+
+/**
+ * Explicit gaps in a strictly increasing id sequence (warnings[].seq, command_changes[].step): list items in order with
+ * { lost: n } entries inserted where ids are missing (also before the first one when it is above 0).
+ */
+export function withGaps(items, idKey) {
+  const sorted = (Array.isArray(items) ? items : []).slice().sort((a, b) => toNum(a[idKey]) - toNum(b[idKey]));
+  const out = [];
+  let expect = 0;
+  for (const it of sorted) {
+    const id = toNum(it[idKey]);
+    if (id != null && id > expect) out.push({ lost: id - expect, from: expect });
+    out.push({ item: it });
+    if (id != null) expect = id + 1;
+  }
+  return out;
+}
+
+/**
  * The settle window to shade after each b5 reading: the largest window_ms of the flag_exclusion rules on bit 5
  * that exclude anything (applies_to null or non-empty). { windowMs, count, appliesTo } or null when there is none;
  * appliesTo = the applies_to of the rule with that window (null = all value rules).

@@ -6,7 +6,10 @@
 //  - VCU status flags b4/b6/b7 are shaded on the time chart as one band per stretch of consecutive
 //    readings (never one area per reading), b5 (setpoint changed) is a thin vertical marker per reading,
 //    and a flag_exclusion rule on b5 shades its settle window. Runs without flags look exactly as before.
-import { memo, useMemo } from 'react';
+//  - contract v0.5 only: warning intervals from the VCU event log (warningIntervals() in runData.js) are drawn as
+//    hatched, outlined bands (red = warning active, slate dashed = status unknown), distinct from the sampled b6 bands,
+//    and detail records as small dots at their t_ms labelled with the raw code. v0.3 / v0.4 runs pass no warnings.
+import { memo, useId, useMemo } from 'react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine, ReferenceArea, ReferenceDot,
@@ -30,6 +33,14 @@ const FLAG_BANDS = [
 ];
 const C_STEP = '#0f766e';
 const C_SETTLE = '#14b8a6';
+// v0.5 warning-event marks.
+const C_WARN = '#b91c1c';
+const C_UNKNOWN = '#475569';
+const DETAIL_MARKS = {
+  DETAIL: { fill: '#7f1d1d', stroke: '#fff', label: (w) => String(w.code ?? '—') },
+  DETAIL_AMBIGUOUS: { fill: '#d97706', stroke: '#fff', label: (w) => `${w.code ?? '—'}?` },
+  DETAIL_UNAVAILABLE: { fill: '#fff', stroke: C_WARN, label: () => 'n/a' },
+};
 
 /** Threshold lines/markers for one signal from the criteria rules. Only numbers present in the rule are drawn. */
 function thresholdsFor(rules, signal) {
@@ -202,18 +213,107 @@ function FlagLegend({ flags, settle }) {
   );
 }
 
-function RpmTimeChart({ rows, events, rules, flags, settle }) {
+/**
+ * v0.5 warning-event marks for the time chart: interval segments (very short ones widened to a visible width) and
+ * detail dots placed just above the highest plotted RPM. null when the run has no warning records to draw.
+ */
+function warningMarks(rows, warningEvents) {
+  const intervals = warningEvents?.intervals || [];
+  const details = (warningEvents?.warnings || []).filter((w) => DETAIL_MARKS[w.kind] && toNum(w.t_ms) != null);
+  if (!intervals.length && !details.length) return null;
+  let tMin = Infinity;
+  let tMax = -Infinity;
+  let yTop = 0;
+  for (const r of rows) {
+    if (r.gap || r.t == null) continue;
+    if (r.t < tMin) tMin = r.t;
+    if (r.t > tMax) tMax = r.t;
+    for (const v of [r.rpm, r.cmd]) if (v != null && v > yTop) yTop = v;
+  }
+  if (!Number.isFinite(tMin)) return null;
+  const minW = (tMax - tMin) * 0.004;
+  const segments = [];
+  for (const iv of intervals) {
+    for (const s of iv.segments) {
+      let { t1, t2 } = s;
+      if (t2 - t1 < minW * 2) {
+        const mid = (t1 + t2) / 2;
+        t1 = mid - minW;
+        t2 = mid + minW;
+      }
+      segments.push({ key: `${iv.key}-${s.state}-${s.t1}`, state: s.state, x1: t1, x2: t2 });
+    }
+  }
+  // Labels of dots close together in time are stacked upwards (level) so their codes stay readable.
+  const near = (tMax - tMin) * 0.03;
+  const dots = [];
+  for (const w of details.slice().sort((a, b) => toNum(a.t_ms) - toNum(b.t_ms))) {
+    const x = toNum(w.t_ms);
+    const prev = dots[dots.length - 1];
+    const level = prev && x - prev.x < near ? Math.min(prev.level + 1, 3) : 0;
+    dots.push({ key: `d-${w.seq}`, x, y: yTop, level, mark: DETAIL_MARKS[w.kind], w });
+  }
+  return {
+    segments,
+    dots,
+    maxLevel: dots.reduce((m, d) => Math.max(m, d.level), 0),
+    hasActive: segments.some((s) => s.state === 'active'),
+    hasUnknown: segments.some((s) => s.state === 'unknown'),
+  };
+}
+
+const hatch = (color) => `repeating-linear-gradient(135deg, ${color} 0 1.5px, transparent 1.5px 4px)`;
+
+function WarningLegend({ wm }) {
+  const items = [];
+  if (wm.hasActive) {
+    items.push({ key: 'active', swatch: <span className="inline-block w-3 h-3 rounded-sm border" style={{ background: hatch(C_WARN), borderColor: C_WARN }} />, text: 'warning interval (VCU event log)' });
+  }
+  if (wm.hasUnknown) {
+    items.push({ key: 'unknown', swatch: <span className="inline-block w-3 h-3 rounded-sm border border-dashed" style={{ background: hatch(C_UNKNOWN), borderColor: C_UNKNOWN }} />, text: 'warning status unknown' });
+  }
+  if (wm.dots.length) {
+    items.push({ key: 'detail', swatch: <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: DETAIL_MARKS.DETAIL.fill }} />, text: 'detail code (raw number; ? ambiguous, n/a unavailable)' });
+  }
+  return (
+    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-600">
+      {items.map((i) => (
+        <span key={i.key} className="inline-flex items-center gap-1.5">{i.swatch}{i.text}</span>
+      ))}
+    </div>
+  );
+}
+
+function RpmTimeChart({ rows, events, rules, flags, settle, warningEvents }) {
   const { lines } = useMemo(() => thresholdsFor(rules, 'rpm_actual'), [rules]);
   const fm = useMemo(() => flagMarks(rows, flags, settle), [rows, flags, settle]);
+  const wm = useMemo(() => warningMarks(rows, warningEvents), [rows, warningEvents]);
+  const uid = useId().replace(/:/g, '');
   const marks = (events || []).filter((e) => e.type === 'FAULT' || e.type === 'STATE');
+  const extra = [fm && 'shading and teal lines: VCU status flags', wm && 'hatched outlined bands and dots: VCU warning event log'].filter(Boolean).join('; ');
   return (
     <ChartFrame
       title="Commanded vs actual RPM"
-      subtitle={`Over time (ms). Dashed gold = commanded, blue = actual. Vertical lines: red FAULT, grey STATE${fm ? '; shading and teal lines: VCU status flags' : ''}.`}
-      legend={fm ? <FlagLegend flags={flags} settle={settle} /> : null}
+      subtitle={`Over time (ms). Dashed gold = commanded, blue = actual. Vertical lines: red FAULT, grey STATE${extra ? `; ${extra}` : ''}.`}
+      legend={fm || wm ? (
+        <>
+          {fm && <FlagLegend flags={flags} settle={settle} />}
+          {wm && <WarningLegend wm={wm} />}
+        </>
+      ) : null}
     >
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+        <LineChart data={rows} margin={{ top: wm?.dots.length ? 18 + wm.maxLevel * 10 : 8, right: 12, bottom: 4, left: 0 }}>
+          {wm && (
+            <defs>
+              <pattern id={`warn-${uid}`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="6" stroke={C_WARN} strokeWidth="1.5" strokeOpacity="0.45" />
+              </pattern>
+              <pattern id={`unk-${uid}`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+                <line x1="0" y1="0" x2="0" y2="6" stroke={C_UNKNOWN} strokeWidth="1.5" strokeOpacity="0.4" />
+              </pattern>
+            </defs>
+          )}
           <CartesianGrid stroke={C_GRID} vertical={false} />
           <XAxis dataKey="t" type="number" domain={['dataMin', 'dataMax']} tick={AXIS_TICK} tickLine={false} stroke={C_GRID} unit=" ms" />
           <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={48} />
@@ -225,8 +325,34 @@ function RpmTimeChart({ rows, events, rules, flags, settle }) {
           {fm?.bands.map((band) => (
             <ReferenceArea key={band.key} x1={band.x1} x2={band.x2} fill={band.def.color} fillOpacity={band.def.opacity} strokeOpacity={0} ifOverflow="hidden" />
           ))}
+          {wm?.segments.map((s) => (
+            <ReferenceArea
+              key={s.key}
+              x1={s.x1}
+              x2={s.x2}
+              fill={`url(#${s.state === 'unknown' ? 'unk' : 'warn'}-${uid})`}
+              fillOpacity={1}
+              stroke={s.state === 'unknown' ? C_UNKNOWN : C_WARN}
+              strokeOpacity={0.8}
+              strokeDasharray={s.state === 'unknown' ? '4 3' : undefined}
+              ifOverflow="hidden"
+            />
+          ))}
           {fm?.steps.map((t) => (
             <ReferenceLine key={`step-${t}`} x={t} stroke={C_STEP} strokeWidth={1} strokeOpacity={0.7} ifOverflow="hidden" />
+          ))}
+          {wm?.dots.map((d) => (
+            <ReferenceDot
+              key={d.key}
+              x={d.x}
+              y={d.y}
+              r={4}
+              fill={d.mark.fill}
+              stroke={d.mark.stroke}
+              strokeWidth={1.5}
+              ifOverflow="extendDomain"
+              label={{ value: d.mark.label(d.w), position: 'top', offset: 5 + d.level * 10, fill: C_WARN, fontSize: 9 }}
+            />
           ))}
           {marks.map((e, i) => (
             <ReferenceLine
@@ -317,7 +443,8 @@ function SignalVsRpmChart({ rows, events, rules, signalKey, field, title, unit }
   );
 }
 
-function RunCharts({ rows, events, criteria, flags, emptyText }) {
+/** warningEvents (contract v0.5 only): { warnings, intervals } from RunDetailPage; omitted for v0.3 / v0.4 runs. */
+function RunCharts({ rows, events, criteria, flags, emptyText, warningEvents }) {
   const rules = criteria?.definition?.rules || [];
   const settle = useMemo(() => settleWindow(criteria?.definition?.rules), [criteria]);
   const hasBemf = useMemo(() => rows.some((r) => r.bemf != null), [rows]);
@@ -330,7 +457,7 @@ function RunCharts({ rows, events, criteria, flags, emptyText }) {
   }
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-      <RpmTimeChart rows={rows} events={events} rules={rules} flags={flags} settle={settle} />
+      <RpmTimeChart rows={rows} events={events} rules={rules} flags={flags} settle={settle} warningEvents={warningEvents} />
       <SignalVsRpmChart rows={rows} events={events} rules={rules} signalKey="current_a" field="current" title="Current" unit="A" />
       <SignalVsRpmChart rows={rows} events={events} rules={rules} signalKey="voltage_v" field="voltage" title="Voltage" unit="V" />
       {hasBemf && <SignalVsRpmChart rows={rows} events={events} rules={rules} signalKey="bemf_v" field="bemf" title="Back-EMF" unit="V" />}

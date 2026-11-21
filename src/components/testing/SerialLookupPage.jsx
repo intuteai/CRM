@@ -4,8 +4,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Eye, ChevronRight } from 'lucide-react';
 import { testingRequest } from './testingApi';
 import { testingPaths } from './testingNav';
-import { OutcomeBadge, Loading, ErrorNote, EmptyState, CancelledBadge, RunKindBadge, UnverifiedChip } from './TestingUi';
-import { BTN_PRIMARY, CARD, TH, TD, formatDateTime, isV04, isCancelled, clockWarnings } from './testingFormat';
+import { OutcomeBadge, Loading, ErrorNote, EmptyState, CancelledBadge, RunKindBadge, UnverifiedChip, Pill } from './TestingUi';
+import { BTN_PRIMARY, CARD, TH, TD, formatDateTime, isV04, isV05, isCancelled, clockWarnings } from './testingFormat';
 
 const dash = (v) => v ?? '—';
 
@@ -50,11 +50,23 @@ function RunDate({ run }) {
   );
 }
 
+/** v0.5 only: the VCU's event log was not complete (lost warning / command records). */
+function EventsIncompleteBadge({ run }) {
+  if (!isV05(run) || run.event_log_complete !== false) return null;
+  const unproven = run.unproven_count ? ` · ${run.unproven_count} unproven record${run.unproven_count === 1 ? '' : 's'}` : '';
+  return (
+    <Pill className="bg-amber-100 text-amber-700" title={`The VCU's warning / command event log is incomplete${unproven}.`}>
+      events incomplete
+    </Pill>
+  );
+}
+
 function RunBadges({ run, full = false }) {
   return (
     <>
       {isCancelled(run) ? <CancelledBadge compact={!full} /> : <OutcomeBadge outcome={run.outcome} />}
       <RunKindBadge run={run} />
+      <EventsIncompleteBadge run={run} />
     </>
   );
 }

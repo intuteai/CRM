@@ -80,8 +80,10 @@ export function display(v, unit = '') {
 
 // ---- contract v0.4 (CRM_BACKEND/docs/motor-test/contract/receipt-signing.md sections 2-3) ----
 // v0.3 runs carry contract_version '0.3' and null for every v0.4 field; they keep the old display.
+// v0.5 = the v0.4 body plus warning events (v05-warning-events.md), so every v0.4 display applies to it too.
 
-export const isV04 = (run) => run?.contract_version === '0.4';
+export const isV04 = (run) => run?.contract_version === '0.4' || run?.contract_version === '0.5';
+export const isV05 = (run) => run?.contract_version === '0.5';
 
 /**
  * CANCEL before START: started === false. CONFIG_CANCELLED is allowed only with started = false
@@ -121,6 +123,44 @@ const ms = (v) => {
  * automatic time was off, the start is later than the ERP receive time, or the end is before the start.
  * Rows without hmi_auto_time (lookup list) are checked on the times alone.
  */
+// ---- contract v0.5 warning events (v05-warning-events.md sections 3-5) ----
+
+export const WARNING_PHASE_TEXT = { PRE_START: 'pre-start', CAPTURE: 'capture', POST_CAPTURE: 'post-capture' };
+export const WARNING_KIND_STYLES = {
+  ACTIVE_AT_START: 'bg-red-100 text-red-700',
+  RAISED: 'bg-red-100 text-red-700',
+  CLEARED: 'bg-green-100 text-green-700',
+  STATUS_UNKNOWN: 'bg-slate-200 text-slate-700',
+  STATUS_KNOWN: 'bg-navy-50 text-navy-800',
+  DETAIL: 'bg-navy-50 text-navy-800',
+  DETAIL_UNAVAILABLE: 'bg-amber-100 text-amber-700',
+  DETAIL_AMBIGUOUS: 'bg-amber-100 text-amber-700',
+};
+export const isDetailKind = (kind) => kind === 'DETAIL' || kind === 'DETAIL_UNAVAILABLE' || kind === 'DETAIL_AMBIGUOUS';
+
+/** "STATUS_BIT6", "VCU_LIMIT · RPM_DEVIATION", "SDO_2031_11". */
+export const warningSourceText = (w) => (w.limit_id ? `${w.source} · ${w.limit_id}` : w.source || '—');
+
+/** Plain words for a command change's link (section 4). */
+export function commandLinkText(c) {
+  switch (c.link) {
+    case 'OWNS_READING': return `owns reading ${c.first_sample_seq ?? '—'}`;
+    case 'SUPERSEDED': return 'superseded before a reading';
+    case 'NO_READING': return 'no reading (capture ended)';
+    case 'READING_NOT_RETAINED': return `reading ${c.first_sample_seq ?? '—'} acquired but not retained`;
+    default: return c.link || '—';
+  }
+}
+export const COMMAND_LINK_STYLES = {
+  OWNS_READING: 'bg-green-100 text-green-700',
+  SUPERSEDED: 'bg-amber-100 text-amber-700',
+  NO_READING: 'bg-amber-100 text-amber-700',
+  READING_NOT_RETAINED: 'bg-amber-100 text-amber-700',
+};
+
+/** "2 events lost here" / "1 step lost here". */
+export const lostText = (n, noun) => `${n.toLocaleString()} ${noun}${n === 1 ? '' : 's'} lost here`;
+
 export function clockWarnings(run) {
   if (!isV04(run)) return [];
   const out = [];
