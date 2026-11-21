@@ -9,6 +9,7 @@ import {
   ReferenceLine, ReferenceArea, ReferenceDot,
 } from 'recharts';
 import { toNum } from './testingFormat';
+import { isFlagType } from './criteriaRules';
 
 const C_ACTUAL = '#3b6fb6';
 const C_CMD = '#c98a1a';
@@ -23,7 +24,8 @@ function thresholdsFor(rules, signal) {
   const lines = [];
   const checkpoints = [];
   for (const r of rules || []) {
-    if (!r || r.signal !== signal) continue;
+    // Status-flag rules (flag_share, flag_any, flag_exclusion, step_coverage) have no signal and draw nothing.
+    if (!r || typeof r !== 'object' || isFlagType(r.type) || r.signal !== signal) continue;
     const id = r.id || r.type;
     if (r.type === 'checkpoint') {
       const at = toNum(r.at_rpm);
