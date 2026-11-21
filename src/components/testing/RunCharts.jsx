@@ -2,14 +2,18 @@
 //  - gaps stay gaps: a missing sample_seq or an invalid (null) value breaks the line, never interpolated;
 //  - thresholds come only from the criteria version the run was judged by (criteria.definition.rules);
 //    a rule whose numbers are null draws nothing;
-//  - FAULT / STATE events are marked on the time chart (FAULT also on the RPM-axis charts).
+//  - FAULT / STATE events are marked on the time chart (FAULT also on the RPM-axis charts);
+//  - VCU status flags b4/b6/b7 are shaded on the time chart as one band per stretch of consecutive
+//    readings (never one area per reading), b5 (setpoint changed) is a thin vertical marker per reading,
+//    and a flag_exclusion rule on b5 shades its settle window. Runs without flags look exactly as before.
 import { memo, useMemo } from 'react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine, ReferenceArea, ReferenceDot,
 } from 'recharts';
 import { toNum } from './testingFormat';
-import { isFlagType } from './criteriaRules';
+import { settleWindow } from './runData';
+import { isFlagType, bitLabel } from './criteriaRules';
 
 const C_ACTUAL = '#3b6fb6';
 const C_CMD = '#c98a1a';
@@ -18,6 +22,14 @@ const C_CHECK = '#7c3aed';
 const C_STATE = '#94a3b8';
 const C_GRID = '#e5e7eb';
 const AXIS_TICK = { fontSize: 11, fill: '#6b7280' };
+// Status-flag marks on the time chart (low opacity so the lines stay readable).
+const FLAG_BANDS = [
+  { bit: 4, color: '#f59e0b', opacity: 0.2, text: 'CAN stale' },
+  { bit: 6, color: '#dc2626', opacity: 0.14, text: 'protective warning' },
+  { bit: 7, color: '#6b7280', opacity: 0.2, text: 'storage lag' },
+];
+const C_STEP = '#0f766e';
+const C_SETTLE = '#14b8a6';
 
 /** Threshold lines/markers for one signal from the criteria rules. Only numbers present in the rule are drawn. */
 function thresholdsFor(rules, signal) {
@@ -62,7 +74,7 @@ function fmt(v, digits = 2) {
   return Number.isInteger(v) ? String(v) : v.toFixed(digits);
 }
 
-function ChartFrame({ title, subtitle, note, children }) {
+function ChartFrame({ title, subtitle, note, legend, children }) {
   return (
     <figure className="bg-white rounded-xl border border-navy-100 p-3 sm:p-4 min-w-0">
       <figcaption className="mb-2">
@@ -70,6 +82,7 @@ function ChartFrame({ title, subtitle, note, children }) {
         {subtitle && <div className="text-xs text-gray-500">{subtitle}</div>}
       </figcaption>
       <div className="h-64 sm:h-72">{children}</div>
+      {legend}
       {note && <div className="mt-2 text-[11px] text-gray-400">{note}</div>}
     </figure>
   );
@@ -84,6 +97,9 @@ function TimeTooltip({ active, payload }) {
       <div className="font-semibold mb-0.5">t = {p.t} ms · #{p.seq}</div>
       <div>Commanded: {fmt(p.cmd)} rpm</div>
       <div>Actual: {fmt(p.rpm)} rpm</div>
+      {(p.b4 || p.b5 || p.b6 || p.b7) && (
+        <div className="text-gray-500">Flags: {[4, 5, 6, 7].filter((b) => p[`b${b}`]).map((b) => bitLabel(b)).join(', ')}</div>
+      )}
     </div>
   );
 }
@@ -105,13 +121,96 @@ function makeXYTooltip(yLabel, unit) {
 
 const limitLabel = (text) => ({ value: text, position: 'insideTopRight', fill: C_LIMIT, fontSize: 10 });
 
-function RpmTimeChart({ rows, events, rules }) {
+/** Merges [a, b] intervals that overlap or touch (input sorted by a). */
+function mergeIntervals(list) {
+  const out = [];
+  for (const [a, b] of list) {
+    const last = out[out.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+
+/**
+ * Bands, step markers and settle windows for the time chart, from flagStats() (runData.js).
+ * A stretch is drawn from half a period before its first reading to half a period after its last,
+ * so the band width equals the stretch length (widened to a minimum visible width); clamped to the data range.
+ */
+function flagMarks(rows, flags, settle) {
+  if (!flags?.any) return null;
+  let tMin = Infinity;
+  let tMax = -Infinity;
+  for (const r of rows) {
+    if (r.gap || r.t == null) continue;
+    if (r.t < tMin) tMin = r.t;
+    if (r.t > tMax) tMax = r.t;
+  }
+  if (!Number.isFinite(tMin)) return null;
+  const half = flags.period != null ? flags.period / 2 : Math.max((tMax - tMin) / 2000, 0.5);
+  const clamp = (v) => Math.min(tMax, Math.max(tMin, v));
+  // A one-reading stretch in a long run would be under a pixel wide: keep every band at least 0.8 % of the time axis.
+  const minHalf = (tMax - tMin) * 0.004;
+  const bands = [];
+  for (const def of FLAG_BANDS) {
+    for (const s of flags.bits[def.bit].stretches) {
+      if (s.t1 == null) continue;
+      const mid = (s.t1 + s.t2) / 2;
+      const w = Math.max((s.t2 - s.t1) / 2 + half, minHalf);
+      const x1 = clamp(mid - w);
+      const x2 = clamp(mid + w);
+      if (x2 > x1) bands.push({ key: `b${def.bit}-${s.t1}`, x1, x2, def });
+    }
+  }
+  const steps = [];
+  for (const r of rows) if (!r.gap && r.b5 && r.t != null) steps.push(r.t);
+  const settleAreas = settle && steps.length
+    ? mergeIntervals(steps.map((t) => [t, t + settle.windowMs])).map(([a, b]) => [a, Math.min(b, tMax)]).filter(([a, b]) => b > a)
+    : [];
+  return { bands, steps, settleAreas };
+}
+
+function Swatch({ color, opacity, line = false }) {
+  return line ? (
+    <span className="inline-block w-0.5 h-3" style={{ background: color }} />
+  ) : (
+    <span className="inline-block w-3 h-3 rounded-sm border" style={{ background: color, opacity: Math.min(1, opacity * 2.5), borderColor: color }} />
+  );
+}
+
+/** Compact legend: only the flags that occur in the run. */
+function FlagLegend({ flags, settle }) {
+  const items = [];
+  for (const def of FLAG_BANDS) {
+    if (flags.bits[def.bit].count) items.push({ key: def.bit, swatch: <Swatch color={def.color} opacity={def.opacity} />, text: `b${def.bit} ${def.text}` });
+  }
+  if (flags.bits[5].count) {
+    items.push({ key: 5, swatch: <Swatch color={C_STEP} line />, text: 'b5 setpoint changed (step start)' });
+    if (settle) {
+      const who = settle.appliesTo ? `ignored by ${settle.appliesTo.join(', ')}` : 'ignored by value rules';
+      const many = settle.count > 1 ? `; largest of ${settle.count} windows` : '';
+      items.push({ key: 'settle', swatch: <Swatch color={C_SETTLE} opacity={0.08} />, text: `settle ${settle.windowMs} ms (${who}${many})` });
+    }
+  }
+  if (!items.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-600">
+      {items.map((i) => (
+        <span key={i.key} className="inline-flex items-center gap-1.5">{i.swatch}{i.text}</span>
+      ))}
+    </div>
+  );
+}
+
+function RpmTimeChart({ rows, events, rules, flags, settle }) {
   const { lines } = useMemo(() => thresholdsFor(rules, 'rpm_actual'), [rules]);
+  const fm = useMemo(() => flagMarks(rows, flags, settle), [rows, flags, settle]);
   const marks = (events || []).filter((e) => e.type === 'FAULT' || e.type === 'STATE');
   return (
     <ChartFrame
       title="Commanded vs actual RPM"
-      subtitle="Over time (ms). Dashed gold = commanded, blue = actual. Vertical lines: red FAULT, grey STATE."
+      subtitle={`Over time (ms). Dashed gold = commanded, blue = actual. Vertical lines: red FAULT, grey STATE${fm ? '; shading and teal lines: VCU status flags' : ''}.`}
+      legend={fm ? <FlagLegend flags={flags} settle={settle} /> : null}
     >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
@@ -120,6 +219,15 @@ function RpmTimeChart({ rows, events, rules }) {
           <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={48} />
           <Tooltip content={<TimeTooltip />} isAnimationActive={false} />
           <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
+          {fm?.settleAreas.map(([a, b]) => (
+            <ReferenceArea key={`settle-${a}`} x1={a} x2={b} fill={C_SETTLE} fillOpacity={0.08} strokeOpacity={0} ifOverflow="hidden" />
+          ))}
+          {fm?.bands.map((band) => (
+            <ReferenceArea key={band.key} x1={band.x1} x2={band.x2} fill={band.def.color} fillOpacity={band.def.opacity} strokeOpacity={0} ifOverflow="hidden" />
+          ))}
+          {fm?.steps.map((t) => (
+            <ReferenceLine key={`step-${t}`} x={t} stroke={C_STEP} strokeWidth={1} strokeOpacity={0.7} ifOverflow="hidden" />
+          ))}
           {marks.map((e, i) => (
             <ReferenceLine
               key={`ev-${i}`}
@@ -209,8 +317,9 @@ function SignalVsRpmChart({ rows, events, rules, signalKey, field, title, unit }
   );
 }
 
-function RunCharts({ rows, events, criteria, emptyText }) {
+function RunCharts({ rows, events, criteria, flags, emptyText }) {
   const rules = criteria?.definition?.rules || [];
+  const settle = useMemo(() => settleWindow(criteria?.definition?.rules), [criteria]);
   const hasBemf = useMemo(() => rows.some((r) => r.bemf != null), [rows]);
   if (!rows.length) {
     return (
@@ -221,7 +330,7 @@ function RunCharts({ rows, events, criteria, emptyText }) {
   }
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-      <RpmTimeChart rows={rows} events={events} rules={rules} />
+      <RpmTimeChart rows={rows} events={events} rules={rules} flags={flags} settle={settle} />
       <SignalVsRpmChart rows={rows} events={events} rules={rules} signalKey="current_a" field="current" title="Current" unit="A" />
       <SignalVsRpmChart rows={rows} events={events} rules={rules} signalKey="voltage_v" field="voltage" title="Voltage" unit="V" />
       {hasBemf && <SignalVsRpmChart rows={rows} events={events} rules={rules} signalKey="bemf_v" field="bemf" title="Back-EMF" unit="V" />}

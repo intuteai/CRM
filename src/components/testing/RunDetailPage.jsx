@@ -12,7 +12,8 @@ import {
   BTN_PRIMARY, CARD, TH, TD, formatDateTime, shortSha, display,
   isV04, isCancelled, timeQualifier, clockWarnings,
 } from './testingFormat';
-import { prepareSamples, gapStats } from './runData';
+import { prepareSamples, gapStats, flagStats } from './runData';
+import { FLAG_BITS } from './criteriaRules';
 import RunCharts from './RunCharts';
 import CorrectionsPanel from './CorrectionsPanel';
 import { CriteriaRulesView } from './CriteriaEditor';
@@ -93,6 +94,25 @@ function SignedReceiptFact({ receipt }) {
 
 const NOTE_AMBER = 'text-sm rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-4 py-2';
 const NOTE_NAVY = 'text-sm rounded-lg border border-navy-100 bg-navy-50 text-navy-800 px-4 py-2';
+
+const msText = (v) => `${Number.isInteger(v) ? v : Math.round(v * 10) / 10} ms`;
+
+/**
+ * "b4 CAN stale 12 readings (1.0 %, longest 300 ms) · b6 protective warning 3 readings (…) · b5 command changes 6"
+ * from flagStats() (runData.js); only flags that occur.
+ */
+function flagSummaryText(flags) {
+  const parts = [];
+  for (const b of [4, 6, 7]) {
+    const f = flags.bits[b];
+    if (!f.count) continue;
+    const pct = flags.total ? ((f.count / flags.total) * 100).toFixed(1) : '0.0';
+    const longest = f.longestMs != null ? `, longest ${msText(f.longestMs)}` : '';
+    parts.push(`b${b} ${FLAG_BITS[b]} ${f.count.toLocaleString()} reading${f.count === 1 ? '' : 's'} (${pct} %${longest})`);
+  }
+  if (flags.bits[5].count) parts.push(`b5 command changes ${flags.bits[5].count.toLocaleString()}`);
+  return parts.join(' · ');
+}
 
 function OutcomeReasons({ reasons }) {
   if (!reasons?.length) return null;
@@ -186,6 +206,8 @@ export default function RunDetailPage({ can }) {
 
   const rows = useMemo(() => prepareSamples(samples), [samples]);
   const gaps = useMemo(() => gapStats(rows), [rows]);
+  const sampleHz = run?.profile?.sample_hz;
+  const flags = useMemo(() => flagStats(rows, sampleHz), [rows, sampleHz]);
   const variantCode = location.state?.variant_code || run?.variant_code;
 
   const exportCsv = async () => {
@@ -217,6 +239,7 @@ export default function RunDetailPage({ can }) {
 
   const p = run.profile;
   const stored = run.receipt?.stored_sample_count ?? total;
+  const flagText = flags.any ? flagSummaryText(flags) : '';
   const invalidText = [['rpm', gaps.rpm], ['current', gaps.current], ['voltage', gaps.voltage]]
     .filter(([, n]) => n > 0)
     .map(([label, n]) => `${label} ${n.toLocaleString()}`)
@@ -318,7 +341,7 @@ export default function RunDetailPage({ can }) {
         <OutcomeReasons reasons={run.outcome_reasons} />
       </section>
 
-      {(loading || gaps.gaps > 0 || invalidText || error || cancelled || recordingIncomplete || storedShort || unverified.length > 0) && (
+      {(loading || gaps.gaps > 0 || invalidText || flagText || error || cancelled || recordingIncomplete || storedShort || unverified.length > 0) && (
         <div className="space-y-2">
           {loading && <Loading label={`Loading readings… ${samples.length.toLocaleString()} / ${total.toLocaleString()}`} />}
           {error && <ErrorNote error={error} onRetry={reload} />}
@@ -347,6 +370,12 @@ export default function RunDetailPage({ can }) {
               Readings marked invalid by the VCU: {invalidText}. They are left out of the graphs (shown as breaks); the raw values stay in the CSV export.
             </div>
           )}
+          {flagText && (
+            <div className={NOTE_NAVY}>
+              <span className="font-semibold">Flags in this run:</span> {flagText}.{' '}
+              <span className="text-gray-500">Recorded by the VCU per reading; the criteria version decides what they mean.</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -354,6 +383,7 @@ export default function RunDetailPage({ can }) {
         rows={rows}
         events={run.events}
         criteria={run.criteria}
+        flags={flags}
         emptyText={cancelled ? 'Cancelled before start — no readings were taken, so there is nothing to plot.' : undefined}
       />
 
